@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class='d-flex gap-2 mt-3 mb-3'><a class='btn btn-outline-dark' href='javascript:history.back()'>Close / Back</a><a class='btn btn-outline-secondary' href='/'>Home</a></div>
+<div class='d-flex justify-content-between'><div><h2 class='fw-bold'>Inquiry {{ inquiry.ref_no }}</h2><p class='text-muted'>{{ inquiry.customer_name }} — {{ inquiry.status }}</p></div><a class='btn btn-success' href='{{ url_for('sales.create_quotation', inquiry_id=inquiry.id) }}'>Create Quotation</a></div>
+<div class='card shadow-sm'><div class='card-body'><table class='table'><tr><th>Customer</th><td>{{ inquiry.customer_name }}</td><th>Phone</th><td>{{ inquiry.phone or '' }}</td></tr><tr><th>Project Type</th><td>{{ inquiry.project_type or '' }}</td><th>Capacity</th><td>{{ inquiry.estimated_capacity or '' }}</td></tr><tr><th>Requirement</th><td colspan='3'>{{ inquiry.requirement_summary or '' }}</td></tr></table></div></div>
+
+{% endblock %}

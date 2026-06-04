@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div><h2 class="fw-bold">Online Forms</h2><p class="text-muted mb-0">Create, view, edit, print, and manage project forms.</p></div>
+</div>
+<div class="alert alert-info">Your role: <strong>{{ current_user.role }}</strong>. Restricted forms are view-only.</div>
+<div class="row g-3">
+{% set forms = [
+("site-survey", "Site Survey & Load Assessment", counts.site_surveys),
+("daily-site-report", "Daily Site Report", counts.daily_reports),
+("delivery-note", "Delivery Note", counts.delivery_notes),
+("testing", "Testing Form", counts.testing_forms),
+("commissioning", "Commissioning", counts.commissioning_forms),
+("handover", "Handover Form", counts.handover_forms)
+] %}
+{% for key, title, count in forms %}
+{% if allowed_view_forms.get(key) %}
+<div class="col-md-3"><div class="card form-card shadow-sm"><div class="card-body">
+<h5>{{ title }}</h5><p class="text-muted">Total: {{ count }}</p>
+{% if allowed_forms[key] %}<a class="btn btn-primary btn-sm" href="{{ url_for('forms.create_form', form_key=key) }}">New Form</a>{% else %}<span class="badge bg-secondary">View Only</span>{% endif %}
+<a class="btn btn-light btn-sm" href="{{ url_for('forms.list_forms', form_key=key) }}">View</a>
+</div></div></div>
+{% endif %}
+{% endfor %}
+</div>
+{% if not (allowed_view_forms.get('site-survey') or allowed_view_forms.get('daily-site-report') or allowed_view_forms.get('delivery-note') or allowed_view_forms.get('testing') or allowed_view_forms.get('commissioning') or allowed_view_forms.get('handover')) %}<div class="alert alert-warning mt-3">No online forms have been assigned to your account. Contact the administrator.</div>{% endif %}
+<div class="alert alert-secondary mt-4 small">
+  <strong>Note:</strong> Site Survey and Load Assessment are now combined into one form. Old Load Assessment records remain accessible for reference:
+  {% if allowed_view_forms.get('load-assessment') %}<a href="{{ url_for('forms.list_forms', form_key='load-assessment') }}">Legacy Load Assessment Records</a>.{% else %}Legacy Load Assessment Records are hidden unless permission is granted.{% endif %}
+</div>
+{% endblock %}

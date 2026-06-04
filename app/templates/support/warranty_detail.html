@@ -1,0 +1,4 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class='d-flex gap-2 mt-3 mb-3'><a class='btn btn-outline-dark' href='javascript:history.back()'>Close / Back</a><a class='btn btn-outline-secondary' href='/'>Home</a></div><h2 class='fw-bold'>Warranty {{ warranty.ref_no }}</h2><div class='card'><div class='card-body'><table class='table'><tr><th>Customer</th><td>{{ warranty.customer_name }}</td><th>Status</th><td>{{ warranty.status }}</td></tr><tr><th>System</th><td>{{ warranty.system_type or '' }}</td><th>Capacity</th><td>{{ warranty.capacity or '' }}</td></tr><tr><th>Start</th><td>{{ warranty.warranty_start or '' }}</td><th>End</th><td>{{ warranty.warranty_end or '' }}</td></tr></table></div></div>
+{% endblock %}

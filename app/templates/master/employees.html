@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div><h2 class="fw-bold">Employees</h2><p class="text-muted mb-0">Employee master table for project workforce and teams.</p></div>
+    <a class="btn btn-dark" href="{{ url_for('master.create_employee') }}">Add Employee</a>
+</div>
+<form class="row g-2 mb-3" method="get">
+    <div class="col-md-5"><input class="form-control" name="q" value="{{ q }}" placeholder="Search name, code or job title"></div>
+    <div class="col-md-3"><select class="form-select" name="status"><option value="">All Status</option>{% for s in statuses %}<option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><button class="btn btn-dark w-100">Search</button></div>
+    <div class="col-md-2"><a class="btn btn-outline-secondary w-100" href="{{ url_for('master.employees') }}">Reset</a></div>
+</form>
+<div class="card shadow-sm"><div class="card-body table-responsive">
+<table class="table table-hover align-middle">
+<thead><tr><th>Code</th><th>Name</th><th>Job Title</th><th>Branch</th><th>Department</th><th>Phone</th><th>Status</th><th>Action</th></tr></thead>
+<tbody>
+{% for e in employees %}
+<tr><td>{{ e.employee_code or "" }}</td><td class="fw-semibold">{{ e.full_name }}</td><td>{{ e.job_title or "" }}</td><td>{{ e.branch.branch_name if e.branch else "" }}</td><td>{{ e.department.department_name if e.department else "" }}</td><td>{{ e.phone or "" }}</td><td>{{ e.status }}</td><td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('payroll.employee_statement', employee_id=e.id) }}">Payroll Report</a> <a class="btn btn-sm btn-outline-success" href="{{ url_for('project_tasks.employee_task_report', employee_id=e.id) }}">Task Report</a> <a class="btn btn-sm btn-outline-dark" href="{{ url_for('master.edit_employee', employee_id=e.id) }}">Edit</a></td></tr>
+{% else %}<tr><td colspan="8" class="text-muted">No employees found.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div></div>
+{% endblock %}

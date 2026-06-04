@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="compact-form-page">
+<div class="action-bar d-flex justify-content-between align-items-center mt-2 mb-2">
+  <div><h4 class="fw-bold mb-0">Material Return Form</h4><span class="ref-badge">Ref No: Automatic after save — MRT</span></div>
+  <div><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('materials.returns_list') }}">Close / Back</a><a class="btn btn-outline-dark btn-sm" href="{{ url_for('materials.dashboard') }}">Materials Home</a><a class="btn btn-outline-primary btn-sm" href="{{ url_for('dashboard.dashboard') }}">Main Home</a></div>
+</div>
+<form method="post">
+<div class="card shadow-sm mb-2"><div class="card-body"><div class="row g-2">
+<div class="col-md-4"><label class="form-label">Project *</label><select class="form-select" name="project_id" required><option value="">Select project</option>{% for p in projects %}<option value="{{ p.id }}">{{ p.project_name }}</option>{% endfor %}</select></div>
+<div class="col-md-2"><label class="form-label">Return Date</label><input class="form-control" type="date" name="return_date"></div>
+<div class="col-md-3"><label class="form-label">Returned By</label><input class="form-control" name="returned_by"></div>
+<div class="col-md-3"><label class="form-label">Reason</label><input class="form-control" name="reason"></div>
+<div class="col-md-12"><label class="form-label">Remarks</label><input class="form-control" name="remarks"></div>
+</div></div></div>
+<div class="card shadow-sm"><div class="card-header py-2 fw-bold">Return Datasheet Lines</div><div class="card-body table-responsive"><table class="table table-bordered table-sm datasheet-table align-middle"><thead><tr><th style="min-width:210px">Item</th><th style="min-width:260px">Description</th><th style="width:110px">Qty Returned</th><th style="width:80px">Unit</th><th style="width:110px">Unit Cost</th><th style="min-width:170px">Remarks</th></tr></thead><tbody>
+{% for i in range(1,16) %}<tr><td><select class="form-select form-select-sm" name="item_id"><option value="">-- select --</option>{% for item in items %}<option value="{{ item.id }}">{{ item.item_name }}</option>{% endfor %}</select><input class="form-control form-control-sm mt-1" name="item_name_row_{{ i }}" placeholder="Manual item"></td><td><input class="form-control form-control-sm" name="description_row_{{ i }}"></td><td><input class="form-control form-control-sm" type="number" step="0.01" name="quantity_row_{{ i }}" value="0"></td><td><input class="form-control form-control-sm" name="unit_row_{{ i }}"></td><td><input class="form-control form-control-sm" type="number" step="0.01" name="unit_cost_row_{{ i }}" value="0"></td><td><input class="form-control form-control-sm" name="remarks_row_{{ i }}"></td></tr>{% endfor %}
+</tbody></table><button class="btn btn-warning btn-sm">Save Return</button><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('materials.returns_list') }}">Cancel</a></div></div>
+</form>
+</div>
+{% endblock %}

@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div>
+        <h2 class="fw-bold">{{ project.project_name }}</h2>
+        <p class="text-muted mb-0">{{ project.customer_name }} — {{ project.location }}</p>
+    </div>
+    <div>
+        {% if current_user.role in ["Admin", "Operation Manager"] %}
+        <a class="btn btn-outline-primary" href="{{ url_for('projects.edit_project', project_id=project.id) }}">Edit</a>
+        {% endif %}
+        <a class="btn btn-primary" href="{{ url_for('documents.upload_document') }}">Upload Document</a>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-4"><div class="card p-3"><strong>Status</strong><span>{{ project.status }}</span></div></div>
+    <div class="col-md-4"><div class="card p-3"><strong>Type</strong><span>{{ project.project_type }}</span></div></div>
+    <div class="col-md-4"><div class="card p-3"><strong>Capacity</strong><span>{{ project.capacity }}</span></div></div>
+</div>
+
+<div class="card mt-3 shadow-sm"><div class="card-body">
+<h5 class="fw-bold">Project Details</h5>
+<p><strong>Start Date:</strong> {{ project.start_date or "" }}</p>
+<p><strong>Expected Completion:</strong> {{ project.expected_completion_date or "" }}</p>
+<p><strong>Assigned Team:</strong><br>{{ project.assigned_team or "" }}</p>
+<p><strong>Description:</strong><br>{{ project.description or "" }}</p>
+</div></div>
+
+<div class="row g-3 mt-1">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Project Tasks</strong>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('project_tasks.create_task', project_id=project.id) }}">+ Task</a>
+            </div>
+            <div class="card-body table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>Task</th><th>Assigned</th><th>Status</th><th>Due</th></tr></thead>
+                    <tbody>
+                    {% for task in project.tasks[:5] %}
+                    <tr class="{% if task.is_overdue %}table-danger{% endif %}">
+                        <td><a href="{{ url_for('project_tasks.edit_task', task_id=task.id) }}">{{ task.title }}</a></td>
+                        <td>{{ task.assigned_to.full_name if task.assigned_to else '-' }}</td>
+                        <td>{{ task.status }}</td>
+                        <td>{{ task.due_date or '-' }}</td>
+                    </tr>
+                    {% else %}<tr><td colspan="4" class="text-muted">No tasks yet.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+                <a href="{{ url_for('project_tasks.list_tasks', project_id=project.id) }}" class="btn btn-light btn-sm">View all tasks</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Issues & Risks</strong>
+                <a class="btn btn-sm btn-outline-danger" href="{{ url_for('issues.create_issue', project_id=project.id) }}">+ Issue</a>
+            </div>
+            <div class="card-body table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>Issue</th><th>Severity</th><th>Status</th><th>Responsible</th></tr></thead>
+                    <tbody>
+                    {% for issue in project.issues[:5] %}
+                    <tr class="{% if issue.is_overdue %}table-danger{% endif %}">
+                        <td><a href="{{ url_for('issues.edit_issue', issue_id=issue.id) }}">{{ issue.title }}</a></td>
+                        <td>{{ issue.severity }}</td>
+                        <td>{{ issue.status }}</td>
+                        <td>{{ issue.responsible_user.full_name if issue.responsible_user else '-' }}</td>
+                    </tr>
+                    {% else %}<tr><td colspan="4" class="text-muted">No issues yet.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+                <a href="{{ url_for('issues.list_issues', project_id=project.id) }}" class="btn btn-light btn-sm">View all issues</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-3 shadow-sm">
+    <div class="card-header bg-white fw-bold">Create Online Forms for This Project</div>
+    <div class="card-body">
+        <div class="row g-2">
+            {% if allowed_forms["site-survey"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='site-survey') }}">Site Survey</a></div>{% endif %}
+            {% if allowed_forms["load-assessment"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='load-assessment') }}">Load Assessment</a></div>{% endif %}
+            {% if allowed_forms["daily-site-report"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='daily-site-report') }}">Daily Site Report</a></div>{% endif %}
+            {% if allowed_forms["delivery-note"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='delivery-note') }}">Delivery Note</a></div>{% endif %}
+            {% if allowed_forms["testing"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='testing') }}">Testing</a></div>{% endif %}
+            {% if allowed_forms["commissioning"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='commissioning') }}">Commissioning</a></div>{% endif %}
+            {% if allowed_forms["handover"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='handover') }}">Handover</a></div>{% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card mt-3 shadow-sm">
+    <div class="card-header bg-white fw-bold">Project Online Forms</div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='site-survey', project_id=project.id) }}">Site Surveys: {{ project.site_surveys|length }}</a></div>
+            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='load-assessment', project_id=project.id) }}">Load Assessments: {{ project.load_assessments|length }}</a></div>
+            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='daily-site-report', project_id=project.id) }}">Daily Reports: {{ project.daily_reports|length }}</a></div>
+            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='delivery-note', project_id=project.id) }}">Delivery Notes: {{ project.delivery_notes|length }}</a></div>
+            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='testing', project_id=project.id) }}">Testing: {{ project.testing_forms|length }}</a></div>
+            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='commissioning', project_id=project.id) }}">Commissioning: {{ project.commissioning_forms|length }}</a></div>
+            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='handover', project_id=project.id) }}">Handover: {{ project.handover_forms|length }}</a></div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-3 shadow-sm">
+    <div class="card-header bg-white fw-bold">Project Documents</div>
+    <div class="card-body">
+        <table class="table table-hover">
+        <thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Uploaded By</th><th>Date</th></tr></thead>
+        <tbody>
+        {% for doc in project.documents %}
+        <tr><td><a href="{{ url_for('documents.detail', document_id=doc.id) }}">{{ doc.document_title }}</a></td><td>{{ doc.document_type }}</td><td><span class="badge bg-secondary">{{ doc.approval_status }}</span></td><td>{{ doc.uploader.full_name }}</td><td>{{ doc.upload_date.strftime("%Y-%m-%d") }}</td></tr>
+        {% else %}<tr><td colspan="5" class="text-muted">No documents uploaded under this project.</td></tr>{% endfor %}
+        </tbody></table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold">Project Workforce</div>
+    <div class="card-body">
+        <h6>Assigned Teams</h6>
+        <ul>
+            {% for a in project.team_assignments if a.status != "Removed" %}
+                <li><strong>{{ a.team.team_name }}</strong> — Leader: {{ a.team.leader.full_name if a.team and a.team.leader else "Not assigned" }} — Scope: {{ a.work_scope or "" }}</li>
+            {% else %}
+                <li class="text-muted">No teams assigned.</li>
+            {% endfor %}
+        </ul>
+        <h6>Direct Employees</h6>
+        <ul>
+            {% for a in project.employee_assignments if a.status != "Removed" %}
+                <li><strong>{{ a.employee.full_name }}</strong> — {{ a.role_on_project or a.employee.job_title or "" }} — Scope: {{ a.work_scope or "" }}</li>
+            {% else %}
+                <li class="text-muted">No direct employees assigned.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<div class="mb-3"><a class="btn btn-outline-warning" href="{{ url_for('materials.project_material_report', project_id=project.id) }}">Material Report</a></div>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class='d-flex gap-2 mt-3 mb-3'><a class='btn btn-outline-dark' href='javascript:history.back()'>Close / Back</a><a class='btn btn-outline-secondary' href='/'>Home</a></div>
+<h2 class='fw-bold'>Register Warranty</h2>
+<form method='post' class='card'><div class='card-body'><div class='row g-3'>
+<div class='col-md-4'><label class='form-label'>Customer</label><input class='form-control' list='customerOptions' name='customer_name' placeholder='Select existing customer or type new customer' required><datalist id='customerOptions'>{% for c in customers %}<option value='{{ c.customer_name }}'>{% endfor %}</datalist><small class='text-muted'>Hal customer field oo keliya.</small></div>
+<div class='col-md-4'><label class='form-label'>Project</label><select class='form-select' name='project_id'><option value=''>-- select --</option>{% for p in projects %}<option value='{{ p.id }}'>{{ p.project_name }} - {{ p.customer_name }}</option>{% endfor %}</select></div>
+<div class='col-md-3'><label class='form-label'>System Type</label><input class='form-control' name='system_type'></div><div class='col-md-3'><label class='form-label'>Capacity</label><input class='form-control' name='capacity'></div><div class='col-md-3'><label class='form-label'>Warranty Start</label><input class='form-control' type='date' name='warranty_start'></div><div class='col-md-3'><label class='form-label'>Warranty End</label><input class='form-control' type='date' name='warranty_end'></div><div class='col-md-3'><label class='form-label'>Status</label><select class='form-select' name='status'>{% for s in statuses %}<option value='{{ s }}'>{{ s }}</option>{% endfor %}</select></div><div class='col-md-12'><label class='form-label'>Notes</label><textarea class='form-control' name='notes'></textarea></div></div><button class='btn btn-primary mt-3'>Save Warranty</button></div></form>
+{% endblock %}

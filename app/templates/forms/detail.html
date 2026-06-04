@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-end mt-2"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('forms.list_forms', form_key=form_key) }}">Close / Back</a><a class="btn btn-outline-dark btn-sm ms-1" href="{{ url_for('forms.forms_home') }}">Forms Home</a></div>
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3"><div><h2 class="fw-bold">{{ form_title }} <span class="ref-badge ms-2">Ref No: {{ form_ref }}</span> #{{ entry.id }}</h2><p class="text-muted mb-0">{{ entry.project.project_name }} — Created by {{ entry.creator.full_name }}</p></div><div><a class="btn btn-outline-secondary" href="{{ url_for('forms.print_form', form_key=form_key, form_id=entry.id) }}" target="_blank">Print</a>
+        <a class="btn btn-success" href="{{ url_for('reports.form_pdf', form_key=form_key, form_id=entry.id) }}" target="_blank">PDF</a> {% if can_review_this_form %}<a class="btn btn-warning" href="{{ url_for('forms.review_form', form_key=form_key, form_id=entry.id) }}">Review</a>{% endif %} {% if can_edit_this_form %}<a class="btn btn-primary" href="{{ url_for('forms.edit_form', form_key=form_key, form_id=entry.id) }}">Edit</a>{% endif %} <a class="btn btn-light" href="{{ url_for('forms.list_forms', form_key=form_key) }}">Back</a></div></div>
+<div class="card shadow-sm mb-3"><div class="card-body"><h5 class="fw-bold">Approval Information</h5><p><strong>Status:</strong> <span class="badge bg-secondary">{{ entry.approval_status }}</span></p><p><strong>Manager Comments:</strong><br>{{ entry.manager_comments or "No comments yet." }}</p>{% if entry.reviewer %}<p><strong>Reviewed By:</strong> {{ entry.reviewer.full_name }}</p><p><strong>Reviewed At:</strong> {{ entry.reviewed_at.strftime("%Y-%m-%d %H:%M") if entry.reviewed_at else "" }}</p>{% endif %}{% if histories %}
+        <hr>
+        <h6 class="fw-bold">Approval History</h6>
+        <table class="table table-sm table-bordered">
+            <thead><tr><th>Date</th><th>Reviewer</th><th>Previous</th><th>New</th><th>Comments</th></tr></thead>
+            <tbody>
+            {% for h in histories %}
+            <tr><td>{{ h.reviewed_at.strftime("%Y-%m-%d %H:%M") }}</td><td>{{ h.reviewer.full_name if h.reviewer else "System" }}</td><td>{{ h.previous_status or "" }}</td><td>{{ h.new_status }}</td><td>{{ h.comments or "" }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        {% if can_edit_this_form and entry.approval_status in ["Draft", "Need Correction", "Rejected"] %}<form method="POST" action="{{ url_for('forms.submit_form', form_key=form_key, form_id=entry.id) }}"><button class="btn btn-success">Submit for Approval</button></form>{% endif %}</div></div>
+<div class="card shadow-sm brand-card"><div class="card-body"><table class="table table-bordered"><tbody><tr><th style="width:260px;">Project</th><td>{{ entry.project.project_name }}</td></tr><tr><th>Customer</th><td>{{ entry.project.customer_name }}</td></tr><tr><th>Created By</th><td>{{ entry.creator.full_name }}</td></tr><tr><th>Created At</th><td>{{ entry.created_at.strftime("%Y-%m-%d %H:%M") }}</td></tr>{% for label, value in display_rows %}<tr><th>{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody></table>{% if can_delete_this_form %}<form method="POST" action="{{ url_for('forms.delete_form', form_key=form_key, form_id=entry.id) }}" onsubmit="return confirm('Are you sure you want to delete this form?');"><button class="btn btn-danger">Delete Form</button></form>{% endif %}</div></div>
+{% endblock %}

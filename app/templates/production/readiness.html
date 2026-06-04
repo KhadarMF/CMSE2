@@ -1,0 +1,4 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class='d-flex gap-2 mt-3 mb-3'><a class='btn btn-outline-dark' href='javascript:history.back()'>Close / Back</a><a class='btn btn-outline-secondary' href='/'>Home</a></div><h2 class='fw-bold'>Production Readiness</h2><p class='text-muted'>Basic checks before online use.</p><div class='card'><div class='card-body'><table class='table'><thead><tr><th>Check</th><th>Status / Count</th></tr></thead><tbody>{% for name,value in checks %}<tr><td>{{ name }}</td><td>{{ value }}</td></tr>{% endfor %}</tbody></table></div></div><div class='alert alert-warning mt-3'>Before full production: configure PostgreSQL backup, persistent upload storage, secure email SMTP, strong passwords and role permissions.</div>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div>
+        <h2 class="fw-bold">Reports</h2>
+        <p class="text-muted mb-0">Project completion checklist, full project reports, customer reports, and PDF exports.</p>
+    </div>
+    <a class="btn btn-dark" href="{{ url_for('reports.customer_reports') }}">Customer Reports</a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Customer</th>
+                    <th>Status</th>
+                    <th>Readiness</th>
+                    <th>Open Tasks</th>
+                    <th>Open Issues</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in summary %}
+                <tr>
+                    <td>{{ row.project.project_name }}</td>
+                    <td>{{ row.project.customer_name }}</td>
+                    <td>{{ row.project.status }}</td>
+                    <td>
+                        {% if row.ready %}
+                            <span class="badge bg-success">Ready</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">Incomplete</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ row.summary.open_tasks }}</td>
+                    <td>{{ row.summary.open_issues }}</td>
+                    <td>
+                        <a class="btn btn-sm btn-outline-dark" href="{{ url_for('reports.project_report', project_id=row.project.id) }}">Checklist</a>
+                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('reports.project_full_report', project_id=row.project.id) }}">Full Report</a>
+                        <a class="btn btn-sm btn-primary" href="{{ url_for('reports.project_full_report_pdf', project_id=row.project.id) }}" target="_blank">Full PDF</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-muted">No projects found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

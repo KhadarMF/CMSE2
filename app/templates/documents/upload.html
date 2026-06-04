@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-4 mb-3"><h2 class="fw-bold">Upload Document</h2></div>
+<div class="card shadow-sm"><div class="card-body">
+<form method="POST" enctype="multipart/form-data">
+<div class="row g-3">
+<div class="col-md-6"><label class="form-label">Project</label><select class="form-select" name="project_id" required><option value="">Select Project</option>{% for project in projects %}<option value="{{ project.id }}">{{ project.project_name }} — {{ project.customer_name }}</option>{% endfor %}</select></div>
+<div class="col-md-6"><label class="form-label">Document Title</label><input class="form-control" name="document_title" required></div>
+<div class="col-md-6"><label class="form-label">Document Type</label><select class="form-select" name="document_type" required>{% for dtype in document_types %}<option value="{{ dtype }}">{{ dtype }}</option>{% endfor %}</select></div>
+<div class="col-md-6"><label class="form-label">Approval Status</label><select class="form-select" name="approval_status"><option value="Draft">Draft</option><option value="Submitted">Submitted</option></select></div>
+<div class="col-md-12"><label class="form-label">File Attachment</label><input type="file" class="form-control" name="file" required></div>
+<div class="col-md-12"><label class="form-label">Remarks</label><textarea class="form-control" name="remarks" rows="3"></textarea></div>
+</div><div class="mt-4"><button class="btn btn-primary">Upload</button><a class="btn btn-light" href="{{ url_for('documents.list_documents') }}">Cancel</a></div>
+</form></div></div>
+{% endblock %}

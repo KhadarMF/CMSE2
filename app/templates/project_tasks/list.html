@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+  <div><h2 class="fw-bold">Project Tasks</h2><p class="text-muted mb-0">Assign tasks to employees and supervise them by system users.</p></div>
+  <a class="btn btn-primary" href="{{ url_for('project_tasks.create_task') }}">+ New Task</a>
+</div>
+<div class="card shadow-sm mb-3"><div class="card-body">
+<form class="row g-2" method="get">
+  <div class="col-md-3"><select name="project_id" class="form-select"><option value="">All Projects</option>{% for p in projects %}<option value="{{ p.id }}" {% if selected_project_id|string == p.id|string %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select></div>
+  <div class="col-md-3"><select name="employee_id" class="form-select"><option value="">All Employees</option>{% for e in employees %}<option value="{{ e.id }}" {% if selected_employee_id|string == e.id|string %}selected{% endif %}>{{ e.full_name }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><select name="status" class="form-select"><option value="">All Statuses</option>{% for s in statuses %}<option value="{{ s }}" {% if selected_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><select name="mine" class="form-select"><option value="">All Supervisors</option><option value="1" {% if mine=='1' %}selected{% endif %}>Supervised by Me</option></select></div>
+  <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
+</form>
+</div></div>
+<div class="card shadow-sm"><div class="card-body table-responsive">
+<table class="table table-hover align-middle">
+<thead><tr><th>Task</th><th>Project</th><th>Assigned Employee</th><th>Supervisor</th><th>Status</th><th>Priority</th><th>Due Date</th><th>Progress</th><th></th></tr></thead>
+<tbody>
+{% for t in tasks %}
+<tr class="{% if t.is_overdue %}table-danger{% endif %}">
+<td><strong>{{ t.title }}</strong><br><small class="text-muted">{{ t.description[:90] if t.description else '' }}</small></td>
+<td><a href="{{ url_for('projects.detail', project_id=t.project_id) }}">{{ t.project.project_name }}</a></td>
+<td>{% if t.assigned_employee %}<a href="{{ url_for('project_tasks.employee_task_report', employee_id=t.assigned_employee.id) }}">{{ t.assigned_employee.full_name }}</a>{% else %}-{% endif %}</td>
+<td>{{ t.supervisor_user.full_name if t.supervisor_user else (t.assigned_to.full_name if t.assigned_to else '-') }}</td>
+<td><span class="badge bg-secondary">{{ t.status }}</span>{% if t.is_overdue %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}</td>
+<td>{{ t.priority }}</td>
+<td>{{ t.due_date or '-' }}</td>
+<td style="min-width:120px"><div class="progress"><div class="progress-bar" style="width: {{ t.progress_percent or 0 }}%">{{ t.progress_percent or 0 }}%</div></div></td>
+<td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('project_tasks.edit_task', task_id=t.id) }}">Edit</a></td>
+</tr>
+{% else %}<tr><td colspan="9" class="text-muted">No tasks found.</td></tr>{% endfor %}
+</tbody></table>
+</div></div>
+{% endblock %}

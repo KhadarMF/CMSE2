@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-4 mb-3"><h2 class="fw-bold">{{ "Edit Team" if team else "Add Team" }}</h2></div>
+<form method="post" class="card shadow-sm"><div class="card-body">
+<div class="row g-3">
+    <div class="col-md-5"><label class="form-label">Team Name *</label><input class="form-control" name="team_name" value="{{ team.team_name if team else '' }}" required></div>
+    <div class="col-md-3"><label class="form-label">Team Type</label><input class="form-control" name="team_type" value="{{ team.team_type if team else '' }}" placeholder="Installation / Survey / Commissioning"></div>
+    <div class="col-md-4"><label class="form-label">Team Leader</label><select class="form-select" name="leader_employee_id"><option value="">--</option>{% for e in employees %}<option value="{{ e.id }}" {% if team and team.leader_employee_id==e.id %}selected{% endif %}>{{ e.full_name }} - {{ e.job_title or "" }}</option>{% endfor %}</select></div>
+    <div class="col-md-4"><label class="form-label">Branch</label><select class="form-select" name="branch_id"><option value="">--</option>{% for b in branches %}<option value="{{ b.id }}" {% if team and team.branch_id==b.id %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}</select></div>
+    <div class="col-md-4"><label class="form-label">Department</label><select class="form-select" name="department_id"><option value="">--</option>{% for d in departments %}<option value="{{ d.id }}" {% if team and team.department_id==d.id %}selected{% endif %}>{{ d.department_name }}</option>{% endfor %}</select></div>
+    <div class="col-md-4"><label class="form-label">Status</label><select class="form-select" name="status">{% for s in statuses %}<option value="{{ s }}" {% if team and team.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+    <div class="col-md-12"><label class="form-label">Remarks</label><textarea class="form-control" name="remarks" rows="3">{{ team.remarks if team else '' }}</textarea></div>
+</div>
+<div class="mt-3"><button class="btn btn-dark">Save</button> <a class="btn btn-outline-secondary" href="{{ url_for('master.teams') }}">Cancel</a></div>
+</div></form>
+{% endblock %}

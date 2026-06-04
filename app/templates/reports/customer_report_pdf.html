@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Customer Report</title>
+<style>
+body{font-family:Arial,sans-serif;color:#111827;font-size:11px}
+.header{border-bottom:3px solid #f97316;padding-bottom:12px;margin-bottom:18px}
+.company{font-size:22px;font-weight:bold}.meta{font-size:10px;color:#555}
+h1{font-size:20px;margin:12px 0} h2{font-size:15px;margin-top:18px}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th,td{border:1px solid #999;padding:6px;vertical-align:top}
+th{background:#f0f0f0;text-align:left}
+.footer{margin-top:40px}.sig{border-top:1px solid #111;padding-top:8px;width:30%;display:inline-block;margin-right:3%}
+</style>
+</head>
+<body>
+<div class="header">
+    <div class="company">{{ company_profile.company_name }}</div>
+    <div>Customer Project Report</div>
+    <div class="meta">Generated: {{ generated_at.strftime("%Y-%m-%d %H:%M") }} UTC</div>
+</div>
+
+<h1>{{ customer_name }}</h1>
+<table>
+<tr><th>Total Projects</th><td>{{ totals.projects }}</td><th>Completed Projects</th><td>{{ totals.completed }}</td></tr>
+<tr><th>Active Projects</th><td>{{ totals.active }}</td><th>Documents</th><td>{{ totals.documents }} / Approved {{ totals.approved_documents }}</td></tr>
+<tr><th>Forms</th><td>{{ totals.forms }} / Approved {{ totals.approved_forms }}</td><th>Open Tasks / Issues</th><td>{{ totals.open_tasks }} / {{ totals.open_issues }}</td></tr>
+<tr><th>Payroll Due</th><td>${{ "%.2f"|format(totals.payroll_due) }}</td><th>Payroll Balance</th><td>${{ "%.2f"|format(totals.payroll_balance) }}</td></tr>
+</table>
+
+<h2>Projects</h2>
+<table>
+<thead>
+<tr><th>Project</th><th>Location</th><th>Type</th><th>Capacity</th><th>Status</th><th>Documents</th><th>Forms</th><th>Open Tasks</th><th>Open Issues</th><th>Readiness</th></tr>
+</thead>
+<tbody>
+{% for row in project_rows %}
+<tr>
+<td>{{ row.project.project_name }}</td>
+<td>{{ row.project.location }}</td>
+<td>{{ row.project.project_type }}</td>
+<td>{{ row.project.capacity or "" }}</td>
+<td>{{ row.project.status }}</td>
+<td>{{ row.summary.total_documents }}</td>
+<td>{{ row.summary.total_forms }}</td>
+<td>{{ row.summary.open_tasks }}</td>
+<td>{{ row.summary.open_issues }}</td>
+<td>{{ "Ready" if row.ready else "Incomplete" }}</td>
+</tr>
+{% else %}
+<tr><td colspan="10">No projects found.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+
+<div class="footer"><div class="sig">Prepared By</div><div class="sig">Reviewed By</div><div class="sig">Approved By</div></div>
+</body>
+</html>

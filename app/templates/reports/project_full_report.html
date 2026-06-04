@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="company-report-header card shadow-sm mb-3"><div class="card-body d-flex justify-content-between align-items-center"><div class="company-logo-text">{{ company_profile.logo_text or 'CMSE' }}</div><div class="text-end"><h4 class="mb-0 fw-bold">{{ company_profile.company_name }}</h4><div class="text-muted">{{ company_profile.tagline or '' }}</div><div class="small">{{ company_profile.phone or '' }} | {{ company_profile.email or '' }} | {{ company_profile.website or '' }}</div><div class="small">{{ company_profile.address or '' }}</div></div></div></div>
+
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div>
+        <h2 class="fw-bold">Full Project Report</h2>
+        <p class="text-muted mb-0">{{ project.project_name }} <span class="ref-badge">Report Ref: {{ report_ref }}</span> — {{ project.customer_name }}</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('reports.project_full_report_pdf', project_id=project.id) }}" target="_blank">Export Full PDF</a>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Documents</div><h3>{{ summary.total_documents }}</h3><small>Approved: {{ summary.approved_documents }}</small></div></div></div>
+    <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Forms</div><h3>{{ summary.total_forms }}</h3><small>Approved: {{ summary.approved_forms }}</small></div></div></div>
+    <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Open Tasks</div><h3>{{ summary.open_tasks }}</h3><small>Overdue: {{ summary.overdue_tasks }}</small></div></div></div>
+    <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Open Issues</div><h3>{{ summary.open_issues }}</h3><small>Critical: {{ summary.critical_issues }}</small></div></div></div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold">Project Information</div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4"><strong>Project:</strong> {{ project.project_name }}</div>
+            <div class="col-md-4"><strong>Customer:</strong> {{ project.customer_name }}</div>
+            <div class="col-md-4"><strong>Status:</strong> {{ project.status }}</div>
+            <div class="col-md-4"><strong>Location:</strong> {{ project.location }}</div>
+            <div class="col-md-4"><strong>Project Type:</strong> {{ project.project_type }}</div>
+            <div class="col-md-4"><strong>Capacity:</strong> {{ project.capacity or "" }}</div>
+            <div class="col-md-4"><strong>Start Date:</strong> {{ project.start_date or "" }}</div>
+            <div class="col-md-4"><strong>Expected Completion:</strong> {{ project.expected_completion_date or "" }}</div>
+            <div class="col-md-4"><strong>Created:</strong> {{ project.created_at.strftime("%Y-%m-%d") if project.created_at else "" }}</div>
+        </div>
+        {% if project.description %}
+        <hr><strong>Description:</strong><br>{{ project.description }}
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold">Forms Summary</div>
+    <div class="card-body table-responsive">
+        <table class="table table-bordered align-middle">
+            <thead><tr><th>Form</th><th>Total</th><th>Approved</th><th>Submitted</th><th>Under Review</th><th>Rejected</th><th>Need Correction</th><th>Draft</th></tr></thead>
+            <tbody>
+            {% for item in forms_summary %}
+                <tr><td>{{ item.label }}</td><td>{{ item.total }}</td><td>{{ item.approved }}</td><td>{{ item.submitted }}</td><td>{{ item.under_review }}</td><td>{{ item.rejected }}</td><td>{{ item.need_correction }}</td><td>{{ item.draft }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold">Workforce / Teams</div>
+    <div class="card-body">
+        <h6>Assigned Teams</h6>
+        <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+            <thead><tr><th>Team</th><th>Leader</th><th>Members</th><th>Scope</th><th>Batch / Work Date</th><th>Status</th></tr></thead>
+            <tbody>
+            {% for a in team_assignments %}
+                <tr>
+                    <td>{{ a.team.team_name }}</td>
+                    <td>{{ a.team.leader.full_name if a.team.leader else "" }}</td>
+                    <td>
+                        {% for m in a.team.members if m.is_active %}
+                            {{ m.employee.full_name }}{% if m.member_role %} ({{ m.member_role }}){% endif %}{% if not loop.last %}, {% endif %}
+                        {% else %}No members{% endfor %}
+                    </td>
+                    <td>{{ a.work_scope or "" }}</td>
+                    <td>{{ a.start_date or "" }} - {{ a.end_date or "" }}</td>
+                    <td>{{ a.status }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="text-muted">No teams assigned.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+
+        <h6>Direct Employees</h6>
+        <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+            <thead><tr><th>Employee</th><th>Job Title</th><th>Role on Project</th><th>Scope</th><th>Batch / Work Date</th><th>Status</th></tr></thead>
+            <tbody>
+            {% for a in employee_assignments %}
+                <tr><td>{{ a.employee.full_name }}</td><td>{{ a.employee.job_title or "" }}</td><td>{{ a.role_on_project or "" }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.start_date or "" }} - {{ a.end_date or "" }}</td><td>{{ a.status }}</td></tr>
+            {% else %}
+                <tr><td colspan="6" class="text-muted">No direct employees assigned.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold">Documents</div>
+    <div class="card-body table-responsive">
+        <table class="table table-hover align-middle">
+            <thead><tr><th>Title</th><th>Type</th><th>Status</th><th>Uploaded By</th><th>Date</th></tr></thead>
+            <tbody>
+            {% for d in documents %}
+                <tr><td>{{ d.document_title }}</td><td>{{ d.document_type }}</td><td>{{ d.approval_status }}</td><td>{{ d.uploader.full_name if d.uploader else "" }}</td><td>{{ d.upload_date.strftime("%Y-%m-%d") if d.upload_date else "" }}</td></tr>
+            {% else %}
+                <tr><td colspan="5" class="text-muted">No documents.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<div class="card shadow-sm mb-3"><div class="card-header fw-bold">Payroll Summary</div><div class="card-body table-responsive"><div class="row mb-3"><div class="col-md-3"><strong>Employees:</strong> {{ summary.payroll_employees }}</div><div class="col-md-3"><strong>Total Due:</strong> ${{ "%.2f"|format(summary.payroll_total_due) }}</div><div class="col-md-3"><strong>Total Paid:</strong> ${{ "%.2f"|format(summary.payroll_total_paid) }}</div><div class="col-md-3"><strong>Balance:</strong> ${{ "%.2f"|format(summary.payroll_balance) }}</div></div><table class="table table-bordered align-middle"><thead><tr><th>Employee</th><th>Batch / Work Date</th><th>Role</th><th>Current</th><th>Previous</th><th>Total Due</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>{% for e in payroll_entries %}<tr><td>{{ e.employee.full_name }}</td><td>{{ e.batch.batch_title }}<br><small>{{ e.batch.work_date or "" }}</small></td><td>{{ e.role_on_project or "" }}</td><td>${{ "%.2f"|format(e.current_due) }}</td><td>${{ "%.2f"|format(e.previous_balance or 0) }}</td><td>${{ "%.2f"|format(e.total_due) }}</td><td>${{ "%.2f"|format(e.total_paid) }}</td><td>${{ "%.2f"|format(e.balance) }}</td><td>{{ e.status }}</td></tr>{% else %}<tr><td colspan="9" class="text-muted">No payroll entries for this project.</td></tr>{% endfor %}</tbody></table></div></div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold">Project Tasks</div>
+    <div class="card-body table-responsive">
+        <table class="table table-hover align-middle">
+            <thead><tr><th>Task</th><th>Assigned To</th><th>Status</th><th>Priority</th><th>Due Date</th><th>Progress</th></tr></thead>
+            <tbody>
+            {% for t in tasks %}
+                <tr class="{% if t.is_overdue %}table-danger{% endif %}">
+                    <td>{{ t.title }}</td><td>{{ t.assigned_employee.full_name if t.assigned_employee else (t.assigned_to.full_name if t.assigned_to else "") }}</td><td>{{ t.status }}</td><td>{{ t.priority }}</td><td>{{ t.due_date or "" }}</td><td>{{ t.progress_percent }}%</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="text-muted">No tasks.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header fw-bold">Issues & Risks</div>
+    <div class="card-body table-responsive">
+        <table class="table table-hover align-middle">
+            <thead><tr><th>Issue</th><th>Type</th><th>Severity</th><th>Status</th><th>Responsible</th><th>Target Date</th></tr></thead>
+            <tbody>
+            {% for i in issues %}
+                <tr class="{% if i.severity == 'Critical' and i.status not in ['Resolved','Closed'] %}table-danger{% elif i.is_overdue %}table-warning{% endif %}">
+                    <td>{{ i.title }}</td><td>{{ i.issue_type }}</td><td>{{ i.severity }}</td><td>{{ i.status }}</td><td>{{ i.responsible_user.full_name if i.responsible_user else "" }}</td><td>{{ i.target_resolution_date or "" }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="text-muted">No issues.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

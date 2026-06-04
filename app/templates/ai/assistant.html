@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-2"><h3 class="mb-0">Ask AI Assistant</h3><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('ai.logs') }}">AI Logs</a></div>
+<div class="alert alert-info">
+  AI will suggest drafts and actions only. Review before using in official records.
+</div>
+
+{% if not result %}
+<div class="card shadow-sm mb-3 border-info">
+  <div class="card-body">
+    <strong>Ready / Diyaar:</strong> Write your question below, then click <strong>Generate AI Response</strong>.
+    Previous AI answers will not appear here automatically. You can see them under <strong>AI Logs</strong>.
+  </div>
+</div>
+{% endif %}
+
+{% if result %}
+<div class="card shadow-sm mb-4 border-success" id="ai-result-box">
+  <div class="card-header fw-bold bg-success text-white d-flex justify-content-between align-items-center">
+    <span>AI Response / Jawaabta AI-ga</span>
+    {% if log %}<span class="badge bg-light text-dark">{{ log.ref_no }}</span>{% endif %}
+  </div>
+  <div class="card-body">
+    <div class="alert alert-warning small mb-3">
+      This answer is a draft. Review it before using it in official records.<br>
+      Jawaabtani waa draft/talo. Hubi ka hor inta aanad si rasmi ah u isticmaalin.
+    </div>
+    <pre class="ai-response p-3 bg-light rounded" style="white-space: pre-wrap; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.5; max-height: none; overflow: visible;">{{ result }}</pre>
+    <div class="d-flex gap-2 mt-3">
+      {% if log %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('ai.logs') }}">View AI Log {{ log.ref_no }}</a>{% endif %}
+      <button type="button" class="btn btn-outline-primary btn-sm" onclick="navigator.clipboard.writeText(document.querySelector('#ai-result-box pre').innerText); alert('AI response copied');">Copy Response</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('ai.assistant') }}" class="card p-3 shadow-sm mb-3">
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label">Context Type</label>
+      <select name="context_type" class="form-select">
+        {% for c in context_types %}
+          <option value="{{ c }}" {% if selected_context_type == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-8">
+      <label class="form-label">Question / Request</label>
+      <input name="prompt" class="form-control" required value="{{ last_prompt or '' }}" placeholder="Example: Draft a customer reply for an inverter fault complaint">
+    </div>
+    <div class="col-12">
+      <label class="form-label">Optional ERP Context</label>
+      <textarea name="context_data" rows="5" class="form-control" placeholder="Paste customer, project, ticket, quotation or report details here">{{ last_context_data or '' }}</textarea>
+    </div>
+  </div>
+  <button class="btn btn-cmse mt-3" type="submit">Generate AI Response</button>
+</form>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-bold">Quick Test Questions / Su'aalo Tijaabo ah</div>
+  <div class="card-body">
+    <p class="small text-muted">Copy one question below and paste it into Question / Request.</p>
+    <div class="list-group small">
+      <button type="button" class="list-group-item list-group-item-action" onclick="fillPrompt(this.innerText)">Analyze this service ticket: Customer says inverter fault E03, battery drains fast at night, and the system stopped. Give category, priority, possible causes, technician checklist, and customer reply.</button>
+      <button type="button" class="list-group-item list-group-item-action" onclick="fillPrompt(this.innerText)">Write a professional WhatsApp follow-up message for a customer interested in a 10kW hybrid solar system for a restaurant in Hargeisa.</button>
+      <button type="button" class="list-group-item list-group-item-action" onclick="fillPrompt(this.innerText)">Generate a weekly management summary: 5 active projects, 3 open service tickets, 2 urgent tickets, 8 tasks completed, and 4 pending customer follow-ups.</button>
+      <button type="button" class="list-group-item list-group-item-action" onclick="fillPrompt(this.innerText)">Translate this into professional English: Macmiilku wuxuu sheegay in inverter-ku fault muujinayo, battery-guna habeenkii si dhaqso ah ayuu u dhacayaa.</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function fillPrompt(text) {
+  const input = document.querySelector('input[name="prompt"]');
+  if (input) {
+    input.value = text.trim();
+    input.focus();
+  }
+}
+if (window.location.hash === '#ai-result-box') {
+  document.getElementById('ai-result-box')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+</script>
+{% endblock %}

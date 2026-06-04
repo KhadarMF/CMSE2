@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+  <div><h2 class="fw-bold">Issue & Risk Tracker</h2><p class="text-muted mb-0">Record technical, material, transport, finance, safety, and customer issues.</p></div>
+  <a class="btn btn-danger" href="{{ url_for('issues.create_issue') }}">+ Report Issue</a>
+</div>
+<div class="card shadow-sm mb-3"><div class="card-body">
+<form class="row g-2" method="get">
+  <div class="col-md-3"><select name="project_id" class="form-select"><option value="">All Projects</option>{% for p in projects %}<option value="{{ p.id }}" {% if selected_project_id|string == p.id|string %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select></div>
+  <div class="col-md-3"><select name="status" class="form-select"><option value="">All Statuses</option>{% for s in statuses %}<option value="{{ s }}" {% if selected_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+  <div class="col-md-3"><select name="severity" class="form-select"><option value="">All Severities</option>{% for s in severities %}<option value="{{ s }}" {% if selected_severity==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
+</form>
+</div></div>
+<div class="card shadow-sm"><div class="card-body table-responsive">
+<table class="table table-hover align-middle">
+<thead><tr><th>Issue</th><th>Project</th><th>Type</th><th>Severity</th><th>Status</th><th>Responsible</th><th>Target Date</th><th></th></tr></thead>
+<tbody>
+{% for i in issues %}
+<tr class="{% if i.is_overdue %}table-danger{% endif %}">
+<td><strong>{{ i.title }}</strong><br><small class="text-muted">{{ i.description[:90] if i.description else '' }}</small></td>
+<td><a href="{{ url_for('projects.detail', project_id=i.project_id) }}">{{ i.project.project_name }}</a></td>
+<td>{{ i.issue_type }}</td>
+<td><span class="badge {% if i.severity=='Critical' %}bg-danger{% elif i.severity=='High' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">{{ i.severity }}</span></td>
+<td>{{ i.status }}{% if i.is_overdue %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}</td>
+<td>{{ i.responsible_user.full_name if i.responsible_user else '-' }}</td>
+<td>{{ i.target_resolution_date or '-' }}</td>
+<td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('issues.edit_issue', issue_id=i.id) }}">Edit</a></td>
+</tr>
+{% else %}<tr><td colspan="8" class="text-muted">No issues found.</td></tr>{% endfor %}
+</tbody></table>
+</div></div>
+{% endblock %}

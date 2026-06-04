@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-4 mb-3"><div class="d-flex justify-content-between align-items-center mt-2 mb-2"><div><span class="ref-badge">Ref No: {{ form_ref }}</span></div><div><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('forms.list_forms', form_key=form_key) }}">Close / Back</a><a class="btn btn-outline-dark btn-sm" href="{{ url_for('forms.forms_home') }}">Forms Home</a></div></div>
+<h2 class="fw-bold">{% if mode == "edit" %}Edit{% else %}Create{% endif %} {{ form_title }}</h2><p class="text-muted">Linked to project and saved in database.</p></div>
+<div class="card shadow-sm brand-card"><div class="card-body"><form method="POST"><div class="row g-3">
+<div class="col-md-6"><label class="form-label">Project</label><select class="form-select" name="project_id" required><option value="">Select Project</option>{% for project in projects %}<option value="{{ project.id }}" {% if selected_project|string == project.id|string %}selected{% endif %}>{{ project.project_name }} — {{ project.customer_name }}</option>{% endfor %}</select></div>
+{% if mode == "create" %}<div class="col-md-6"><label class="form-label">Initial Status</label><select class="form-select" name="approval_status"><option value="Draft">Draft</option><option value="Submitted">Submitted</option></select></div>{% else %}<div class="col-md-6"><label class="form-label">Current Status</label><input class="form-control" value="{{ approval_status }}" readonly></div>{% endif %}
+{% for name, label, field_type in fields %}
+<div class="{% if field_type == 'textarea' %}col-md-12{% else %}col-md-4{% endif %}">
+  <label class="form-label">{{ label }}</label>
+  {% if field_type.startswith('select:') %}
+    {% set choice_key = field_type.replace('select:', '') %}
+    <select class="form-select" name="{{ name }}">
+      <option value="">-- Select --</option>
+      {% for value, text in field_choices.get(choice_key, []) %}
+        <option value="{{ value }}" {% if values.get(name, '') == value %}selected{% endif %}>{{ text }}</option>
+      {% endfor %}
+    </select>
+  {% elif field_type == "textarea" %}
+    <textarea class="form-control" name="{{ name }}" rows="3">{{ values.get(name, "") }}</textarea>
+  {% else %}
+    <input type="{{ field_type }}" class="form-control" name="{{ name }}" value="{{ values.get(name, "") }}">
+  {% endif %}
+</div>
+{% endfor %}
+</div><div class="mt-4"><button class="btn btn-primary">{% if mode == "edit" %}Update Form{% else %}Save Form{% endif %}</button><a class="btn btn-light" href="{{ url_for('forms.forms_home') }}">Cancel</a></div></form></div></div>
+{% endblock %}

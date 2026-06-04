@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-4 mb-3"><h2 class="fw-bold">{{ "Edit Customer" if customer else "Add Customer" }}</h2></div>
+<form method="post" class="card shadow-sm"><div class="card-body">
+<div class="row g-3">
+    <div class="col-md-6"><label class="form-label">Customer Name *</label><input class="form-control" name="customer_name" value="{{ customer.customer_name if customer else '' }}" required></div>
+    <div class="col-md-6"><label class="form-label">Contact Person</label><input class="form-control" name="contact_person" value="{{ customer.contact_person if customer else '' }}"></div>
+    <div class="col-md-4"><label class="form-label">Phone</label><input class="form-control" name="phone" value="{{ customer.phone if customer else '' }}"></div>
+    <div class="col-md-4"><label class="form-label">Email</label><input class="form-control" name="email" value="{{ customer.email if customer else '' }}"></div>
+    <div class="col-md-4"><label class="form-label">Customer Type</label><input class="form-control" name="customer_type" value="{{ customer.customer_type if customer else '' }}" placeholder="Residential / Commercial / NGO / Government"></div>
+    <div class="col-md-12"><label class="form-label">Address</label><input class="form-control" name="address" value="{{ customer.address if customer else '' }}"></div>
+    <div class="col-md-12"><label class="form-label">Remarks</label><textarea class="form-control" name="remarks" rows="3">{{ customer.remarks if customer else '' }}</textarea></div>
+    <div class="col-md-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="is_active" {% if not customer or customer.is_active %}checked{% endif %}><label class="form-check-label">Active</label></div></div>
+</div>
+<div class="mt-3"><button class="btn btn-dark">Save</button> <a class="btn btn-outline-secondary" href="{{ url_for('master.customers') }}">Cancel</a></div>
+</div></form>
+{% endblock %}

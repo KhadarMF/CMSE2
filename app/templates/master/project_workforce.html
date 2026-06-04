@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div><h2 class="fw-bold">Project Workforce</h2><p class="text-muted mb-0">{{ project.project_name }} — {{ project.customer_name }}</p></div>
+    <a class="btn btn-outline-dark" href="{{ url_for('projects.detail', project_id=project.id) }}">Back to Project</a>
+</div>
+
+<div class="row g-3">
+<div class="col-lg-6">
+<div class="card shadow-sm mb-3"><div class="card-header fw-bold">Assign Team</div><div class="card-body">
+<form method="post">
+<input type="hidden" name="action" value="add_team">
+<div class="row g-2">
+<div class="col-md-12"><label class="form-label">Team</label><select class="form-select" name="team_id" required><option value="">Select Team</option>{% for t in teams %}<option value="{{ t.id }}">{{ t.team_name }} — Leader: {{ t.leader.full_name if t.leader else "No leader" }}</option>{% endfor %}</select></div>
+<div class="col-md-6"><label class="form-label">Work Scope</label><input class="form-control" name="work_scope" placeholder="Survey / Installation / Testing"></div>
+<div class="col-md-3"><label class="form-label">Start Date</label><input class="form-control" type="date" name="start_date"></div>
+<div class="col-md-3"><label class="form-label">End Date</label><input class="form-control" type="date" name="end_date"></div>
+<div class="col-md-4"><label class="form-label">Status</label><select class="form-select" name="status">{% for s in work_statuses %}<option value="{{ s }}" {% if s=="Active" %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+<div class="col-md-8"><label class="form-label">Remarks</label><input class="form-control" name="remarks"></div>
+</div>
+<button class="btn btn-dark mt-3">Assign Team</button>
+</form>
+</div></div>
+
+<div class="card shadow-sm"><div class="card-header fw-bold">Assigned Teams</div><div class="card-body table-responsive">
+<table class="table table-hover align-middle">
+<thead><tr><th>Team</th><th>Leader</th><th>Members</th><th>Scope</th><th>Status</th><th></th></tr></thead>
+<tbody>
+{% for a in project.team_assignments if a.status != "Removed" %}
+<tr><td>{{ a.team.team_name }}</td><td>{{ a.team.leader.full_name if a.team.leader else "" }}</td><td>{{ a.team.members|selectattr("is_active")|list|length }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td><td><a class="btn btn-sm btn-outline-danger" href="{{ url_for('master.remove_project_team', project_id=project.id, assignment_id=a.id) }}">Remove</a></td></tr>
+{% else %}<tr><td colspan="6" class="text-muted">No teams assigned.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div></div>
+</div>
+
+<div class="col-lg-6">
+<div class="card shadow-sm mb-3"><div class="card-header fw-bold">Assign Direct Employee</div><div class="card-body">
+<form method="post">
+<input type="hidden" name="action" value="add_employee">
+<div class="row g-2">
+<div class="col-md-12"><label class="form-label">Employee</label><select class="form-select" name="employee_id" required><option value="">Select Employee</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }} — {{ e.job_title or "" }}</option>{% endfor %}</select></div>
+<div class="col-md-6"><label class="form-label">Role on Project</label><input class="form-control" name="role_on_project" placeholder="Site Supervisor / Engineer"></div>
+<div class="col-md-6"><label class="form-label">Work Scope</label><input class="form-control" name="work_scope"></div>
+<div class="col-md-3"><label class="form-label">Start Date</label><input class="form-control" type="date" name="start_date"></div>
+<div class="col-md-3"><label class="form-label">End Date</label><input class="form-control" type="date" name="end_date"></div>
+<div class="col-md-3"><label class="form-label">Status</label><select class="form-select" name="status">{% for s in work_statuses %}<option value="{{ s }}" {% if s=="Active" %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+<div class="col-md-12"><label class="form-label">Remarks</label><input class="form-control" name="remarks"></div>
+</div>
+<button class="btn btn-dark mt-3">Assign Employee</button>
+</form>
+</div></div>
+
+<div class="card shadow-sm"><div class="card-header fw-bold">Direct Employees</div><div class="card-body table-responsive">
+<table class="table table-hover align-middle">
+<thead><tr><th>Employee</th><th>Job Title</th><th>Role</th><th>Scope</th><th>Status</th><th></th></tr></thead>
+<tbody>
+{% for a in project.employee_assignments if a.status != "Removed" %}
+<tr><td>{{ a.employee.full_name }}</td><td>{{ a.employee.job_title or "" }}</td><td>{{ a.role_on_project or "" }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td><td><a class="btn btn-sm btn-outline-danger" href="{{ url_for('master.remove_project_employee', project_id=project.id, assignment_id=a.id) }}">Remove</a></td></tr>
+{% else %}<tr><td colspan="6" class="text-muted">No direct employees assigned.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div></div>
+</div>
+</div>
+{% endblock %}

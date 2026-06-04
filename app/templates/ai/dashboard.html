@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h3>AI Assistant & Smart ERP Intelligence</h3><p class="text-muted mb-0">Smart help for CRM, service tickets, reports, translation and operational decisions.</p></div>
+  <div>
+    <a class="btn btn-cmse" href="{{ url_for('ai.assistant') }}">Ask AI</a>
+    {% if current_user.role == 'Admin' %}<a class="btn btn-outline-dark" href="{{ url_for('ai.settings') }}">AI Settings</a>{% endif %}
+  </div>
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-md-2"><div class="card p-3 shadow-sm"><div class="text-muted">AI Logs</div><h4>{{ stats.logs }}</h4></div></div>
+  <div class="col-md-2"><div class="card p-3 shadow-sm"><div class="text-muted">Today</div><h4>{{ stats.today }}</h4></div></div>
+  <div class="col-md-2"><div class="card p-3 shadow-sm"><div class="text-muted">Errors/Offline</div><h4>{{ stats.errors }}</h4></div></div>
+  <div class="col-md-3"><div class="card p-3 shadow-sm"><div class="text-muted">Service Tickets</div><h4>{{ stats.tickets }}</h4></div></div>
+  <div class="col-md-3"><div class="card p-3 shadow-sm"><div class="text-muted">CRM Inquiries</div><h4>{{ stats.crm }}</h4></div></div>
+</div>
+<div class="row g-3">
+  <div class="col-md-3"><a class="card p-3 shadow-sm text-decoration-none h-100" href="{{ url_for('ai.assistant') }}"><h5>General AI Assistant</h5><p>Ask questions, translate, draft messages, explain ERP steps.</p></a></div>
+  <div class="col-md-3"><a class="card p-3 shadow-sm text-decoration-none h-100" href="{{ url_for('ai.reports') }}"><h5>AI Reports</h5><p>Generate weekly management and operations reports.</p></a></div>
+  <div class="col-md-3"><a class="card p-3 shadow-sm text-decoration-none h-100" href="{{ url_for('ai.logs') }}"><h5>AI Logs</h5><p>Audit all AI prompts, responses, usage and review status.</p></a></div>
+  <div class="col-md-3"><a class="card p-3 shadow-sm text-decoration-none h-100" href="{{ url_for('support.tickets') }}"><h5>Ticket AI Helper</h5><p>Open a ticket, then use AI Help to analyze it.</p></a></div>
+</div>
+<div class="card mt-4 shadow-sm"><div class="card-header fw-bold">Latest AI Activity</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Date</th><th>Type</th><th>User</th><th>Related</th><th>Status</th></tr></thead><tbody>{% for l in latest %}<tr><td>{{ l.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ l.context_type }}</td><td>{{ l.user.full_name if l.user else '' }}</td><td>{{ l.related_ref or '' }}</td><td>{{ l.status }}</td></tr>{% else %}<tr><td colspan="5" class="text-muted">No AI activity yet.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

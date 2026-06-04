@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block content %}
+<h3>AI CRM Follow-up Helper</h3>
+<div class="card shadow-sm mb-3"><div class="card-header fw-bold">Inquiry {{ inquiry.ref_no }}</div><div class="card-body"><p><b>Customer:</b> {{ inquiry.customer_name }} | <b>Status:</b> {{ inquiry.status }} | <b>Type:</b> {{ inquiry.project_type }}</p><p>{{ inquiry.requirement_summary }}</p></div></div>
+<form method="post" class="card p-3 shadow-sm mb-3">
+  <label class="form-label">AI Request</label><textarea name="prompt" rows="3" class="form-control">{{ default_prompt }}</textarea>
+  <button class="btn btn-cmse mt-3">Generate Follow-up</button>
+</form>
+<div class="row g-3"><div class="col-md-5"><div class="card"><div class="card-header">Context Sent to AI</div><div class="card-body"><pre class="small">{{ context_data }}</pre></div></div></div><div class="col-md-7">{% if result %}<div class="card"><div class="card-header fw-bold">AI Suggestion</div><div class="card-body"><pre class="ai-response">{{ result }}</pre></div></div>{% endif %}</div></div>
+{% endblock %}

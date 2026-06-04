@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div><h2 class="fw-bold">Teams</h2><p class="text-muted mb-0">Create work teams and assign leaders/members.</p></div>
+    <a class="btn btn-dark" href="{{ url_for('master.create_team') }}">Add Team</a>
+</div>
+<form class="row g-2 mb-3" method="get">
+    <div class="col-md-5"><input class="form-control" name="q" value="{{ q }}" placeholder="Search team name or type"></div>
+    <div class="col-md-2"><button class="btn btn-dark w-100">Search</button></div>
+</form>
+<div class="card shadow-sm"><div class="card-body table-responsive">
+<table class="table table-hover align-middle">
+<thead><tr><th>Team</th><th>Type</th><th>Leader</th><th>Branch</th><th>Department</th><th>Members</th><th>Status</th><th>Action</th></tr></thead>
+<tbody>
+{% for t in teams %}
+<tr><td class="fw-semibold">{{ t.team_name }}</td><td>{{ t.team_type or "" }}</td><td>{{ t.leader.full_name if t.leader else "" }}</td><td>{{ t.branch.branch_name if t.branch else "" }}</td><td>{{ t.department.department_name if t.department else "" }}</td><td>{{ t.members|selectattr("is_active")|list|length }}</td><td>{{ t.status }}</td><td><a class="btn btn-sm btn-primary" href="{{ url_for('master.team_detail', team_id=t.id) }}">Manage</a> <a class="btn btn-sm btn-outline-dark" href="{{ url_for('master.edit_team', team_id=t.id) }}">Edit</a></td></tr>
+{% else %}<tr><td colspan="8" class="text-muted">No teams found.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div></div>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <h2 class="fw-bold">Documents</h2>
+    <a class="btn btn-primary" href="{{ url_for('documents.upload_document') }}">Upload Document</a>
+</div>
+<div class="card shadow-sm mb-3"><div class="card-body">
+<form class="row g-2" method="GET">
+    <div class="col-md-3"><input class="form-control" name="search" placeholder="Search document" value="{{ search }}"></div>
+    <div class="col-md-3"><select class="form-select" name="project_id"><option value="">All Projects</option>{% for project in projects %}<option value="{{ project.id }}" {% if selected_project|string == project.id|string %}selected{% endif %}>{{ project.project_name }}</option>{% endfor %}</select></div>
+    <div class="col-md-3"><select class="form-select" name="status"><option value="">All Statuses</option>{% for status in statuses %}<option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><button class="btn btn-dark w-100">Filter</button></div>
+    <div class="col-md-1"><a class="btn btn-light w-100" href="{{ url_for('documents.list_documents') }}">Reset</a></div>
+</form></div></div>
+<div class="card shadow-sm"><div class="card-body"><table class="table table-hover align-middle">
+<thead><tr><th>Title</th><th>Project</th><th>Type</th><th>Status</th><th>Uploaded By</th><th>Date</th></tr></thead><tbody>
+{% for doc in documents %}
+<tr><td><a href="{{ url_for('documents.detail', document_id=doc.id) }}">{{ doc.document_title }}</a></td><td>{{ doc.project.project_name }}</td><td>{{ doc.document_type }}</td><td><span class="badge bg-secondary">{{ doc.approval_status }}</span></td><td>{{ doc.uploader.full_name }}</td><td>{{ doc.upload_date.strftime("%Y-%m-%d") }}</td></tr>
+{% else %}<tr><td colspan="6" class="text-muted">No documents found.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

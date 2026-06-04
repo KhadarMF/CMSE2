@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h2 class="fw-bold">Notification Center</h2><p class="text-muted">In-app alerts for users, supervisors and managers.</p></div>
+  <div class="d-flex gap-2"><a class="btn btn-outline-dark" href="{{ url_for('notifications.logs') }}">Notification Log</a><a class="btn btn-outline-success" href="{{ url_for('notifications.sms_queue') }}">SMS Queue</a><a class="btn btn-outline-primary" href="{{ url_for('notifications.whatsapp_settings') }}">WhatsApp Future Setup</a><a class="btn btn-primary" href="{{ url_for('notifications.create_notification') }}">Create Notification</a></div>
+</div>
+<div class="row g-3 mb-3"><div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Unread</div><h3>{{ unread }}</h3></div></div></div></div>
+<div class='card'><div class='card-body table-responsive'><table class='table table-hover align-middle'><thead><tr><th>Ref</th><th>Title / Message</th><th>Target</th><th>Priority</th><th>Status</th><th>Related</th><th>Date</th><th></th></tr></thead><tbody>{% for n in notifications %}<tr><td>{{ n.ref_no }}</td><td><strong>{{ n.title }}</strong><br><small>{{ n.message or '' }}</small></td><td>{{ n.target_user.full_name if n.target_user else 'All Users' }}</td><td><span class="badge bg-warning text-dark">{{ n.priority }}</span></td><td>{{ n.status }}</td><td>{{ n.related_module or '' }} {{ n.related_ref or '' }}</td><td>{{ n.created_at }}</td><td><a class='btn btn-sm btn-outline-success' href='{{ url_for('notifications.mark_read', notification_id=n.id) }}'>Read</a></td></tr>{% else %}<tr><td colspan="8" class="text-center text-muted">No notifications found.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

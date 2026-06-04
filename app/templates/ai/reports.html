@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block content %}
+<h3>AI Report Generator</h3>
+<form method="post" class="card p-3 shadow-sm mb-3">
+  <div class="row g-3">
+    <div class="col-md-4"><label class="form-label">Report Type</label><select name="report_type" class="form-select"><option>Weekly Operations Report</option><option>Service Support Report</option><option>Sales CRM Report</option><option>Project Management Report</option><option>Executive Summary</option></select></div>
+    <div class="col-md-8"><label class="form-label">Instruction</label><input name="prompt" class="form-control" placeholder="Generate a concise management report with risks and next actions"></div>
+  </div>
+  <button class="btn btn-cmse mt-3">Generate Report Draft</button>
+</form>
+{% if result %}<div class="card shadow-sm"><div class="card-header fw-bold">AI Report Draft</div><div class="card-body"><pre class="ai-response">{{ result }}</pre></div></div>{% endif %}
+{% endblock %}

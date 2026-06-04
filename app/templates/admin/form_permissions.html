@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="fw-bold">User Access Permissions</h2>
+    <p class="text-muted mb-0">Strict mode: user-ku wuxuu geli karaa oo keliya waxa halkan looga oggolaado. Wax aan la tick-gareyn = DENIED.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin.permissions_overview') }}">Role Overview</a>
+</div>
+
+<div class="alert alert-warning">
+  <strong>Important:</strong> After saving permissions, user-ka ha <strong>Logout</strong> sameeyo kadibna ha soo galo mar kale. Direct URL access-na waa la xidhayaa haddii permission uusan haysan.
+</div>
+
+<form method="get" class="card mb-3">
+  <div class="card-body row g-2 align-items-end">
+    <div class="col-md-6"><label class="form-label">Select User</label><select name="user_id" class="form-select">{% for u in users %}<option value="{{ u.id }}" {% if selected_user and selected_user.id==u.id %}selected{% endif %}>{{ u.full_name }} - {{ u.role }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><button class="btn btn-primary w-100">Load</button></div>
+  </div>
+</form>
+
+{% if selected_user %}
+<form method="post" class="card" id="permissionForm">
+  <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+    <span>Permissions for {{ selected_user.full_name }} <span class="text-muted">({{ selected_user.role }})</span></span>
+    {% if selected_user.role == "Admin" %}<span class="badge bg-success">ADMIN FULL ACCESS</span>{% else %}<span class="badge bg-danger">STRICT ACCESS</span>{% endif %}
+  </div>
+  <div class="card-body">
+    <input type="hidden" name="user_id" value="{{ selected_user.id }}">
+    {% set is_admin_user = selected_user.role == "Admin" %}
+    {% if is_admin_user %}
+      <div class="alert alert-success">
+        <strong>Admin Full Access:</strong> Admin user-ku si joogto ah ayuu u leeyahay dhammaan permissions-ka.
+        Matrix-kan hoose waxaa loo muujinayaa checked si loo caddeeyo in Admin-ku wax walba geli karo.
+        Looma baahna in Admin permissions loo save-gareeyo.
+      </div>
+    {% endif %}
+    <div class="d-flex flex-wrap gap-2 mb-3 no-print" {% if is_admin_user %}style="display:none !important"{% endif %}>
+      <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllPerms()">Clear All</button>
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectTechnicianForms()">Technician Forms Only</button>
+      <button type="button" class="btn btn-sm btn-outline-success" onclick="selectSupportUser()">Support User</button>
+      <button type="button" class="btn btn-sm btn-outline-warning" onclick="selectSalesUser()">Sales User</button>
+      <button type="button" class="btn btn-sm btn-outline-dark" onclick="selectManagerView()">Manager View</button>
+    </div>
+    
+    <div class="alert alert-success small">
+      <strong>How it works:</strong> Tick permissions, then Save. A user must logout and login again. If only Technician Forms are selected, the user will see Dashboard + Online Forms only. Direct URLs to other modules will be denied.
+    </div>
+    <div class="alert alert-info small">View = arki kara, Create = abuuri/buuxin kara, Edit = beddeli kara, Delete = tirtiri kara, Approve = ansixin kara, Print/Export = report/pdf/excel soo saari kara.</div>
+    {% set ns = namespace(group='') %}
+    <div class="table-responsive">
+    <table class="table table-bordered align-middle table-sm">
+      <thead class="table-light"><tr><th style="min-width:270px">Module / Form / Report</th><th class="text-center">View</th><th class="text-center">Create</th><th class="text-center">Edit</th><th class="text-center">Delete</th><th class="text-center">Approve</th><th class="text-center">Print / Export</th></tr></thead>
+      <tbody>
+      {% for item in forms %}
+        {% set key = item[0] %}{% set label = item[1] %}{% set group = item[2] if item|length > 2 else 'General' %}
+        {% if ns.group != group %}
+          {% set ns.group = group %}<tr class="table-secondary"><td colspan="7"><strong>{{ group }}</strong></td></tr>
+        {% endif %}
+        {% set p=existing.get(key) %}
+        <tr data-key="{{ key }}">
+          <td><strong>{{ label }}</strong><br><small class="text-muted">{{ key }}</small></td>
+          <td class="text-center"><input type="checkbox" class="form-check-input perm view" name="{{ key }}_view" {% if is_admin_user or (p and p.can_view) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+          <td class="text-center"><input type="checkbox" class="form-check-input perm create" name="{{ key }}_create" {% if is_admin_user or (p and p.can_create) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+          <td class="text-center"><input type="checkbox" class="form-check-input perm edit" name="{{ key }}_edit" {% if is_admin_user or (p and p.can_edit) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+          <td class="text-center"><input type="checkbox" class="form-check-input perm delete" name="{{ key }}_delete" {% if is_admin_user or (p and p.can_delete) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+          <td class="text-center"><input type="checkbox" class="form-check-input perm approve" name="{{ key }}_approve" {% if is_admin_user or (p and p.can_approve) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+          <td class="text-center"><input type="checkbox" class="form-check-input perm print_export" name="{{ key }}_print_export" {% if is_admin_user or (p and p.can_print_export) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% if is_admin_user %}
+      <button type="button" class="btn btn-success btn-lg" disabled>Admin Already Has Full Access</button>
+    {% else %}
+      <button class="btn btn-success btn-lg">Save Permissions</button>
+    {% endif %}
+  </div>
+</form>
+<script>
+function allBoxes(){ return document.querySelectorAll('#permissionForm input.perm'); }
+function row(key){ return document.querySelector('tr[data-key="'+key+'"]'); }
+function setKey(key, actions){ const r=row(key); if(!r) return; actions.forEach(a=>{ const cb=r.querySelector('.'+a); if(cb) cb.checked=true; }); }
+function clearAllPerms(){ allBoxes().forEach(cb=>cb.checked=false); }
+function selectTechnicianForms(){
+  clearAllPerms();
+  ['forms-home','site-survey','daily-site-report','delivery-note','testing','commissioning','handover'].forEach(k=>setKey(k,['view','create','edit','print_export']));
+}
+function selectSupportUser(){
+  clearAllPerms();
+  ['after-sales','service-ticket','warranty'].forEach(k=>setKey(k,['view','create','edit','print_export']));
+  setKey('customers',['view']); setKey('projects',['view']);
+}
+function selectSalesUser(){
+  clearAllPerms();
+  ['sales-crm','customer-inquiry','quotation','quotation-items'].forEach(k=>setKey(k,['view','create','edit','print_export']));
+  setKey('customers',['view','create','edit']);
+}
+function selectManagerView(){
+  clearAllPerms();
+  ['projects','project-tasks','issues-risks','documents','forms-home','site-survey','daily-site-report','delivery-note','testing','commissioning','handover','sales-crm','customer-inquiry','quotation','after-sales','service-ticket','warranty','reports','project-reports','customer-reports','material-reports','notifications','ai-assistant'].forEach(k=>setKey(k,['view','print_export']));
+}
+</script>
+{% endif %}
+{% endblock %}

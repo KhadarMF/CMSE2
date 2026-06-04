@@ -1,0 +1,13 @@
+{% extends 'base.html' %}{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h2 class="fw-bold">Warranty & After-Sales Support</h2><p class="text-muted">Customer complaints, service tickets, technician visits, warranty records and closure reports.</p></div>
+  <div class="d-flex gap-2"><a class="btn btn-primary" href="{{ url_for('support.create_ticket') }}">New Service Ticket</a><a class="btn btn-outline-success" href="{{ url_for('support.create_warranty') }}">Register Warranty</a></div>
+</div>
+<div class="row g-3 mb-3">
+{% for k,v in summary.items() %}<div class="col-md-2"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">{{ k.replace('_',' ')|title }}</div><h3>{{ v }}</h3></div></div></div>{% endfor %}
+</div>
+<div class="row g-3">
+  <div class="col-md-8"><div class="card"><div class="card-header fw-bold">Recent Tickets</div><div class="card-body table-responsive"><table class="table table-hover"><thead><tr><th>Ref</th><th>Customer</th><th>Category</th><th>Priority</th><th>Status</th><th>Due</th><th></th></tr></thead><tbody>{% for t in tickets %}<tr><td>{{ t.ref_no }}</td><td>{{ t.customer_name }}</td><td>{{ t.issue_category or '' }}</td><td>{{ t.priority }}</td><td>{{ t.status }}</td><td>{{ t.due_date or '' }}</td><td><a class="btn btn-sm btn-outline-dark" href="{{ url_for('support.ticket_detail', ticket_id=t.id) }}">Open</a></td></tr>{% else %}<tr><td colspan="7" class="text-muted">No service tickets yet.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-md-4"><div class="card"><div class="card-header fw-bold">Workflow</div><div class="card-body"><ol class="mb-0"><li>Customer complaint received</li><li>Open ticket and choose category/priority</li><li>Assign technician and supervisor</li><li>Record site visit and fault found</li><li>Resolve, confirm customer, close ticket</li></ol></div></div></div>
+</div>
+{% endblock %}

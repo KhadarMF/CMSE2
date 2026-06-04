@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class='d-flex justify-content-between align-items-center mt-3 mb-3'>
+  <div><h2 class='fw-bold mb-0'>Quotation Item Master</h2><p class='text-muted mb-0'>Items used in quotation dropdowns. Import from Excel/CSV.</p></div>
+  <a class='btn btn-outline-success' href='{{ url_for("sales.quotation_items_template") }}'>Download Excel Template</a>
+</div>
+<div class='row g-3'>
+  <div class='col-lg-5'><div class='card shadow-sm'><div class='card-header bg-white fw-bold'>Add Single Item</div><div class='card-body'>
+    <form method='post'>
+      <div class='mb-2'><label class='form-label'>Item Name</label><input name='item_name' class='form-control' required></div>
+      <div class='mb-2'><label class='form-label'>Description</label><textarea name='description' class='form-control' rows='2'></textarea></div>
+      <div class='row g-2'><div class='col-md-4'><label class='form-label'>Unit</label><input name='unit' class='form-control'></div><div class='col-md-4'><label class='form-label'>Unit Price</label><input name='unit_price' type='number' step='0.01' class='form-control'></div><div class='col-md-4'><label class='form-label'>Category</label><input name='category' class='form-control'></div></div>
+      <button class='btn btn-primary mt-3'>Save Item</button>
+    </form>
+  </div></div>
+  <div class='card shadow-sm mt-3'><div class='card-header bg-white fw-bold'>Import Excel / CSV</div><div class='card-body'>
+    <form method='post' enctype='multipart/form-data'>
+      <input type='file' name='file' class='form-control' accept='.xlsx,.csv' required>
+      <div class='form-text'>Required columns: item_name, description, unit, unit_price, category</div>
+      <button class='btn btn-success mt-3'>Import Items</button>
+    </form>
+  </div></div></div>
+  <div class='col-lg-7'><div class='card shadow-sm'><div class='card-header bg-white fw-bold'>Current Items</div><div class='card-body table-responsive'>
+    <table class='table table-sm table-hover align-middle'><thead><tr><th>Item</th><th>Category</th><th>Unit</th><th>Price</th><th>Description</th></tr></thead><tbody>{% for item in items %}<tr><td class='fw-semibold'>{{ item.item_name }}</td><td>{{ item.category or '' }}</td><td>{{ item.unit or '' }}</td><td>${{ '%.2f'|format(item.unit_price or 0) }}</td><td class='small'>{{ item.description or '' }}</td></tr>{% else %}<tr><td colspan='5' class='text-muted'>No items yet. Import template first.</td></tr>{% endfor %}</tbody></table>
+  </div></div></div>
+</div>
+{% endblock %}

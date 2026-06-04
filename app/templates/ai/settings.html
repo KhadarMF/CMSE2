@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block content %}
+<h3>AI Settings</h3>
+<div class="alert alert-warning">For production, prefer setting <b>OPENAI_API_KEY</b> in Render Environment Variables. Do not share API keys with users.</div>
+<form method="post" class="card p-3 shadow-sm">
+  <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="enabled" {% if setting.enabled %}checked{% endif %}><label class="form-check-label">Enable Live AI</label></div>
+  <div class="row g-3">
+    <div class="col-md-4"><label class="form-label">Provider</label><input name="provider" class="form-control" value="{{ setting.provider }}"></div>
+    <div class="col-md-4"><label class="form-label">Model Name</label><input name="model_name" class="form-control" value="{{ setting.model_name }}"></div>
+    <div class="col-md-4"><label class="form-label">API Key</label><input name="api_key" type="password" class="form-control" placeholder="{{ masked_key }}"></div>
+    <div class="col-12"><label class="form-label">API Base URL</label><input name="api_base_url" class="form-control" value="{{ setting.api_base_url }}"></div>
+    <div class="col-md-3"><label class="form-label">Temperature</label><input name="temperature" class="form-control" value="{{ setting.temperature }}"></div>
+    <div class="col-md-3"><label class="form-label">Max Tokens</label><input name="max_tokens" class="form-control" value="{{ setting.max_tokens }}"></div>
+    <div class="col-md-6"><div class="form-check mt-4"><input class="form-check-input" type="checkbox" name="allow_data_context" {% if setting.allow_data_context %}checked{% endif %}><label class="form-check-label">Allow ERP context to AI</label></div></div>
+    <div class="col-12"><label class="form-label">System Prompt</label><textarea name="system_prompt" rows="6" class="form-control">{{ setting.system_prompt }}</textarea></div>
+    <div class="col-12"><label class="form-label">Notes</label><textarea name="notes" rows="3" class="form-control">{{ setting.notes or '' }}</textarea></div>
+  </div>
+  <button class="btn btn-cmse mt-3">Save AI Settings</button>
+</form>
+{% endblock %}

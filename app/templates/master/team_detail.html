@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div><h2 class="fw-bold">{{ team.team_name }}</h2><p class="text-muted mb-0">Leader: {{ team.leader.full_name if team.leader else "Not assigned" }}</p></div>
+    <div><a class="btn btn-outline-dark" href="{{ url_for('master.teams') }}">Back</a> <a class="btn btn-dark" href="{{ url_for('master.edit_team', team_id=team.id) }}">Edit Team</a></div>
+</div>
+
+<div class="row g-3">
+<div class="col-lg-5">
+<div class="card shadow-sm"><div class="card-header fw-bold">Add Member</div><div class="card-body">
+<form method="post" action="{{ url_for('master.add_team_member', team_id=team.id) }}">
+<div class="mb-2"><label class="form-label">Employee</label><select class="form-select" name="employee_id" required><option value="">Select</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }} - {{ e.job_title or "" }}</option>{% endfor %}</select></div>
+<div class="mb-2"><label class="form-label">Role in Team</label><input class="form-control" name="member_role" placeholder="Electrician / Installer / Supervisor"></div>
+<button class="btn btn-dark">Add Member</button>
+</form>
+</div></div>
+</div>
+<div class="col-lg-7">
+<div class="card shadow-sm"><div class="card-header fw-bold">Team Members</div><div class="card-body table-responsive">
+<table class="table table-hover align-middle">
+<thead><tr><th>Employee</th><th>Job Title</th><th>Role</th><th>Status</th><th></th></tr></thead>
+<tbody>
+{% for m in team.members if m.is_active %}
+<tr><td>{{ m.employee.full_name }}</td><td>{{ m.employee.job_title or "" }}</td><td>{{ m.member_role or "" }}</td><td>{% if m.is_active %}Active{% else %}Inactive{% endif %}</td><td><a class="btn btn-sm btn-outline-danger" href="{{ url_for('master.remove_team_member', team_id=team.id, member_id=m.id) }}">Remove</a></td></tr>
+{% else %}<tr><td colspan="5" class="text-muted">No active members.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div></div>
+</div>
+</div>
+{% endblock %}

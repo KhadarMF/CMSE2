@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Full Project Report</title>
+<style>
+body{font-family:Arial,sans-serif;color:#111827;font-size:11px}
+.header{border-bottom:3px solid #f97316;padding-bottom:12px;margin-bottom:18px}
+.company{font-size:22px;font-weight:bold}
+.meta{font-size:10px;color:#555}
+h1{font-size:20px;margin:12px 0} h2{font-size:15px;margin-top:18px}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th,td{border:1px solid #999;padding:6px;vertical-align:top}
+th{background:#f0f0f0;text-align:left}
+.kpi td{width:25%}.footer{margin-top:40px}.sig{border-top:1px solid #111;padding-top:8px;width:30%;display:inline-block;margin-right:3%}
+</style>
+</head>
+<body>
+<div class="header">
+    <div class="company">{{ company_profile.company_name }}</div>
+    <div>Full Project Report</div>
+    <div class="meta">Generated: {{ generated_at.strftime("%Y-%m-%d %H:%M") }} UTC</div>
+</div>
+
+<h1>{{ project.project_name }} <span class="ref-badge">Report Ref: {{ report_ref }}</span></h1>
+<table>
+<tr><th>Customer</th><td>{{ project.customer_name }}</td><th>Status</th><td>{{ project.status }}</td></tr>
+<tr><th>Location</th><td>{{ project.location }}</td><th>Project Type</th><td>{{ project.project_type }}</td></tr>
+<tr><th>Capacity</th><td>{{ project.capacity or "" }}</td><th>Readiness</th><td>{{ "Ready" if ready else "Incomplete" }}</td></tr>
+<tr><th>Start Date</th><td>{{ project.start_date or "" }}</td><th>Expected Completion</th><td>{{ project.expected_completion_date or "" }}</td></tr>
+</table>
+
+<h2>Summary</h2>
+<table class="kpi">
+<tr><th>Documents</th><th>Forms</th><th>Open Tasks</th><th>Open Issues</th></tr>
+<tr><td>{{ summary.total_documents }} / Approved {{ summary.approved_documents }}</td><td>{{ summary.total_forms }} / Approved {{ summary.approved_forms }}</td><td>{{ summary.open_tasks }} / Overdue {{ summary.overdue_tasks }}</td><td>{{ summary.open_issues }} / Critical {{ summary.critical_issues }}</td></tr>
+</table>
+
+<h2>Forms Summary</h2>
+<table>
+<thead><tr><th>Form</th><th>Total</th><th>Approved</th><th>Submitted</th><th>Under Review</th><th>Rejected</th><th>Need Correction</th><th>Draft</th></tr></thead>
+<tbody>
+{% for item in forms_summary %}
+<tr><td>{{ item.label }}</td><td>{{ item.total }}</td><td>{{ item.approved }}</td><td>{{ item.submitted }}</td><td>{{ item.under_review }}</td><td>{{ item.rejected }}</td><td>{{ item.need_correction }}</td><td>{{ item.draft }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+
+
+<h2>Workforce / Teams</h2>
+<table>
+<thead><tr><th>Team</th><th>Leader</th><th>Members</th><th>Scope</th><th>Status</th></tr></thead>
+<tbody>
+{% for a in team_assignments %}
+<tr>
+<td>{{ a.team.team_name }}</td>
+<td>{{ a.team.leader.full_name if a.team.leader else "" }}</td>
+<td>{% for m in a.team.members if m.is_active %}{{ m.employee.full_name }}{% if m.member_role %} ({{ m.member_role }}){% endif %}{% if not loop.last %}, {% endif %}{% else %}No members{% endfor %}</td>
+<td>{{ a.work_scope or "" }}</td>
+<td>{{ a.status }}</td>
+</tr>
+{% else %}<tr><td colspan="5">No teams assigned.</td></tr>{% endfor %}
+</tbody>
+</table>
+
+<table>
+<thead><tr><th>Direct Employee</th><th>Job Title</th><th>Role</th><th>Scope</th><th>Status</th></tr></thead>
+<tbody>
+{% for a in employee_assignments %}
+<tr><td>{{ a.employee.full_name }}</td><td>{{ a.employee.job_title or "" }}</td><td>{{ a.role_on_project or "" }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td></tr>
+{% else %}<tr><td colspan="5">No direct employees assigned.</td></tr>{% endfor %}
+</tbody>
+</table>
+
+<h2>Documents</h2>
+<table>
+<thead><tr><th>Title</th><th>Type</th><th>Status</th><th>Uploaded By</th><th>Date</th></tr></thead>
+<tbody>
+{% for d in documents %}
+<tr><td>{{ d.document_title }}</td><td>{{ d.document_type }}</td><td>{{ d.approval_status }}</td><td>{{ d.uploader.full_name if d.uploader else "" }}</td><td>{{ d.upload_date.strftime("%Y-%m-%d") if d.upload_date else "" }}</td></tr>
+{% else %}<tr><td colspan="5">No documents.</td></tr>{% endfor %}
+</tbody>
+</table>
+
+
+<h2>Payroll Summary</h2><table><tr><th>Employees</th><td>{{ summary.payroll_employees }}</td><th>Total Due</th><td>${{ "%.2f"|format(summary.payroll_total_due) }}</td></tr><tr><th>Total Paid</th><td>${{ "%.2f"|format(summary.payroll_total_paid) }}</td><th>Balance</th><td>${{ "%.2f"|format(summary.payroll_balance) }}</td></tr></table><table><thead><tr><th>Employee</th><th>Batch / Work Date</th><th>Role</th><th>Total Due</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>{% for e in payroll_entries %}<tr><td>{{ e.employee.full_name }}</td><td>{{ e.batch.batch_title }} - {{ e.batch.work_date or "" }}</td><td>{{ e.role_on_project or "" }}</td><td>${{ "%.2f"|format(e.total_due) }}</td><td>${{ "%.2f"|format(e.total_paid) }}</td><td>${{ "%.2f"|format(e.balance) }}</td><td>{{ e.status }}</td></tr>{% else %}<tr><td colspan="7">No payroll entries for this project.</td></tr>{% endfor %}</tbody></table>
+
+<h2>Tasks</h2>
+<table>
+<thead><tr><th>Task</th><th>Assigned To</th><th>Status</th><th>Priority</th><th>Due Date</th><th>Progress</th></tr></thead>
+<tbody>
+{% for t in tasks %}
+<tr><td>{{ t.title }}</td><td>{{ t.assigned_employee.full_name if t.assigned_employee else (t.assigned_to.full_name if t.assigned_to else "") }}</td><td>{{ t.status }}</td><td>{{ t.priority }}</td><td>{{ t.due_date or "" }}</td><td>{{ t.progress_percent }}%</td></tr>
+{% else %}<tr><td colspan="6">No tasks.</td></tr>{% endfor %}
+</tbody>
+</table>
+
+<h2>Issues & Risks</h2>
+<table>
+<thead><tr><th>Issue</th><th>Type</th><th>Severity</th><th>Status</th><th>Responsible</th><th>Target Date</th></tr></thead>
+<tbody>
+{% for i in issues %}
+<tr><td>{{ i.title }}</td><td>{{ i.issue_type }}</td><td>{{ i.severity }}</td><td>{{ i.status }}</td><td>{{ i.responsible_user.full_name if i.responsible_user else "" }}</td><td>{{ i.target_resolution_date or "" }}</td></tr>
+{% else %}<tr><td colspan="6">No issues.</td></tr>{% endfor %}
+</tbody>
+</table>
+
+<div class="footer"><div class="sig">Prepared By</div><div class="sig">Reviewed By</div><div class="sig">Approved By</div></div>
+</body>
+</html>

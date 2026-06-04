@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+  <div><h2 class="fw-bold">Employee Task Report</h2><p class="text-muted mb-0">{{ employee.full_name }}{% if employee.job_title %} — {{ employee.job_title }}{% endif %}</p></div>
+  <a class="btn btn-outline-dark" href="{{ url_for('project_tasks.list_tasks') }}">Back to Tasks</a>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Total Tasks</div><h3>{{ summary.total }}</h3></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Completed</div><h3>{{ summary.completed }}</h3></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Open</div><h3>{{ summary.open }}</h3></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Overdue</div><h3>{{ summary.overdue }}</h3></div></div></div>
+</div>
+<div class="card shadow-sm"><div class="card-body table-responsive">
+<table class="table table-hover align-middle"><thead><tr><th>Task</th><th>Project</th><th>Supervisor</th><th>Status</th><th>Priority</th><th>Due Date</th><th>Progress</th></tr></thead><tbody>
+{% for t in tasks %}<tr class="{% if t.is_overdue %}table-danger{% endif %}"><td>{{ t.title }}</td><td>{{ t.project.project_name }}</td><td>{{ t.supervisor_user.full_name if t.supervisor_user else (t.assigned_to.full_name if t.assigned_to else '-') }}</td><td>{{ t.status }}</td><td>{{ t.priority }}</td><td>{{ t.due_date or '-' }}</td><td>{{ t.progress_percent or 0 }}%</td></tr>{% else %}<tr><td colspan="7" class="text-muted">No tasks assigned to this employee.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

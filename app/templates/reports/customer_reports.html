@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div>
+        <h2 class="fw-bold">Customer Reports</h2>
+        <p class="text-muted mb-0">Summary of each customer, number of projects, documents, forms, tasks, and issues.</p>
+    </div>
+    <a class="btn btn-outline-dark" href="{{ url_for('reports.reports_home') }}">Back to Reports</a>
+</div>
+
+<form class="row g-2 mb-3" method="get">
+    <div class="col-md-5"><input class="form-control" name="q" value="{{ q }}" placeholder="Search customer name"></div>
+    <div class="col-md-2"><button class="btn btn-dark w-100">Search</button></div>
+    <div class="col-md-2"><a class="btn btn-outline-secondary w-100" href="{{ url_for('reports.customer_reports') }}">Reset</a></div>
+</form>
+
+<div class="card shadow-sm">
+    <div class="card-body table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Projects</th>
+                    <th>Completed</th>
+                    <th>Active</th>
+                    <th>Documents</th>
+                    <th>Forms</th>
+                    <th>Open Tasks</th>
+                    <th>Open Issues</th>
+                    <th>Payroll Balance</th>
+                    <th>Locations</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for c in customers %}
+                <tr>
+                    <td class="fw-semibold">{{ c.customer_name }}</td>
+                    <td>{{ c.project_count }}</td>
+                    <td>{{ c.completed_count }}</td>
+                    <td>{{ c.active_count }}</td>
+                    <td>{{ c.documents }}</td>
+                    <td>{{ c.forms }}</td>
+                    <td>{{ c.open_tasks }}</td>
+                    <td>{{ c.open_issues }}</td>
+                    <td>${{ "%.2f"|format(c.payroll_balance) }}</td>
+                    <td>{{ c.locations }}</td>
+                    <td><a class="btn btn-sm btn-primary" href="{{ url_for('reports.customer_report_detail', customer_name=c.customer_name) }}">View Report</a></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="11" class="text-muted">No customers found.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

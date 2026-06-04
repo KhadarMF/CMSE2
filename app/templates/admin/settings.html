@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-4 mb-3"><h2 class="fw-bold">Email Settings</h2><p class="text-muted">Configure SMTP inside the system.</p></div>
+<div class="card shadow-sm mb-4"><div class="card-body"><form method="POST"><div class="row g-3">
+<div class="col-md-6"><label class="form-label">SMTP Server</label><input class="form-control" name="MAIL_SERVER" value="{{ cfg.MAIL_SERVER }}"></div>
+<div class="col-md-3"><label class="form-label">SMTP Port</label><input class="form-control" name="MAIL_PORT" value="{{ cfg.MAIL_PORT }}"></div>
+<div class="col-md-3"><label class="form-label">Use TLS</label><br><input class="form-check-input" type="checkbox" name="MAIL_USE_TLS" {% if cfg.MAIL_USE_TLS %}checked{% endif %}> <span class="ms-2">Enabled</span></div>
+<div class="col-md-6"><label class="form-label">Username / Email</label><input class="form-control" name="MAIL_USERNAME" value="{{ cfg.MAIL_USERNAME }}"></div>
+<div class="col-md-6"><label class="form-label">App Password</label><input type="password" class="form-control" name="MAIL_PASSWORD" value="{{ cfg.MAIL_PASSWORD }}"></div>
+<div class="col-md-6"><label class="form-label">Default Sender</label><input class="form-control" name="MAIL_DEFAULT_SENDER" value="{{ cfg.MAIL_DEFAULT_SENDER }}"></div>
+</div><div class="mt-4"><button class="btn btn-primary">Save Email Settings</button></div></form></div></div>
+<div class="card shadow-sm"><div class="card-header bg-white fw-bold">Test Email</div><div class="card-body"><form method="POST" action="{{ url_for('admin.test_email') }}" class="row g-2"><div class="col-md-8"><input type="email" class="form-control" name="test_email" placeholder="Recipient email" value="{{ current_user.email }}"></div><div class="col-md-4"><button class="btn btn-success w-100">Send Test Email</button></div></form></div></div>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-3">
+  <div><h2 class="fw-bold mb-0">Project Materials</h2><small class="text-muted">Material request, issue, returns and project material report.</small></div>
+  <div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('dashboard.dashboard') }}">Back Home</a>
+    <a class="btn btn-outline-dark btn-sm" href="{{ url_for('materials.items') }}">Items</a>
+    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('materials.requests_list') }}">Requests</a>
+    <a class="btn btn-outline-success btn-sm" href="{{ url_for('materials.issues_list') }}">Issues</a>
+    <a class="btn btn-outline-warning btn-sm" href="{{ url_for('materials.returns_list') }}">Returns</a>
+    <a class="btn btn-primary btn-sm" href="{{ url_for('materials.create_request') }}">New Request</a>
+  </div>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Requests</div><h3>{{ summary.requests }}</h3></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Issues</div><h3>{{ summary.issues }}</h3></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Issue Cost</div><h3>${{ "%.2f"|format(summary.issue_cost) }}</h3></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Returned Cost</div><h3>${{ "%.2f"|format(summary.return_cost) }}</h3></div></div></div>
+</div>
+<div class="card shadow-sm"><div class="card-header fw-bold">Recent Requests</div><div class="card-body table-responsive">
+<table class="table table-hover table-sm align-middle"><thead><tr><th>Ref No.</th><th>Project</th><th>Date</th><th>Lines</th><th>Est. Cost</th><th>Status</th><th></th></tr></thead><tbody>
+{% for r in requests %}<tr><td class="fw-semibold">{{ r.ref_no }}</td><td>{{ r.project.project_name }}</td><td>{{ r.request_date }}</td><td>{{ r.lines|length }}</td><td>${{ "%.2f"|format(r.total_estimated_cost) }}</td><td>{{ r.status }}</td><td><a class="btn btn-sm btn-outline-dark" href="{{ url_for('materials.request_detail', request_id=r.id) }}">Open</a></td></tr>{% else %}<tr><td colspan="7" class="text-muted">No requests.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

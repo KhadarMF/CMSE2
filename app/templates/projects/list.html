@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <h2 class="fw-bold">Projects</h2>
+    {% if current_user.role in ["Admin", "Operation Manager"] %}
+    <a class="btn btn-primary" href="{{ url_for('projects.create_project') }}">Create Project</a>
+    {% endif %}
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <form class="row g-2" method="GET">
+            <div class="col-md-5"><input class="form-control" name="search" placeholder="Search project, customer, location" value="{{ search }}"></div>
+            <div class="col-md-3">
+                <select class="form-select" name="status">
+                    <option value="">All Statuses</option>
+                    {% for status in statuses %}
+                    <option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2"><button class="btn btn-dark w-100">Filter</button></div>
+            <div class="col-md-2"><a class="btn btn-light w-100" href="{{ url_for('projects.list_projects') }}">Reset</a></div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm"><div class="card-body">
+<table class="table table-hover align-middle">
+<thead><tr><th>Project</th><th>Customer</th><th>Location</th><th>Type</th><th>Capacity</th><th>Status</th><th>Expected Completion</th></tr></thead>
+<tbody>
+{% for project in projects %}
+<tr>
+<td><a href="{{ url_for('projects.detail', project_id=project.id) }}">{{ project.project_name }}</a></td>
+<td>{{ project.customer_name }}</td><td>{{ project.location }}</td><td>{{ project.project_type }}</td><td>{{ project.capacity }}</td>
+<td><span class="badge bg-info text-dark">{{ project.status }}</span></td><td>{{ project.expected_completion_date or "" }}</td>
+</tr>
+{% else %}<tr><td colspan="7" class="text-muted">No projects found.</td></tr>{% endfor %}
+</tbody></table>
+</div></div>
+{% endblock %}

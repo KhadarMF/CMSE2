@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ company_profile.company_name if company_profile else "Solar Project Document System" }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+{% if current_user.is_authenticated %}
+<nav class="navbar navbar-expand-lg navbar-dark shadow-sm compact-main-nav cmse-navbar">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold" href="{{ url_for('dashboard.dashboard') }}">{{ company_profile.logo_text or "CMSE" }} System</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="mainNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item"><a class="nav-link" href="{{ url_for('dashboard.dashboard') }}">Dashboard</a></li>
+
+                {% if can_access_module(current_user, 'sales-crm', 'view') or can_access_module(current_user, 'customer-inquiry', 'view') or can_access_module(current_user, 'quotation', 'view') or can_access_module(current_user, 'quotation-items', 'view') %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Sales CRM</a>
+                    <ul class="dropdown-menu">{% if can_access_module(current_user, 'sales-crm') %}
+                        <li><a class="dropdown-item" href="{{ url_for('sales.dashboard') }}">Sales Dashboard</a></li>{% endif %}{% if can_access_module(current_user, 'customer-inquiry') %}
+                        <li><a class="dropdown-item" href="{{ url_for('sales.inquiries') }}">Customer Inquiries</a></li>{% endif %}{% if can_access_module(current_user, 'customer-inquiry') %}
+                        <li><a class="dropdown-item" href="{{ url_for('sales.create_inquiry') }}">New Inquiry</a></li>{% endif %}{% if can_access_module(current_user, 'quotation') %}
+                        <li><a class="dropdown-item" href="{{ url_for('sales.quotations') }}">Quotations</a></li>{% endif %}{% if can_access_module(current_user, 'quotation-items') %}
+                        <li><a class="dropdown-item" href="{{ url_for('sales.quotation_items') }}">Quotation Item Master</a></li>{% endif %}{% if can_access_module(current_user, 'quotation') %}
+                        <li><a class="dropdown-item" href="{{ url_for('sales.create_quotation') }}">New Quotation</a></li>{% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
+                {% if can_access_module(current_user, 'projects') or can_access_module(current_user, 'project-tasks') or can_access_module(current_user, 'issues-risks') or can_access_module(current_user, 'documents') %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Projects</a>
+                    <ul class="dropdown-menu">{% if can_access_module(current_user, 'projects') %}
+                        <li><a class="dropdown-item" href="{{ url_for('projects.list_projects') }}">Projects List</a></li>{% endif %}{% if can_access_module(current_user, 'project-tasks') %}
+                        <li><a class="dropdown-item" href="{{ url_for('project_tasks.list_tasks') }}">Project Tasks</a></li>{% endif %}{% if can_access_module(current_user, 'project-tasks') %}
+                        <li><a class="dropdown-item" href="{{ url_for('tasks.my_tasks') }}">My Tasks</a></li>{% endif %}{% if can_access_module(current_user, 'issues-risks') %}
+                        <li><a class="dropdown-item" href="{{ url_for('issues.list_issues') }}">Issues / Risks</a></li>{% endif %}{% if can_access_module(current_user, 'documents') %}
+                        <li><a class="dropdown-item" href="{{ url_for('documents.list_documents') }}">Documents</a></li>{% endif %}{% if can_access_module(current_user, 'payroll') %}
+                        <li><a class="dropdown-item" href="{{ url_for('payroll.dashboard') }}">Project Payroll</a></li>{% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
+                {% if can_access_module(current_user, 'materials') or can_access_module(current_user, 'material-items') or can_access_module(current_user, 'material-request') or can_access_module(current_user, 'material-issue') or can_access_module(current_user, 'material-return') or can_access_module(current_user, 'material-reports') %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Materials</a>
+                    <ul class="dropdown-menu">{% if can_access_module(current_user, 'materials') or can_access_module(current_user, 'material-items') or can_access_module(current_user, 'material-request') or can_access_module(current_user, 'material-issue') or can_access_module(current_user, 'material-return') or can_access_module(current_user, 'material-reports') %}
+                        <li><a class="dropdown-item" href="{{ url_for('materials.dashboard') }}">Materials Dashboard</a></li>{% endif %}{% if can_access_module(current_user, 'material-items') %}
+                        <li><a class="dropdown-item" href="{{ url_for('materials.items') }}">Material Items</a></li>{% endif %}{% if can_access_module(current_user, 'material-request') %}
+                        <li><a class="dropdown-item" href="{{ url_for('materials.requests_list') }}">Material Requests</a></li>{% endif %}{% if can_access_module(current_user, 'material-request') %}
+                        <li><a class="dropdown-item" href="{{ url_for('materials.create_request') }}">New Material Request</a></li>{% endif %}{% if can_access_module(current_user, 'material-return') %}
+                        <li><a class="dropdown-item" href="{{ url_for('materials.create_return') }}">Material Return</a></li>{% endif %}{% if can_access_module(current_user, 'material-issue') %}
+                        <li><a class="dropdown-item" href="{{ url_for('materials.issues_list') }}">Material Issues</a></li>{% endif %}{% if can_access_module(current_user, 'material-return') %}
+                        <li><a class="dropdown-item" href="{{ url_for('materials.returns_list') }}">Material Returns List</a></li>{% endif %}
+                        <li><hr class="dropdown-divider"></li>{% if can_access_module(current_user, 'material-reports') %}
+                        <li><a class="dropdown-item fw-semibold" href="{{ url_for('materials.material_reports') }}">Material Reports</a></li>{% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
+                {% if can_access_module(current_user, 'reports') or can_access_module(current_user, 'site-survey') or can_access_module(current_user, 'daily-site-report') or can_access_module(current_user, 'delivery-note') or can_access_module(current_user, 'testing') or can_access_module(current_user, 'commissioning') or can_access_module(current_user, 'handover') %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Forms & Reports</a>
+                    <ul class="dropdown-menu">{% if can_access_module(current_user, 'forms-home', 'view') %}
+                        <li><a class="dropdown-item" href="{{ url_for('forms.forms_home') }}">Online Forms</a></li>{% endif %}{% if can_access_module(current_user, 'reports') %}
+                        <li><a class="dropdown-item" href="{{ url_for('reports.reports_home') }}">Project Reports</a></li>{% endif %}{% if can_access_module(current_user, 'customer-reports') %}
+                        <li><a class="dropdown-item" href="{{ url_for('reports.customer_reports') }}">Customer Reports</a></li>{% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
+                {% if can_access_module(current_user, 'after-sales', 'view') or can_access_module(current_user, 'service-ticket', 'view') or can_access_module(current_user, 'warranty', 'view') %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">After-Sales & Warranty</a>
+                    <ul class="dropdown-menu">{% if can_access_module(current_user, 'after-sales') %}
+                        <li><a class="dropdown-item" href="{{ url_for('support.dashboard') }}">Support Dashboard</a></li>{% endif %}{% if can_access_module(current_user, 'service-ticket') %}
+                        <li><a class="dropdown-item" href="{{ url_for('support.tickets') }}">Service Tickets / Complaints</a></li>{% endif %}{% if can_access_module(current_user, 'service-ticket') %}
+                        <li><a class="dropdown-item" href="{{ url_for('support.create_ticket') }}">New Service Ticket</a></li>{% endif %}{% if can_access_module(current_user, 'warranty') %}
+                        <li><a class="dropdown-item" href="{{ url_for('support.warranties') }}">Warranties</a></li>{% endif %}{% if can_access_module(current_user, 'warranty') %}
+                        <li><a class="dropdown-item" href="{{ url_for('support.create_warranty') }}">Register Warranty</a></li>{% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
+                {% if can_access_module(current_user, 'customers', 'view') or can_access_module(current_user, 'employees', 'view') or can_access_module(current_user, 'teams', 'view') %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Master Data</a>
+                    <ul class="dropdown-menu">{% if can_access_module(current_user, 'customers') %}
+                        <li><a class="dropdown-item" href="{{ url_for('master.customers') }}">Customers</a></li>{% endif %}{% if can_access_module(current_user, 'employees') %}
+                        <li><a class="dropdown-item" href="{{ url_for('master.employees') }}">Employees</a></li>{% endif %}{% if can_access_module(current_user, 'teams') %}
+                        <li><a class="dropdown-item" href="{{ url_for('master.teams') }}">Teams</a></li>{% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
+
+                {% if can_access_module(current_user, 'ai-assistant', 'view') or can_access_module(current_user, 'ai-reports', 'view') or can_access_module(current_user, 'ai-logs', 'view') %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">AI Assistant</a>
+                    <ul class="dropdown-menu">{% if can_access_module(current_user, 'ai-assistant') %}
+                        <li><a class="dropdown-item" href="{{ url_for('ai.dashboard') }}">AI Dashboard</a></li>{% endif %}{% if can_access_module(current_user, 'ai-assistant') %}
+                        <li><a class="dropdown-item" href="{{ url_for('ai.assistant') }}">Ask AI</a></li>{% endif %}{% if can_access_module(current_user, 'ai-reports') %}
+                        <li><a class="dropdown-item" href="{{ url_for('ai.reports') }}">AI Report Generator</a></li>{% endif %}{% if can_access_module(current_user, 'ai-logs') %}
+                        <li><a class="dropdown-item" href="{{ url_for('ai.logs') }}">AI Logs</a></li>{% endif %}
+                        {% if current_user.role == "Admin" %}<li><a class="dropdown-item" href="{{ url_for('ai.settings') }}">AI Settings</a></li>{% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
+                {% if can_access_module(current_user, 'notifications', 'view') or can_access_module(current_user, 'notification-log', 'view') or can_access_module(current_user, 'sms-queue', 'view') or can_access_module(current_user, 'whatsapp-integration', 'view') or can_access_module(current_user, 'production-readiness', 'view') %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">System Center</a>
+                    <ul class="dropdown-menu">{% if can_access_module(current_user, 'notifications') %}
+                        <li><a class="dropdown-item" href="{{ url_for('notifications.list_notifications') }}">Notification Center</a></li>{% endif %}{% if can_access_module(current_user, 'notifications') %}
+                        <li><a class="dropdown-item" href="{{ url_for('notifications.create_notification') }}">Create Notification</a></li>{% endif %}{% if can_access_module(current_user, 'notification-log') %}
+                        <li><a class="dropdown-item" href="{{ url_for('notifications.logs') }}">Notification Log</a></li>{% endif %}{% if can_access_module(current_user, 'sms-queue') %}
+                        <li><a class="dropdown-item" href="{{ url_for('notifications.sms_queue') }}">SMS Queue (No API)</a></li>{% endif %}{% if can_access_module(current_user, 'whatsapp-integration') %}
+                        <li><a class="dropdown-item" href="{{ url_for('notifications.whatsapp_settings') }}">WhatsApp Future Integration</a></li>{% endif %}{% if can_access_module(current_user, 'production-readiness') %}
+                        <li><a class="dropdown-item" href="{{ url_for('production.readiness') }}">Production Readiness</a></li>{% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
+                {% if current_user.role == "Admin" %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Admin</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{{ url_for('users.list_users') }}">Users</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('admin.settings_home') }}">Settings</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('admin.company_profile') }}">Company Profile</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('admin.branches') }}">Branches</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('admin.departments') }}">Departments</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('admin.permissions_overview') }}">Role Permissions Overview</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('admin.form_permissions') }}">User Form Permissions</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('activity.activity_log') }}">Activity Log</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('admin.backup_home') }}">Backup</a></li>
+                        <li><hr class="dropdown-divider"></li>{% if can_access_module(current_user, 'after-sales') %}
+                        <li><a class="dropdown-item" href="{{ url_for('support.dashboard') }}">Warranty & After-Sales Support</a></li>{% endif %}{% if can_access_module(current_user, 'notifications') %}
+                        <li><a class="dropdown-item" href="{{ url_for('notifications.list_notifications') }}">Notifications Center</a></li>{% endif %}{% if can_access_module(current_user, 'production-readiness') %}
+                        <li><a class="dropdown-item" href="{{ url_for('production.readiness') }}">Production Readiness</a></li>{% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+            </ul>
+            {% if can_access_module(current_user, 'notifications', 'view') %}<a class="btn btn-warning btn-sm me-2" href="{{ url_for('notifications.list_notifications') }}">🔔 {{ unread_notification_count }}</a>{% endif %}
+            <span class="navbar-text text-white me-3 small">{{ current_user.full_name }} | {{ current_user.role }}</span>
+            <a class="btn btn-outline-light btn-sm" href="{{ url_for('auth.logout') }}">Logout</a>
+        </div>
+    </div>
+</nav>
+{% endif %}
+
+<main class="container-fluid page-container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="mt-3">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+    {% if current_user.is_authenticated %}
+    <div class="global-action-toolbar no-print d-flex justify-content-end gap-2 mb-2">
+        <button type="button" onclick="history.back()" class="btn btn-outline-secondary btn-sm">Close / Back</button>
+        <a class="btn btn-outline-dark btn-sm" href="{{ url_for('dashboard.dashboard') }}">Home</a>
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
