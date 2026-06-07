@@ -14,6 +14,9 @@
   <div class="d-flex gap-2">
     <button onclick="window.print()" class="btn btn-outline-secondary">Print</button>
     <a class="btn btn-outline-dark" href="{{ url_for('support.ticket_report', ticket_id=ticket.id) }}" target="_blank">Report</a>
+    <form method="post" action="{{ url_for('support.analyze_ticket_ai', ticket_id=ticket.id) }}" class="d-inline">
+      <button class="btn btn-warning" type="submit">Analyze with AI</button>
+    </form>
     <a class="btn btn-danger" href="{{ url_for('support.ticket_pdf', ticket_id=ticket.id) }}" target="_blank">PDF</a>
   </div>
 </div>
@@ -89,6 +92,50 @@
         </form>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="card mt-3 border-warning">
+  <div class="card-header fw-bold bg-warning-subtle d-flex justify-content-between align-items-center">
+    <span>Phase 16A — AI Service Ticket Agent</span>
+    <form method="post" action="{{ url_for('support.analyze_ticket_ai', ticket_id=ticket.id) }}" class="m-0">
+      <button class="btn btn-sm btn-warning" type="submit">Analyze / Reanalyze with AI</button>
+    </form>
+  </div>
+  <div class="card-body">
+    {% if ticket.ai_last_analysis %}
+      <div class="row g-3">
+        <div class="col-md-3"><strong>AI Category</strong><br>{{ ticket.ai_category or 'Not provided' }}</div>
+        <div class="col-md-3"><strong>AI Priority</strong><br>{{ ticket.ai_priority or 'Not provided' }}</div>
+        <div class="col-md-3"><strong>Visit Estimate</strong><br>{{ ticket.ai_visit_estimate or 'Not provided' }}</div>
+        <div class="col-md-3"><strong>Confidence</strong><br>{{ ticket.ai_confidence_score or 'Not provided' }}</div>
+        <div class="col-md-12"><hr></div>
+        <div class="col-md-6">
+          <h6 class="fw-bold">Likely Root Cause</h6>
+          <div class="border rounded p-2 bg-light" style="white-space: pre-wrap;">{{ ticket.ai_root_cause or 'Not provided' }}</div>
+        </div>
+        <div class="col-md-6">
+          <h6 class="fw-bold">Spare Parts / Tools</h6>
+          <div class="border rounded p-2 bg-light" style="white-space: pre-wrap;">{{ ticket.ai_spare_parts or 'Not provided' }}</div>
+        </div>
+        <div class="col-md-6">
+          <h6 class="fw-bold">Technician Action Plan</h6>
+          <div class="border rounded p-2 bg-light" style="white-space: pre-wrap;">{{ ticket.ai_action_plan or 'Not provided' }}</div>
+        </div>
+        <div class="col-md-6">
+          <h6 class="fw-bold">Technician Checklist</h6>
+          <div class="border rounded p-2 bg-light" style="white-space: pre-wrap;">{{ ticket.ai_technician_checklist or 'Not provided' }}</div>
+        </div>
+        <div class="col-md-12">
+          <h6 class="fw-bold">Customer Reply Draft</h6>
+          <div class="border rounded p-2 bg-light" style="white-space: pre-wrap;">{{ ticket.ai_customer_reply or 'Not provided' }}</div>
+        </div>
+        <div class="col-md-12 text-muted small">Last AI Analysis: {{ ticket.ai_last_analysis }}</div>
+      </div>
+    {% else %}
+      <p class="text-muted mb-2">No AI analysis has been generated for this ticket yet.</p>
+      <p class="mb-0">Click <strong>Analyze with AI</strong> to generate category, priority, likely root cause, technician checklist, spare parts, visit estimate and customer reply draft.</p>
+    {% endif %}
   </div>
 </div>
 

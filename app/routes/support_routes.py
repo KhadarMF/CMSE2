@@ -1,11 +1,16 @@
 from datetime import datetime, date, timedelta
+import json
+import re
 from flask import Blueprint, render_template, request, redirect, url_for, flash, make_response
 from flask_login import login_required, current_user
 from app import db
 from app.notification_gateway import create_notification_event
+from app.ai_service import call_ai, make_ai_ref, CADCEED_SYSTEM_PROMPT
+from app.permissions import can_access_module
 from sqlalchemy import text
 from app.models import (
     Customer, Project, Employee, User, WarrantyRegistration, SupportTicket, ServiceVisit,
+    AISetting, AIInteractionLog,
     WARRANTY_STATUSES, TICKET_STATUSES, TICKET_PRIORITIES, VISIT_STATUSES,
     TICKET_CATEGORIES, COMPLAINT_SOURCES, SERVICE_RESULTS, CUSTOMER_CONFIRMATIONS
 )
@@ -23,14 +28,151 @@ def parse_date(v):
 def make_ref(prefix):
     return f"{prefix}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
 
+
+def _get_ai_setting():
+    setting = AISetting.query.first()
+    if not setting:
+        setting = AISetting(
+            enabled=True,
+            provider='OpenAI Responses API',
+            model_name='gpt-4o-mini',
+            api_base_url='https://api.openai.com/v1/responses',
+            system_prompt=CADCEED_SYSTEM_PROMPT,
+            notes='Created automatically by Phase 16A Service Ticket AI Agent.'
+        )
+        db.session.add(setting)
+        db.session.commit()
+    return setting
+
+
+def _save_ticket_ai_log(ticket, prompt, context_data, response, error=None):
+    setting = _get_ai_setting()
+    log = AIInteractionLog(
+        ref_no=make_ai_ref(),
+        user_id=current_user.id,
+        context_type='AI Service Ticket Agent',
+        related_module='Support Ticket',
+        related_ref=ticket.ref_no,
+        prompt=prompt,
+        context_data=context_data,
+        response=response,
+        provider=setting.provider,
+        model_name=setting.model_name,
+        error_message=error,
+    )
+    db.session.add(log)
+    db.session.flush()
+    return log
+
+
+def _ticket_ai_context(ticket):
+    visits = []
+    for v in ticket.service_visits:
+        visits.append(
+            f"- {v.ref_no} | Date: {v.visit_date or 'Not provided'} | Technician: {v.technician.full_name if v.technician else 'Not provided'} | Fault: {v.fault_found or 'Not provided'} | Work Done: {v.work_done or 'Not provided'} | Result: {v.result or 'Not provided'}"
+        )
+    return f"""
+Ticket Ref: {ticket.ref_no}
+Ticket Date: {ticket.ticket_date or 'Not provided'}
+Customer: {ticket.customer_name}
+Phone: {ticket.phone or 'Not provided'}
+Location: {ticket.location or 'Not provided'}
+Project: {ticket.project.project_name if ticket.project else 'Not provided'}
+Warranty Ref: {ticket.warranty.ref_no if ticket.warranty else 'Not provided'}
+Warranty Status: {ticket.warranty.status if ticket.warranty else 'Not provided'}
+Warranty Notes: {ticket.warranty_note or 'Not provided'}
+Complaint Source: {ticket.complaint_source or 'Not provided'}
+Issue Category: {ticket.issue_category or 'Not provided'}
+Issue Description: {ticket.issue_description or 'Not provided'}
+Priority: {ticket.priority or 'Not provided'}
+Status: {ticket.status or 'Not provided'}
+Assigned Technician: {ticket.assigned_employee.full_name if ticket.assigned_employee else 'Not assigned'}
+Supervisor: {ticket.supervisor.full_name if ticket.supervisor else 'Not assigned'}
+Current Root Cause: {ticket.root_cause or 'Not provided'}
+Corrective Action: {ticket.corrective_action or 'Not provided'}
+Preventive Action: {ticket.preventive_action or 'Not provided'}
+Resolution Summary: {ticket.resolution_summary or 'Not provided'}
+Previous Service Visits:
+{chr(10).join(visits) if visits else 'No service visits recorded yet.'}
+""".strip()
+
+
+def _ticket_ai_prompt():
+    return """
+You are the AI Service Ticket Agent for Cadceed-Maal Solar Energy.
+Analyze the ERP service ticket below and produce a practical technical support analysis.
+
+Return ONLY valid JSON with these exact keys:
+{
+  "category": "Inverter/Battery/BMS/PV Panels/Wiring/Earthing/Pump/AC/Installation/Warranty/Other",
+  "priority": "Low/Medium/High/Urgent",
+  "root_cause": "likely root cause, do not invent certainty",
+  "action_plan": "clear step-by-step recommended action for the technician",
+  "spare_parts": "possible spare parts or tools required",
+  "visit_estimate": "30 minutes/1 hour/2 hours/Half Day/Full Day",
+  "customer_reply": "professional bilingual Somali and English customer reply",
+  "technician_checklist": "short checklist with each item on a new line",
+  "confidence_score": "percentage estimate such as 70%"
+}
+
+Rules:
+- Do not claim certainty when data is missing.
+- If fault code is mentioned, include it in root cause/action plan.
+- Keep actions practical for solar/inverter/battery/pump after-sales service.
+- The output is a DRAFT and must be reviewed by an engineer.
+""".strip()
+
+
+def _extract_json_object(text_value):
+    if not text_value:
+        return None
+    cleaned = text_value.strip()
+    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        pass
+    match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except Exception:
+            return None
+    return None
+
+
+def _first_non_empty(*values):
+    for value in values:
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
 @support_bp.before_app_request
 def ensure_support_tables():
     try:
         db.create_all()
         inspector = db.inspect(db.engine)
         cols = [c["name"] for c in inspector.get_columns("support_ticket")]
-        if "warranty_note" not in cols:
-            db.session.execute(text("ALTER TABLE support_ticket ADD COLUMN warranty_note TEXT"))
+        support_ai_columns = {
+            "warranty_note": "TEXT",
+            "ai_category": "VARCHAR(150)",
+            "ai_priority": "VARCHAR(80)",
+            "ai_root_cause": "TEXT",
+            "ai_action_plan": "TEXT",
+            "ai_spare_parts": "TEXT",
+            "ai_visit_estimate": "VARCHAR(120)",
+            "ai_customer_reply": "TEXT",
+            "ai_technician_checklist": "TEXT",
+            "ai_confidence_score": "VARCHAR(50)",
+            "ai_last_analysis": "TIMESTAMP",
+        }
+        changed = False
+        for col, col_type in support_ai_columns.items():
+            if col not in cols:
+                db.session.execute(text(f"ALTER TABLE support_ticket ADD COLUMN {col} {col_type}"))
+                changed = True
+        if changed:
             db.session.commit()
     except Exception:
         db.session.rollback()
@@ -202,6 +344,42 @@ def add_visit(ticket_id):
     if request.form.get('root_cause'):
         ticket.root_cause = request.form.get('root_cause')
     db.session.commit(); flash('Service visit saved.', 'success')
+    return redirect(url_for('support.ticket_detail', ticket_id=ticket.id))
+
+
+@support_bp.route('/tickets/<int:ticket_id>/ai-analyze', methods=['POST'])
+@login_required
+def analyze_ticket_ai(ticket_id):
+    ticket = SupportTicket.query.get_or_404(ticket_id)
+    if not (can_access_module(current_user, 'ai-service-ticket-agent', 'view') or can_access_module(current_user, 'service-ticket', 'edit')):
+        flash('Access Denied: You do not have permission to use AI Service Ticket Agent.', 'danger')
+        return redirect(url_for('support.ticket_detail', ticket_id=ticket.id))
+
+    setting = _get_ai_setting()
+    context_data = _ticket_ai_context(ticket)
+    prompt = _ticket_ai_prompt()
+    response, error = call_ai(setting, prompt, context_data=context_data)
+    parsed = _extract_json_object(response)
+
+    if parsed:
+        ticket.ai_category = _first_non_empty(parsed.get('category'), ticket.ai_category)
+        ticket.ai_priority = _first_non_empty(parsed.get('priority'), ticket.ai_priority)
+        ticket.ai_root_cause = _first_non_empty(parsed.get('root_cause'), ticket.ai_root_cause)
+        ticket.ai_action_plan = _first_non_empty(parsed.get('action_plan'), ticket.ai_action_plan)
+        ticket.ai_spare_parts = _first_non_empty(parsed.get('spare_parts'), ticket.ai_spare_parts)
+        ticket.ai_visit_estimate = _first_non_empty(parsed.get('visit_estimate'), ticket.ai_visit_estimate)
+        ticket.ai_customer_reply = _first_non_empty(parsed.get('customer_reply'), ticket.ai_customer_reply)
+        ticket.ai_technician_checklist = _first_non_empty(parsed.get('technician_checklist'), ticket.ai_technician_checklist)
+        ticket.ai_confidence_score = _first_non_empty(parsed.get('confidence_score'), ticket.ai_confidence_score)
+    else:
+        # Keep full text in the action plan if JSON parsing fails, so the user still gets value.
+        ticket.ai_action_plan = response
+        ticket.ai_root_cause = ticket.ai_root_cause or 'AI returned free-text analysis. Review action plan.'
+
+    ticket.ai_last_analysis = datetime.utcnow()
+    _save_ticket_ai_log(ticket, prompt, context_data, response, error=error)
+    db.session.commit()
+    flash('AI Service Ticket analysis generated and saved on the ticket.' if not error else 'AI analysis saved, but live API returned an error/local response. Check AI Logs.', 'success' if not error else 'warning')
     return redirect(url_for('support.ticket_detail', ticket_id=ticket.id))
 
 @support_bp.route('/tickets/<int:ticket_id>/report')

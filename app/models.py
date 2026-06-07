@@ -920,6 +920,19 @@ class SupportTicket(db.Model):
     root_cause = db.Column(db.Text, nullable=True)
     corrective_action = db.Column(db.Text, nullable=True)
     preventive_action = db.Column(db.Text, nullable=True)
+
+    # Phase 16A: AI Service Ticket Agent fields
+    ai_category = db.Column(db.String(150), nullable=True)
+    ai_priority = db.Column(db.String(80), nullable=True)
+    ai_root_cause = db.Column(db.Text, nullable=True)
+    ai_action_plan = db.Column(db.Text, nullable=True)
+    ai_spare_parts = db.Column(db.Text, nullable=True)
+    ai_visit_estimate = db.Column(db.String(120), nullable=True)
+    ai_customer_reply = db.Column(db.Text, nullable=True)
+    ai_technician_checklist = db.Column(db.Text, nullable=True)
+    ai_confidence_score = db.Column(db.String(50), nullable=True)
+    ai_last_analysis = db.Column(db.DateTime, nullable=True)
+
     final_result = db.Column(db.String(120), nullable=True)
     customer_confirmation = db.Column(db.String(120), nullable=True)
     closed_at = db.Column(db.DateTime, nullable=True)
@@ -1035,6 +1048,7 @@ FORM_PERMISSION_KEYS = [
     ("ai-project-report", "AI Project Report Writer", "AI"),
     ("ai-quotation", "AI Quotation Draft Generator", "AI"),
     ("ai-stock", "AI Stock Assistant", "AI"),
+    ("ai-service-ticket-agent", "AI Service Ticket Agent", "AI"),
     ("ai-reports", "AI Reports", "AI"),
     ("ai-logs", "AI Logs", "AI"),
     ("ai-settings", "AI Settings", "AI"),
@@ -1128,7 +1142,7 @@ class UserFormPermission(db.Model):
 AI_CONTEXT_TYPES = [
     "General ERP Question", "Service Ticket Help", "CRM Follow-up", "Quotation Note",
     "Project Summary", "Weekly Report", "Technical Troubleshooting", "Somali/English Translation",
-    "AI Project Report Writer", "AI Quotation Draft Generator", "AI Stock Assistant",
+    "AI Project Report Writer", "AI Quotation Draft Generator", "AI Stock Assistant", "AI Service Ticket Agent",
 ]
 AI_RESPONSE_STATUSES = ["Draft", "Reviewed", "Used", "Archived"]
 
