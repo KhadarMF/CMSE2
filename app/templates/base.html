@@ -105,7 +105,10 @@
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">AI Assistant</a>
                     <ul class="dropdown-menu">{% if can_access_module(current_user, 'ai-assistant') %}
                         <li><a class="dropdown-item" href="{{ url_for('ai.dashboard') }}">AI Dashboard</a></li>{% endif %}{% if can_access_module(current_user, 'ai-assistant') %}
-                        <li><a class="dropdown-item" href="{{ url_for('ai.assistant') }}">Ask AI</a></li>{% endif %}{% if can_access_module(current_user, 'ai-reports') %}
+                        <li><a class="dropdown-item" href="{{ url_for('ai.assistant') }}">Ask AI</a></li>{% endif %}{% if can_access_module(current_user, 'ai-project-report') %}
+                        <li><a class="dropdown-item" href="{{ url_for('ai.project_report_ai') }}">AI Project Report Writer</a></li>{% endif %}{% if can_access_module(current_user, 'ai-quotation') %}
+                        <li><a class="dropdown-item" href="{{ url_for('ai.quotation_ai') }}">AI Quotation Draft</a></li>{% endif %}{% if can_access_module(current_user, 'ai-stock') %}
+                        <li><a class="dropdown-item" href="{{ url_for('ai.stock_ai') }}">AI Stock Assistant</a></li>{% endif %}{% if can_access_module(current_user, 'ai-reports') %}
                         <li><a class="dropdown-item" href="{{ url_for('ai.reports') }}">AI Report Generator</a></li>{% endif %}{% if can_access_module(current_user, 'ai-logs') %}
                         <li><a class="dropdown-item" href="{{ url_for('ai.logs') }}">AI Logs</a></li>{% endif %}
                         {% if current_user.role == "Admin" %}<li><a class="dropdown-item" href="{{ url_for('ai.settings') }}">AI Settings</a></li>{% endif %}

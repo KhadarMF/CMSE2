@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h3>AI Quotation Draft Generator</h3><p class="text-muted mb-0">Create draft quotation, BOQ and customer proposal text. Final approval is still required.</p></div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('ai.dashboard') }}">AI Dashboard</a>
+</div>
+<div class="row g-3">
+  <div class="col-lg-5"><div class="card shadow-sm"><div class="card-body">
+    <form method="post">
+      <label class="form-label fw-bold">Existing Quotation</label>
+      <select name="quotation_id" class="form-select mb-3">
+        <option value="">Optional - choose existing quotation</option>
+        {% for q in quotations %}<option value="{{ q.id }}" {% if selected_quotation_id == q.id|string %}selected{% endif %}>{{ q.ref_no }} - {{ q.customer_name }} - {{ q.status }}</option>{% endfor %}
+      </select>
+      <label class="form-label fw-bold">Manual Customer / Load Data</label>
+      <textarea name="manual_context" rows="7" class="form-control mb-3" placeholder="Example: Customer: Restaurant, Location: Hargeisa, Day load: 100kWh, Night load: 145kWh, Panel: 605W, Battery usable ratio: 90%">{{ manual_context or '' }}</textarea>
+      <label class="form-label fw-bold">AI Prompt</label>
+      <textarea name="prompt" rows="8" class="form-control mb-3">{{ default_prompt }}</textarea>
+      <button class="btn btn-cmse w-100">Generate AI Quotation Draft</button>
+    </form>
+  </div></div></div>
+  <div class="col-lg-7"><div class="card shadow-sm"><div class="card-header fw-bold">AI Output</div><div class="card-body">{% if result %}<pre style="white-space:pre-wrap">{{ result }}</pre>{% else %}<p class="text-muted mb-0">Select a quotation or enter load data, then generate a draft.</p>{% endif %}</div></div></div>
+</div>
+{% endblock %}

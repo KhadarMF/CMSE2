@@ -903,6 +903,7 @@ class SupportTicket(db.Model):
     customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=True)
     warranty_id = db.Column(db.Integer, db.ForeignKey("warranty_registration.id"), nullable=True)
+    warranty_note = db.Column(db.Text, nullable=True)
     customer_name = db.Column(db.String(180), nullable=False)
     phone = db.Column(db.String(80), nullable=True)
     location = db.Column(db.String(180), nullable=True)
@@ -1031,6 +1032,9 @@ FORM_PERMISSION_KEYS = [
 
     # AI
     ("ai-assistant", "AI Assistant", "AI"),
+    ("ai-project-report", "AI Project Report Writer", "AI"),
+    ("ai-quotation", "AI Quotation Draft Generator", "AI"),
+    ("ai-stock", "AI Stock Assistant", "AI"),
     ("ai-reports", "AI Reports", "AI"),
     ("ai-logs", "AI Logs", "AI"),
     ("ai-settings", "AI Settings", "AI"),
@@ -1124,15 +1128,16 @@ class UserFormPermission(db.Model):
 AI_CONTEXT_TYPES = [
     "General ERP Question", "Service Ticket Help", "CRM Follow-up", "Quotation Note",
     "Project Summary", "Weekly Report", "Technical Troubleshooting", "Somali/English Translation",
+    "AI Project Report Writer", "AI Quotation Draft Generator", "AI Stock Assistant",
 ]
 AI_RESPONSE_STATUSES = ["Draft", "Reviewed", "Used", "Archived"]
 
 class AISetting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     enabled = db.Column(db.Boolean, default=True)
-    provider = db.Column(db.String(120), default="OpenAI-Compatible")
+    provider = db.Column(db.String(120), default="OpenAI Responses API")
     model_name = db.Column(db.String(120), default="gpt-4o-mini")
-    api_base_url = db.Column(db.String(250), default="https://api.openai.com/v1/chat/completions")
+    api_base_url = db.Column(db.String(250), default="https://api.openai.com/v1/responses")
     api_key = db.Column(db.Text, nullable=True)  # Prefer environment variable OPENAI_API_KEY in production.
     temperature = db.Column(db.Float, default=0.2)
     max_tokens = db.Column(db.Integer, default=900)

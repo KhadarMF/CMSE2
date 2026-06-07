@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h3>AI Quotation Draft: {{ quotation.ref_no }}</h3><p class="text-muted mb-0">{{ quotation.customer_name }} — {{ quotation.status }}</p></div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('sales.quotation_detail', quotation_id=quotation.id) }}">Back to Quotation</a>
+</div>
+<div class="row g-3">
+  <div class="col-lg-5"><div class="card shadow-sm"><div class="card-body">
+    <form method="post"><label class="form-label fw-bold">Prompt</label><textarea name="prompt" rows="9" class="form-control mb-3">{{ default_prompt }}</textarea><button class="btn btn-cmse w-100">Generate Draft</button></form>
+    <hr><h6 class="fw-bold">ERP Context Sent to AI</h6><pre class="small" style="white-space:pre-wrap">{{ context_data }}</pre>
+  </div></div></div>
+  <div class="col-lg-7"><div class="card shadow-sm"><div class="card-header fw-bold">AI Output</div><div class="card-body">{% if result %}<pre style="white-space:pre-wrap">{{ result }}</pre>{% else %}<p class="text-muted mb-0">Click Generate to create a draft quotation note and proposal text.</p>{% endif %}</div></div></div>
+</div>
+{% endblock %}

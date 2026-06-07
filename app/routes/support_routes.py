@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app import db
 from app.notification_gateway import create_notification_event
+from sqlalchemy import text
 from app.models import (
     Customer, Project, Employee, User, WarrantyRegistration, SupportTicket, ServiceVisit,
     WARRANTY_STATUSES, TICKET_STATUSES, TICKET_PRIORITIES, VISIT_STATUSES,
@@ -26,8 +27,13 @@ def make_ref(prefix):
 def ensure_support_tables():
     try:
         db.create_all()
+        inspector = db.inspect(db.engine)
+        cols = [c["name"] for c in inspector.get_columns("support_ticket")]
+        if "warranty_note" not in cols:
+            db.session.execute(text("ALTER TABLE support_ticket ADD COLUMN warranty_note TEXT"))
+            db.session.commit()
     except Exception:
-        pass
+        db.session.rollback()
 
 @support_bp.route('/')
 @login_required
@@ -102,6 +108,17 @@ def create_ticket():
     if request.method == 'POST':
         customer_id = request.form.get('customer_id') or None
         customer = Customer.query.get(customer_id) if customer_id else None
+        new_customer_name = (request.form.get('new_customer_name') or '').strip()
+        customer_name = (customer.customer_name if customer else new_customer_name or (request.form.get('customer_name') or '').strip())
+        if not customer_name:
+            flash('Please select a customer from the Customers table or enter a New Customer Name.', 'warning')
+            return render_template('support/ticket_form.html',
+                projects=Project.query.order_by(Project.project_name.asc()).all(),
+                customers=Customer.query.order_by(Customer.customer_name.asc()).all(),
+                employees=Employee.query.order_by(Employee.status.asc(), Employee.full_name.asc()).all(),
+                users=User.query.filter_by(is_active=True).order_by(User.full_name.asc()).all(),
+                warranties=WarrantyRegistration.query.order_by(WarrantyRegistration.created_at.desc()).all(),
+                statuses=TICKET_STATUSES, priorities=TICKET_PRIORITIES, categories=TICKET_CATEGORIES, sources=COMPLAINT_SOURCES)
         due_date = parse_date(request.form.get('due_date'))
         if not due_date:
             priority = request.form.get('priority') or 'Medium'
@@ -110,8 +127,9 @@ def create_ticket():
         ticket = SupportTicket(
             ref_no=make_ref('TKT'), ticket_date=parse_date(request.form.get('ticket_date')) or date.today(),
             customer_id=customer_id, project_id=request.form.get('project_id') or None, warranty_id=request.form.get('warranty_id') or None,
-            customer_name=request.form.get('customer_name') or (customer.customer_name if customer else ''),
-            phone=request.form.get('phone'), location=request.form.get('location'), complaint_source=request.form.get('complaint_source'),
+            warranty_note=request.form.get('warranty_note'),
+            customer_name=customer_name,
+            phone=request.form.get('phone') or (customer.phone if customer else None), location=request.form.get('location') or (customer.address if customer else None), complaint_source=request.form.get('complaint_source'),
             preferred_visit_date=parse_date(request.form.get('preferred_visit_date')), due_date=due_date,
             issue_category=request.form.get('issue_category'), issue_description=request.form.get('issue_description'),
             priority=request.form.get('priority') or 'Medium', status=request.form.get('status') or 'Open',
@@ -129,7 +147,7 @@ def create_ticket():
     return render_template('support/ticket_form.html',
         projects=Project.query.order_by(Project.project_name.asc()).all(),
         customers=Customer.query.order_by(Customer.customer_name.asc()).all(),
-        employees=Employee.query.filter_by(status='Active').all(), users=User.query.filter_by(is_active=True).all(),
+        employees=Employee.query.order_by(Employee.status.asc(), Employee.full_name.asc()).all(), users=User.query.filter_by(is_active=True).order_by(User.full_name.asc()).all(),
         warranties=WarrantyRegistration.query.order_by(WarrantyRegistration.created_at.desc()).all(),
         statuses=TICKET_STATUSES, priorities=TICKET_PRIORITIES, categories=TICKET_CATEGORIES, sources=COMPLAINT_SOURCES)
 
@@ -137,16 +155,17 @@ def create_ticket():
 @login_required
 def ticket_detail(ticket_id):
     ticket = SupportTicket.query.get_or_404(ticket_id)
-    employees = Employee.query.filter_by(status='Active').all()
-    users = User.query.filter_by(is_active=True).all()
+    employees = Employee.query.order_by(Employee.status.asc(), Employee.full_name.asc()).all()
+    users = User.query.filter_by(is_active=True).order_by(User.full_name.asc()).all()
+    all_tickets = SupportTicket.query.order_by(SupportTicket.created_at.desc()).limit(200).all()
     return render_template('support/ticket_detail.html', ticket=ticket, employees=employees, users=users, statuses=TICKET_STATUSES,
-                           visit_statuses=VISIT_STATUSES, service_results=SERVICE_RESULTS, confirmations=CUSTOMER_CONFIRMATIONS)
+                           all_tickets=all_tickets, visit_statuses=VISIT_STATUSES, service_results=SERVICE_RESULTS, confirmations=CUSTOMER_CONFIRMATIONS)
 
 @support_bp.route('/tickets/<int:ticket_id>/update', methods=['POST'])
 @login_required
 def update_ticket(ticket_id):
     ticket = SupportTicket.query.get_or_404(ticket_id)
-    for field in ['priority', 'status', 'issue_category', 'location', 'complaint_source', 'root_cause', 'corrective_action', 'preventive_action', 'final_result', 'customer_confirmation', 'resolution_summary']:
+    for field in ['priority', 'status', 'issue_category', 'location', 'complaint_source', 'warranty_note', 'root_cause', 'corrective_action', 'preventive_action', 'final_result', 'customer_confirmation', 'resolution_summary']:
         if field in request.form:
             setattr(ticket, field, request.form.get(field))
     ticket.due_date = parse_date(request.form.get('due_date')) or ticket.due_date

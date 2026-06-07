@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h3>AI Stock Assistant</h3><p class="text-muted mb-0">Ask stock/material questions using ERP material item data. Warehouse confirmation is required before reservation.</p></div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('ai.dashboard') }}">AI Dashboard</a>
+</div>
+<div class="row g-3">
+  <div class="col-lg-5"><div class="card shadow-sm"><div class="card-body">
+    <form method="post">
+      <label class="form-label fw-bold">Stock Question</label>
+      <textarea name="question" rows="5" class="form-control mb-3" placeholder="Example: Do we have materials for a 20kW hybrid solar system?">{{ question or '' }}</textarea>
+      <button class="btn btn-cmse w-100">Ask Stock AI</button>
+    </form>
+    <hr>
+    <div class="small text-muted">Cost visibility: {% if include_cost %}allowed for your role{% else %}hidden for your role{% endif %}</div>
+  </div></div>
+  <div class="card shadow-sm mt-3"><div class="card-header fw-bold">Stock Data Preview</div><div class="card-body"><pre class="small" style="white-space:pre-wrap; max-height:360px; overflow:auto">{{ stock_data }}</pre></div></div>
+  </div>
+  <div class="col-lg-7"><div class="card shadow-sm"><div class="card-header fw-bold">AI Output</div><div class="card-body">{% if result %}<pre style="white-space:pre-wrap">{{ result }}</pre>{% else %}<p class="text-muted mb-0">Write a stock question and generate an answer.</p>{% endif %}</div></div></div>
+</div>
+{% endblock %}

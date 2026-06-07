@@ -253,7 +253,7 @@ PARENT_CHILD_PERMISSION_KEYS = {
     "employees": ["employees"],
     "teams": ["teams"],
     "notifications": ["notifications", "notification-log", "sms-queue", "whatsapp-integration", "production-readiness"],
-    "ai-assistant": ["ai-assistant", "ai-reports", "ai-logs", "ai-settings"],
+    "ai-assistant": ["ai-assistant", "ai-project-report", "ai-quotation", "ai-stock", "ai-reports", "ai-logs", "ai-settings"],
 }
 
 FORM_CHILD_KEYS = ["site-survey", "load-assessment", "daily-site-report", "delivery-note", "testing", "commissioning", "handover"]

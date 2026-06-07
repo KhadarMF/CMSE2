@@ -1,26 +1,143 @@
-{% extends 'base.html' %}{% block content %}
-<div class="d-flex gap-2 mt-3 mb-3"><a class="btn btn-outline-dark" href="javascript:history.back()">Close / Back</a><a class="btn btn-outline-secondary" href="/">Home</a></div>
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex gap-2 mt-3 mb-3">
+  <a class="btn btn-outline-dark" href="javascript:history.back()">Close / Back</a>
+  <a class="btn btn-outline-secondary" href="/">Home</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('support.tickets') }}">Tickets</a>
+</div>
+
 <h2 class="fw-bold">New Service Ticket / Customer Complaint</h2>
 <p class="text-muted">Use this form whenever a customer reports a fault, complaint, warranty claim or service request.</p>
-<form method="post" class="card shadow-sm"><div class="card-body">
-<div class="alert alert-info"><strong>Tip:</strong> Customer field is now one clean combo box. Select an existing customer or type a new customer name.</div>
-<div class="row g-3">
-  <div class="col-md-3"><label class="form-label">Ticket Date</label><input class="form-control" type="date" name="ticket_date"></div>
-  <div class="col-md-3"><label class="form-label">Complaint Source</label><select class="form-select" name="complaint_source"><option value="">-- select --</option>{% for s in sources %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div>
-  <div class="col-md-3"><label class="form-label">Priority</label><select class="form-select" name="priority">{% for p in priorities %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></div>
-  <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" name="status">{% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div>
-  <div class="col-md-4"><label class="form-label">Customer</label><input class="form-control" list="customerOptions" name="customer_name" placeholder="Select existing customer or type new customer" required><datalist id="customerOptions">{% for c in customers %}<option value="{{ c.customer_name }}">{% endfor %}</datalist></div>
-  <div class="col-md-4"><label class="form-label">Phone</label><input class="form-control" name="phone"></div>
-  <div class="col-md-4"><label class="form-label">Project</label><select class="form-select" name="project_id"><option value="">-- select --</option>{% for p in projects %}<option value="{{ p.id }}">{{ p.project_name }} - {{ p.customer_name }}</option>{% endfor %}</select></div>
-  <div class="col-md-4"><label class="form-label">Warranty</label><select class="form-select" name="warranty_id"><option value="">-- select --</option>{% for w in warranties %}<option value="{{ w.id }}">{{ w.ref_no }} - {{ w.customer_name }}</option>{% endfor %}</select></div>
-  <div class="col-md-4"><label class="form-label">Location</label><input class="form-control" name="location" placeholder="Hargeisa / Burco / Site location"></div>
-  <div class="col-md-4"><label class="form-label">Issue Category</label><select class="form-select" name="issue_category"><option value="">-- select --</option>{% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select></div>
-  <div class="col-md-4"><label class="form-label">Assigned Technician</label><select class="form-select" name="assigned_employee_id"><option value="">-- select --</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }}</option>{% endfor %}</select></div>
-  <div class="col-md-4"><label class="form-label">Supervisor / Responsible User</label><select class="form-select" name="supervisor_user_id"><option value="">-- select --</option>{% for u in users %}<option value="{{ u.id }}">{{ u.full_name }}</option>{% endfor %}</select></div>
-  <div class="col-md-3"><label class="form-label">Preferred Visit Date</label><input class="form-control" type="date" name="preferred_visit_date"></div>
-  <div class="col-md-3"><label class="form-label">Due Date</label><input class="form-control" type="date" name="due_date"><div class="form-text">Blank = auto based on priority.</div></div>
-  <div class="col-md-12"><label class="form-label">Complaint / Issue Description</label><textarea class="form-control" name="issue_description" rows="4" required placeholder="Describe exactly what customer reported..."></textarea></div>
-</div>
-<div class="mt-3"><button class="btn btn-primary">Save Ticket</button></div>
-</div></form>
+
+<form method="post" class="card shadow-sm">
+  <div class="card-body">
+    <div class="alert alert-info">
+      <strong>Updated:</strong> Customer, Warranty and Assigned To fields now read from master tables. Use “New Customer Name” only when the customer is not yet registered.
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Ticket Date</label>
+        <input class="form-control" type="date" name="ticket_date">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Complaint Source</label>
+        <select class="form-select" name="complaint_source">
+          <option value="">-- select --</option>
+          {% for s in sources %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Priority</label>
+        <select class="form-select" name="priority">
+          {% for p in priorities %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Status</label>
+        <select class="form-select" name="status">
+          {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Customer <span class="text-danger">*</span></label>
+        <select class="form-select" name="customer_id" id="customerSelect">
+          <option value="">-- select customer from Customers table --</option>
+          {% for c in customers %}
+            <option value="{{ c.id }}" data-phone="{{ c.phone or '' }}" data-location="{{ c.address or '' }}">{{ c.customer_name }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Reads from Customers table.</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">New Customer Name</label>
+        <input class="form-control" name="new_customer_name" placeholder="Use only if customer is not in the list">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Phone</label>
+        <input class="form-control" name="phone" id="phoneInput">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Project</label>
+        <select class="form-select" name="project_id">
+          <option value="">-- select project --</option>
+          {% for p in projects %}<option value="{{ p.id }}">{{ p.project_name }} - {{ p.customer_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Warranty Registration</label>
+        <select class="form-select" name="warranty_id">
+          <option value="">-- select warranty if available --</option>
+          {% for w in warranties %}<option value="{{ w.id }}">{{ w.ref_no }} - {{ w.customer_name }} - {{ w.status }}</option>{% endfor %}
+        </select>
+        <div class="form-text"><a href="{{ url_for('support.create_warranty') }}" target="_blank">Create warranty registration</a> if it is not listed.</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Warranty / Claim Notes</label>
+        <input class="form-control" name="warranty_note" placeholder="e.g. Customer claims under warranty, invoice no., serial no.">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Location</label>
+        <input class="form-control" name="location" id="locationInput" placeholder="Hargeisa / Burco / Site location">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Issue Category</label>
+        <select class="form-select" name="issue_category">
+          <option value="">-- select --</option>
+          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Assigned To / Technician</label>
+        <select class="form-select" name="assigned_employee_id">
+          <option value="">-- select employee from Employees table --</option>
+          {% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }}{% if e.job_title %} - {{ e.job_title }}{% endif %}{% if e.status %} ({{ e.status }}){% endif %}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Supervisor / Responsible User</label>
+        <select class="form-select" name="supervisor_user_id">
+          <option value="">-- select responsible user --</option>
+          {% for u in users %}<option value="{{ u.id }}">{{ u.full_name }} - {{ u.role }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Preferred Visit Date</label>
+        <input class="form-control" type="date" name="preferred_visit_date">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Due Date</label>
+        <input class="form-control" type="date" name="due_date">
+        <div class="form-text">Blank = auto based on priority.</div>
+      </div>
+
+      <div class="col-md-12">
+        <label class="form-label">Complaint / Issue Description <span class="text-danger">*</span></label>
+        <textarea class="form-control" name="issue_description" rows="4" required placeholder="Describe exactly what customer reported..."></textarea>
+      </div>
+    </div>
+
+    <div class="mt-3"><button class="btn btn-primary">Save Ticket</button></div>
+  </div>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const customerSelect = document.getElementById('customerSelect');
+  const phoneInput = document.getElementById('phoneInput');
+  const locationInput = document.getElementById('locationInput');
+  if (customerSelect) {
+    customerSelect.addEventListener('change', function () {
+      const opt = customerSelect.options[customerSelect.selectedIndex];
+      if (!opt) return;
+      if (opt.dataset.phone && !phoneInput.value) phoneInput.value = opt.dataset.phone;
+      if (opt.dataset.location && !locationInput.value) locationInput.value = opt.dataset.location;
+    });
+  }
+});
+</script>
 {% endblock %}

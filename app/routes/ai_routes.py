@@ -2,14 +2,117 @@ from datetime import datetime, date, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
-from app.ai_service import call_ai, make_ai_ref, CADCEED_SYSTEM_PROMPT
+from app.ai_service import call_ai, make_ai_ref, CADCEED_SYSTEM_PROMPT, test_ai_connection, get_api_key
+from app.permissions import can_access_module
 from app.models import (
     AISetting, AIInteractionLog, AI_CONTEXT_TYPES, AI_RESPONSE_STATUSES,
-    Project, ProjectTask, SupportTicket, SalesInquiry, SalesQuotation,
-    SystemNotification
+    Project, ProjectTask, SupportTicket, SalesInquiry, SalesQuotation, SalesQuotationLine,
+    MaterialItem, SiteSurveyForm, LoadAssessmentForm, DailySiteReport, DeliveryNoteForm,
+    TestingForm, CommissioningForm, HandoverForm, SystemNotification
 )
 
 ai_bp = Blueprint('ai', __name__, url_prefix='/ai')
+
+
+PHASE1_FORM_MAP = {
+    'site-survey': ('Site Survey & Load Assessment', SiteSurveyForm),
+    'load-assessment': ('Load Assessment', LoadAssessmentForm),
+    'daily-site-report': ('Daily Site Report', DailySiteReport),
+    'delivery-note': ('Delivery Note', DeliveryNoteForm),
+    'testing': ('Testing Report', TestingForm),
+    'commissioning': ('Commissioning Form', CommissioningForm),
+    'handover': ('Handover Certificate', HandoverForm),
+}
+
+REPORT_FIELD_MAP = {
+    'site-survey': ['site_name','survey_date','surveyed_by','gps_coordinates','roof_type','roof_condition','available_space','shading_status','existing_power_source','earthing_condition','access_road','assessment_date','assessed_by','daytime_load_kw','nighttime_load_kw','total_daily_consumption_kwh','critical_loads','ac_loads','pump_loads','lighting_loads','backup_hours_required','recommended_system_size','recommendation','remarks'],
+    'load-assessment': ['assessment_date','assessed_by','daytime_load_kw','nighttime_load_kw','total_daily_consumption_kwh','critical_loads','ac_loads','pump_loads','lighting_loads','backup_hours_required','recommended_system_size','remarks'],
+    'daily-site-report': ['report_date','site_supervisor','manpower','work_done_today','materials_used','tools_equipment_used','issues_challenges','safety_notes','next_day_plan','progress_percentage','remarks'],
+    'delivery-note': ['delivery_date','delivered_by','received_by','vehicle_plate','delivery_location','items_delivered','quantity_summary','condition_of_items','receiver_comments','remarks'],
+    'testing': ['testing_date','tested_by','inverter_status','pv_voltage','battery_voltage','output_voltage','load_test_result','protection_test_result','faults_found','corrective_actions','test_result','remarks'],
+    'commissioning': ['commissioning_date','commissioned_by','system_capacity','inverter_model','battery_model','pv_array_details','battery_settings','inverter_settings','monitoring_setup','client_training_done','commissioning_status','remarks'],
+    'handover': ['handover_date','handed_over_by','received_by','documents_handed_over','spare_parts_handed_over','training_provided','warranty_explained','client_comments','final_status','remarks'],
+}
+
+
+def _require_ai_permission(key):
+    if not can_access_module(current_user, key, 'view'):
+        flash('Access Denied: You do not have permission to use this AI module.', 'danger')
+        return False
+    return True
+
+
+def _format_value(value):
+    if value is None or value == '':
+        return 'Not provided'
+    try:
+        return value.strftime('%Y-%m-%d')
+    except Exception:
+        return str(value)
+
+
+def _project_context(project):
+    return f"""
+Project Name: {project.project_name}
+Customer: {project.customer_name}
+Location: {project.location}
+Project Type: {project.project_type}
+Capacity: {project.capacity or 'Not provided'}
+Status: {project.status}
+Start Date: {_format_value(project.start_date)}
+Expected Completion: {_format_value(project.expected_completion_date)}
+Assigned Team: {project.assigned_team or 'Not provided'}
+Description: {project.description or 'Not provided'}
+""".strip()
+
+
+def _form_context(form_key, entry):
+    lines = [_project_context(entry.project), f"Form Type: {PHASE1_FORM_MAP[form_key][0]}", f"Form ID: {entry.id}", f"Approval Status: {entry.approval_status}", f"Created By: {entry.creator.full_name if entry.creator else 'Not provided'}"]
+    for field in REPORT_FIELD_MAP.get(form_key, []):
+        label = field.replace('_', ' ').title()
+        lines.append(f"{label}: {_format_value(getattr(entry, field, None))}")
+    return '\n'.join(lines)
+
+
+def _quotation_context(quotation=None):
+    if not quotation:
+        return ''
+    lines = [
+        f"Quotation Ref: {quotation.ref_no}",
+        f"Customer: {quotation.customer_name}",
+        f"Project Type: {quotation.project_type or 'Not provided'}",
+        f"Capacity: {quotation.capacity or 'Not provided'}",
+        f"Status: {quotation.status}",
+        f"Scope of Work: {quotation.scope_of_work or 'Not provided'}",
+        f"Validity Days: {quotation.validity_days}",
+        f"Prepared By: {quotation.prepared_by.full_name if quotation.prepared_by else 'Not provided'}",
+        f"Notes: {quotation.notes or 'Not provided'}",
+        "Items:"
+    ]
+    for line in quotation.lines:
+        lines.append(f"- {line.item} | {line.description or ''} | Qty: {line.quantity} {line.unit or ''} | Unit Price: {line.unit_price}")
+    return '\n'.join(lines)
+
+
+def _stock_context(limit=120, include_cost=False):
+    items = MaterialItem.query.filter_by(is_active=True).order_by(MaterialItem.category.asc(), MaterialItem.item_name.asc()).limit(limit).all()
+    rows = []
+    for item in items:
+        cost = f" | Unit Cost: {item.unit_cost}" if include_cost else ""
+        rows.append(f"- {item.item_code or ''} | {item.item_name} | Category: {item.category or ''} | Unit: {item.unit or ''} | Description: {item.description or ''}{cost}")
+    return '\n'.join(rows) if rows else 'No active material items found.'
+
+
+def _default_report_prompt(form_title):
+    return f"PHASE1_PROJECT_REPORT: Generate a formal {form_title} for Cadceed-Maal Solar Energy. Include Project Information, Work Completed/Details, Materials or Measurements, Pending Work, Issues/Risks, Required Actions, Next Plan, and Professional Summary. Mark it as DRAFT until approved."
+
+
+def _default_quotation_prompt():
+    return "PHASE1_QUOTATION: Generate a draft solar quotation and customer proposal. Include customer need summary, recommended system, PV sizing draft, inverter sizing draft, battery sizing draft, BOQ draft, assumptions, warranty note, payment terms placeholder, proposal text, WhatsApp follow-up, and approval reminder."
+
+
+def _default_stock_prompt(question):
+    return f"PHASE1_STOCK: Answer this stock/material question using only the provided ERP material data. Question: {question}"
 
 @ai_bp.before_app_request
 def ensure_ai_tables():
@@ -21,9 +124,22 @@ def ensure_ai_tables():
 def get_setting():
     setting = AISetting.query.first()
     if not setting:
-        setting = AISetting(enabled=True, system_prompt=CADCEED_SYSTEM_PROMPT, notes='Local offline AI mode is enabled. Add API key for live AI.')
+        setting = AISetting(
+            enabled=True,
+            provider='OpenAI Responses API',
+            model_name='gpt-4o-mini',
+            api_base_url='https://api.openai.com/v1/responses',
+            system_prompt=CADCEED_SYSTEM_PROMPT,
+            notes='Live AI mode. Put OPENAI_API_KEY in server environment variables or enter API key here.'
+        )
         db.session.add(setting)
         db.session.commit()
+    else:
+        # Upgrade old default endpoint to the current Responses API unless user intentionally set a custom URL.
+        if not setting.api_base_url or setting.api_base_url.strip() == 'https://api.openai.com/v1/chat/completions':
+            setting.provider = setting.provider or 'OpenAI Responses API'
+            setting.api_base_url = 'https://api.openai.com/v1/responses'
+            db.session.commit()
     return setting
 
 def save_log(context_type, prompt, response, context_data='', related_module=None, related_ref=None, error=None):
@@ -190,6 +306,124 @@ def update_log_status(log_id):
     db.session.commit(); flash('AI log status updated.', 'success')
     return redirect(url_for('ai.logs'))
 
+
+
+@ai_bp.route('/project-report', methods=['GET', 'POST'])
+@login_required
+def project_report_ai():
+    if not _require_ai_permission('ai-project-report'):
+        return redirect(url_for('ai.dashboard'))
+    setting = get_setting(); result = None; log = None; selected_form_key = request.values.get('form_key') or 'daily-site-report'; selected_form_id = request.values.get('form_id') or ''
+    entries = []
+    if selected_form_key in PHASE1_FORM_MAP:
+        title, Model = PHASE1_FORM_MAP[selected_form_key]
+        entries = Model.query.order_by(Model.created_at.desc()).limit(100).all()
+    if request.method == 'POST':
+        if selected_form_key not in PHASE1_FORM_MAP:
+            flash('Invalid form type.', 'danger')
+            return redirect(url_for('ai.project_report_ai'))
+        title, Model = PHASE1_FORM_MAP[selected_form_key]
+        entry = Model.query.get_or_404(request.form.get('form_id'))
+        context_data = _form_context(selected_form_key, entry)
+        prompt = request.form.get('prompt') or _default_report_prompt(title)
+        response, error = call_ai(setting, prompt, context_data=context_data)
+        log = save_log('AI Project Report Writer', prompt, response, context_data=context_data, related_module=title, related_ref=f'{selected_form_key}-{entry.id}', error=error)
+        result = response
+        flash('AI project report draft generated and saved in AI logs.', 'success' if not error else 'warning')
+    return render_template('ai/phase1_project_report.html', result=result, log=log, form_map=PHASE1_FORM_MAP, selected_form_key=selected_form_key, selected_form_id=str(selected_form_id), entries=entries, default_prompt=_default_report_prompt(PHASE1_FORM_MAP.get(selected_form_key, ('Project Report', None))[0]))
+
+
+@ai_bp.route('/project-report/<form_key>/<int:form_id>', methods=['GET', 'POST'])
+@login_required
+def project_report_from_form(form_key, form_id):
+    if not _require_ai_permission('ai-project-report'):
+        return redirect(url_for('ai.dashboard'))
+    if form_key not in PHASE1_FORM_MAP:
+        flash('Invalid form type.', 'danger')
+        return redirect(url_for('ai.project_report_ai'))
+    title, Model = PHASE1_FORM_MAP[form_key]
+    entry = Model.query.get_or_404(form_id)
+    setting = get_setting(); result = None; log = None
+    context_data = _form_context(form_key, entry)
+    default_prompt = _default_report_prompt(title)
+    if request.method == 'POST':
+        prompt = request.form.get('prompt') or default_prompt
+        response, error = call_ai(setting, prompt, context_data=context_data)
+        log = save_log('AI Project Report Writer', prompt, response, context_data=context_data, related_module=title, related_ref=f'{form_key}-{entry.id}', error=error)
+        result = response
+        flash('AI project report draft generated and saved in AI logs.', 'success' if not error else 'warning')
+    return render_template('ai/phase1_project_report_single.html', result=result, log=log, form_key=form_key, form_title=title, entry=entry, context_data=context_data, default_prompt=default_prompt)
+
+
+@ai_bp.route('/quotation-draft', methods=['GET', 'POST'])
+@login_required
+def quotation_ai():
+    if not _require_ai_permission('ai-quotation'):
+        return redirect(url_for('ai.dashboard'))
+    setting = get_setting(); result = None; log = None
+    quotations = SalesQuotation.query.order_by(SalesQuotation.created_at.desc()).limit(100).all()
+    selected_quotation_id = request.values.get('quotation_id') or ''
+    quotation = SalesQuotation.query.get(selected_quotation_id) if selected_quotation_id else None
+    context_data = _quotation_context(quotation) if quotation else ''
+    manual_context = ''
+    if request.method == 'POST':
+        quotation = SalesQuotation.query.get(request.form.get('quotation_id')) if request.form.get('quotation_id') else None
+        context_data = _quotation_context(quotation) if quotation else ''
+        manual_context = request.form.get('manual_context') or ''
+        if manual_context:
+            context_data = (context_data + '\n\nManual Customer / Load Data:\n' + manual_context).strip()
+        prompt = request.form.get('prompt') or _default_quotation_prompt()
+        if not context_data:
+            flash('Please select a quotation or enter customer/load details.', 'danger')
+        else:
+            response, error = call_ai(setting, prompt, context_data=context_data)
+            related_ref = quotation.ref_no if quotation else 'Manual quotation draft'
+            log = save_log('AI Quotation Draft Generator', prompt, response, context_data=context_data, related_module='Sales Quotation', related_ref=related_ref, error=error)
+            result = response
+            flash('AI quotation draft generated and saved in AI logs.', 'success' if not error else 'warning')
+    return render_template('ai/phase1_quotation.html', result=result, log=log, quotations=quotations, selected_quotation_id=str(selected_quotation_id), default_prompt=_default_quotation_prompt(), manual_context=manual_context)
+
+
+@ai_bp.route('/quotation-draft/<int:quotation_id>', methods=['GET', 'POST'])
+@login_required
+def quotation_from_record(quotation_id):
+    if not _require_ai_permission('ai-quotation'):
+        return redirect(url_for('ai.dashboard'))
+    quotation = SalesQuotation.query.get_or_404(quotation_id)
+    setting = get_setting(); result = None; log = None
+    context_data = _quotation_context(quotation)
+    default_prompt = _default_quotation_prompt()
+    if request.method == 'POST':
+        prompt = request.form.get('prompt') or default_prompt
+        response, error = call_ai(setting, prompt, context_data=context_data)
+        log = save_log('AI Quotation Draft Generator', prompt, response, context_data=context_data, related_module='Sales Quotation', related_ref=quotation.ref_no, error=error)
+        result = response
+        flash('AI quotation draft generated and saved in AI logs.', 'success' if not error else 'warning')
+    return render_template('ai/phase1_quotation_single.html', result=result, log=log, quotation=quotation, context_data=context_data, default_prompt=default_prompt)
+
+
+@ai_bp.route('/stock-assistant', methods=['GET', 'POST'])
+@login_required
+def stock_ai():
+    if not _require_ai_permission('ai-stock'):
+        return redirect(url_for('ai.dashboard'))
+    setting = get_setting(); result = None; log = None
+    question = request.form.get('question') if request.method == 'POST' else (request.args.get('q') or '')
+    include_cost = current_user.role in ['Admin', 'Management', 'Finance Officer']
+    stock_data = _stock_context(include_cost=include_cost)
+    if request.method == 'POST':
+        if not question:
+            flash('Please write a stock question.', 'danger')
+        else:
+            prompt = _default_stock_prompt(question)
+            context_data = f"User Role: {current_user.role}\nPermission: {'Cost allowed' if include_cost else 'Hide cost and selling price'}\n\nStock Data:\n{stock_data}"
+            response, error = call_ai(setting, prompt, context_data=context_data)
+            log = save_log('AI Stock Assistant', prompt, response, context_data=context_data, related_module='Materials', related_ref=question[:100], error=error)
+            result = response
+            flash('AI stock answer generated and saved in AI logs.', 'success' if not error else 'warning')
+    return render_template('ai/phase1_stock.html', result=result, log=log, question=question, stock_data=stock_data, include_cost=include_cost)
+
+
 @ai_bp.route('/settings', methods=['GET','POST'])
 @login_required
 def settings():
@@ -197,9 +431,11 @@ def settings():
         flash('Only admin can change AI settings.', 'danger')
         return redirect(url_for('ai.dashboard'))
     setting = get_setting()
+    test_result = None
+    test_error = None
     if request.method == 'POST':
         setting.enabled = request.form.get('enabled') == 'on'
-        setting.provider = request.form.get('provider') or 'OpenAI-Compatible'
+        setting.provider = request.form.get('provider') or 'OpenAI Responses API'
         setting.model_name = request.form.get('model_name') or setting.model_name
         setting.api_base_url = request.form.get('api_base_url') or setting.api_base_url
         if request.form.get('api_key'):
@@ -210,7 +446,19 @@ def settings():
         setting.allow_data_context = request.form.get('allow_data_context') == 'on'
         setting.notes = request.form.get('notes')
         setting.updated_by_id = current_user.id
-        db.session.commit(); flash('AI settings saved.', 'success')
+        db.session.commit()
+
+        if request.form.get('action') == 'test':
+            test_result, test_error = test_ai_connection(setting)
+            if test_error:
+                flash('AI settings saved, but API test returned an error. See the test box below.', 'warning')
+            else:
+                flash('AI settings saved and API connection tested successfully.', 'success')
+            masked_key = 'Saved / Environment Key Available' if get_api_key(setting) else 'Use OPENAI_API_KEY environment variable or enter key'
+            return render_template('ai/settings.html', setting=setting, masked_key=masked_key, test_result=test_result, test_error=test_error)
+
+        flash('AI settings saved.', 'success')
         return redirect(url_for('ai.settings'))
-    masked_key = 'Saved / Environment Key Available' if setting.api_key else 'Use OPENAI_API_KEY environment variable or enter key'
-    return render_template('ai/settings.html', setting=setting, masked_key=masked_key)
+
+    masked_key = 'Saved / Environment Key Available' if get_api_key(setting) else 'Use OPENAI_API_KEY environment variable or enter key'
+    return render_template('ai/settings.html', setting=setting, masked_key=masked_key, test_result=test_result, test_error=test_error)

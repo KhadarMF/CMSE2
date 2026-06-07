@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3>AI Project Report Writer</h3>
+    <p class="text-muted mb-0">Generate professional draft reports from ERP forms. Output remains DRAFT until reviewed.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('ai.dashboard') }}">AI Dashboard</a>
+</div>
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card shadow-sm"><div class="card-body">
+      <form method="get" class="mb-3">
+        <label class="form-label fw-bold">Form Type</label>
+        <select name="form_key" class="form-select" onchange="this.form.submit()">
+          {% for key, data in form_map.items() %}
+          <option value="{{ key }}" {% if selected_form_key == key %}selected{% endif %}>{{ data[0] }}</option>
+          {% endfor %}
+        </select>
+      </form>
+      <form method="post">
+        <input type="hidden" name="form_key" value="{{ selected_form_key }}">
+        <label class="form-label fw-bold">Select Record</label>
+        <select name="form_id" class="form-select mb-3" required>
+          <option value="">Choose a form record</option>
+          {% for e in entries %}
+          <option value="{{ e.id }}" {% if selected_form_id == e.id|string %}selected{% endif %}>#{{ e.id }} - {{ e.project.project_name }} / {{ e.project.customer_name }} - {{ e.approval_status }}</option>
+          {% endfor %}
+        </select>
+        <label class="form-label fw-bold">AI Prompt</label>
+        <textarea name="prompt" rows="8" class="form-control mb-3">{{ default_prompt }}</textarea>
+        <button class="btn btn-cmse w-100">Generate AI Report Draft</button>
+      </form>
+    </div></div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card shadow-sm"><div class="card-header fw-bold">AI Output</div><div class="card-body">
+      {% if result %}<pre class="white-space-pre-wrap mb-0" style="white-space:pre-wrap">{{ result }}</pre>{% else %}<p class="text-muted mb-0">Choose a form record and generate a draft report.</p>{% endif %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}

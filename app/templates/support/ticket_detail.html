@@ -1,11 +1,149 @@
-{% extends 'base.html' %}{% block content %}
-<div class="d-flex gap-2 mt-3 mb-3"><a class="btn btn-outline-dark" href="javascript:history.back()">Close / Back</a><a class="btn btn-outline-secondary" href="/">Home</a><a class="btn btn-outline-primary" href="{{ url_for('support.tickets') }}">Tickets</a></div>
-<div class="d-flex justify-content-between align-items-center mb-3"><div><h2 class="fw-bold">Ticket {{ ticket.ref_no }}</h2><p class="text-muted">{{ ticket.customer_name }} — {{ ticket.issue_category or 'No category' }}</p></div><div class="d-flex gap-2"><button onclick="window.print()" class="btn btn-outline-secondary">Print</button><a class="btn btn-outline-dark" href="{{ url_for('support.ticket_report', ticket_id=ticket.id) }}" target="_blank">Report</a><a class="btn btn-danger" href="{{ url_for('support.ticket_pdf', ticket_id=ticket.id) }}" target="_blank">PDF</a></div></div>
-<div class="row g-3">
-  <div class="col-md-8"><div class="card shadow-sm"><div class="card-header fw-bold">Complaint Details</div><div class="card-body"><table class="table table-sm"><tr><th>Customer</th><td>{{ ticket.customer_name }}</td><th>Phone</th><td>{{ ticket.phone or '' }}</td></tr><tr><th>Project</th><td>{{ ticket.project.project_name if ticket.project else '' }}</td><th>Warranty</th><td>{{ ticket.warranty.ref_no if ticket.warranty else '' }}</td></tr><tr><th>Source</th><td>{{ ticket.complaint_source or '' }}</td><th>Location</th><td>{{ ticket.location or '' }}</td></tr><tr><th>Priority</th><td>{{ ticket.priority }}</td><th>Status</th><td>{{ ticket.status }}</td></tr><tr><th>Technician</th><td>{{ ticket.assigned_employee.full_name if ticket.assigned_employee else '' }}</td><th>Supervisor</th><td>{{ ticket.supervisor.full_name if ticket.supervisor else '' }}</td></tr><tr><th>Preferred Visit</th><td>{{ ticket.preferred_visit_date or '' }}</td><th>Due Date</th><td>{{ ticket.due_date or '' }}</td></tr></table><h6 class="fw-bold">Issue Description</h6><p>{{ ticket.issue_description }}</p></div></div></div>
-  <div class="col-md-4"><div class="card shadow-sm"><div class="card-header fw-bold">Update Ticket</div><div class="card-body"><form method="post" action="{{ url_for('support.update_ticket', ticket_id=ticket.id) }}"><label class="form-label">Status</label><select class="form-select mb-2" name="status">{% for s in statuses %}<option value="{{ s }}" {% if ticket.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select><label class="form-label">Priority</label><select class="form-select mb-2" name="priority">{% for p in ['Low','Medium','High','Urgent'] %}<option value="{{ p }}" {% if ticket.priority==p %}selected{% endif %}>{{ p }}</option>{% endfor %}</select><label class="form-label">Technician</label><select class="form-select mb-2" name="assigned_employee_id"><option value="">-- select --</option>{% for e in employees %}<option value="{{ e.id }}" {% if ticket.assigned_employee_id==e.id %}selected{% endif %}>{{ e.full_name }}</option>{% endfor %}</select><label class="form-label">Due Date</label><input class="form-control mb-2" type="date" name="due_date" value="{{ ticket.due_date or '' }}"><label class="form-label">Final Result</label><select class="form-select mb-2" name="final_result"><option value="">-- select --</option>{% for r in service_results %}<option value="{{ r }}" {% if ticket.final_result==r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select><label class="form-label">Customer Confirmation</label><select class="form-select mb-2" name="customer_confirmation"><option value="">-- select --</option>{% for c in confirmations %}<option value="{{ c }}" {% if ticket.customer_confirmation==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select><button class="btn btn-primary w-100 mt-2">Update</button></form></div></div></div>
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex gap-2 mt-3 mb-3">
+  <a class="btn btn-outline-dark" href="javascript:history.back()">Close / Back</a>
+  <a class="btn btn-outline-secondary" href="/">Home</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('support.tickets') }}">Tickets</a>
 </div>
-<div class="card mt-3"><div class="card-header fw-bold">Root Cause & CAPA</div><div class="card-body"><form method="post" action="{{ url_for('support.update_ticket', ticket_id=ticket.id) }}"><div class="row g-3"><div class="col-md-4"><label class="form-label">Root Cause</label><textarea class="form-control" name="root_cause">{{ ticket.root_cause or '' }}</textarea></div><div class="col-md-4"><label class="form-label">Corrective Action</label><textarea class="form-control" name="corrective_action">{{ ticket.corrective_action or '' }}</textarea></div><div class="col-md-4"><label class="form-label">Preventive Action</label><textarea class="form-control" name="preventive_action">{{ ticket.preventive_action or '' }}</textarea></div><div class="col-md-12"><label class="form-label">Resolution Summary</label><textarea class="form-control" name="resolution_summary">{{ ticket.resolution_summary or '' }}</textarea></div></div><button class="btn btn-outline-success mt-2">Save RCA / CAPA</button></form></div></div>
-<div class="card mt-3"><div class="card-header fw-bold">Add Service Visit Report</div><div class="card-body"><form method="post" action="{{ url_for('support.add_visit', ticket_id=ticket.id) }}"><div class="row g-2"><div class="col-md-3"><label class="form-label">Visit Date</label><input class="form-control" type="date" name="visit_date"></div><div class="col-md-3"><label class="form-label">Technician</label><select class="form-select" name="technician_employee_id"><option value="">Use assigned technician</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }}</option>{% endfor %}</select></div><div class="col-md-3"><label class="form-label">Visit Status</label><select class="form-select" name="status">{% for s in visit_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div><div class="col-md-3"><label class="form-label">Result</label><select class="form-select" name="result"><option value="">-- select --</option>{% for r in service_results %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select></div><div class="col-md-6"><label class="form-label">Fault Found</label><textarea class="form-control" name="fault_found"></textarea></div><div class="col-md-6"><label class="form-label">Root Cause</label><textarea class="form-control" name="root_cause"></textarea></div><div class="col-md-6"><label class="form-label">Work Done</label><textarea class="form-control" name="work_done"></textarea></div><div class="col-md-6"><label class="form-label">Parts Used</label><textarea class="form-control" name="parts_used"></textarea></div><div class="col-md-4"><label class="form-label">Test Result</label><select class="form-select" name="test_result"><option value="">-- select --</option><option>Pass</option><option>Pass with Comments</option><option>Fail</option><option>Not Tested</option></select></div><div class="col-md-4"><label class="form-label">Customer Confirmation</label><select class="form-select" name="customer_confirmation"><option value="">-- select --</option>{% for c in confirmations %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select></div><div class="col-md-4"><label class="form-label">Close Ticket?</label><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="close_ticket" id="close_ticket"><label class="form-check-label" for="close_ticket">Close after this visit</label></div></div><div class="col-md-6"><label class="form-label">Customer Feedback</label><textarea class="form-control" name="customer_feedback"></textarea></div><div class="col-md-6"><label class="form-label">Next Action</label><textarea class="form-control" name="next_action"></textarea></div></div><button class="btn btn-success mt-3">Save Visit</button></form></div></div>
-<div class="card mt-3"><div class="card-header fw-bold">Service Visits</div><div class="card-body table-responsive"><table class="table"><thead><tr><th>Ref</th><th>Date</th><th>Technician</th><th>Fault</th><th>Result</th><th>Customer Confirmation</th></tr></thead><tbody>{% for v in ticket.service_visits %}<tr><td>{{ v.ref_no }}</td><td>{{ v.visit_date }}</td><td>{{ v.technician.full_name if v.technician else '' }}</td><td>{{ v.fault_found or '' }}</td><td>{{ v.result or '' }}</td><td>{{ v.customer_confirmation or '' }}</td></tr>{% else %}<tr><td colspan="6" class="text-muted">No service visits recorded.</td></tr>{% endfor %}</tbody></table></div></div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="fw-bold">Ticket {{ ticket.ref_no }}</h2>
+    <p class="text-muted">{{ ticket.customer_name }} — {{ ticket.issue_category or 'No category' }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <button onclick="window.print()" class="btn btn-outline-secondary">Print</button>
+    <a class="btn btn-outline-dark" href="{{ url_for('support.ticket_report', ticket_id=ticket.id) }}" target="_blank">Report</a>
+    <a class="btn btn-danger" href="{{ url_for('support.ticket_pdf', ticket_id=ticket.id) }}" target="_blank">PDF</a>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-header fw-bold">Select / Jump to Ticket</div>
+  <div class="card-body">
+    <select class="form-select" onchange="if(this.value){ window.location=this.value; }">
+      <option value="">-- select assigned/service ticket --</option>
+      {% for t in all_tickets %}
+        <option value="{{ url_for('support.ticket_detail', ticket_id=t.id) }}" {% if t.id == ticket.id %}selected{% endif %}>{{ t.ref_no }} - {{ t.customer_name }} - {{ t.status }}{% if t.assigned_employee %} - {{ t.assigned_employee.full_name }}{% endif %}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-8">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Complaint Details</div>
+      <div class="card-body">
+        <table class="table table-sm">
+          <tr><th>Customer</th><td>{{ ticket.customer_name }}</td><th>Phone</th><td>{{ ticket.phone or '' }}</td></tr>
+          <tr><th>Project</th><td>{{ ticket.project.project_name if ticket.project else '' }}</td><th>Warranty</th><td>{{ ticket.warranty.ref_no if ticket.warranty else '' }}</td></tr>
+          <tr><th>Warranty Notes</th><td colspan="3">{{ ticket.warranty_note or '' }}</td></tr>
+          <tr><th>Source</th><td>{{ ticket.complaint_source or '' }}</td><th>Location</th><td>{{ ticket.location or '' }}</td></tr>
+          <tr><th>Priority</th><td>{{ ticket.priority }}</td><th>Status</th><td>{{ ticket.status }}</td></tr>
+          <tr><th>Assigned To</th><td>{{ ticket.assigned_employee.full_name if ticket.assigned_employee else '' }}</td><th>Supervisor</th><td>{{ ticket.supervisor.full_name if ticket.supervisor else '' }}</td></tr>
+          <tr><th>Preferred Visit</th><td>{{ ticket.preferred_visit_date or '' }}</td><th>Due Date</th><td>{{ ticket.due_date or '' }}</td></tr>
+        </table>
+        <h6 class="fw-bold">Issue Description</h6>
+        <p>{{ ticket.issue_description }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Update Ticket</div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('support.update_ticket', ticket_id=ticket.id) }}">
+          <label class="form-label">Status</label>
+          <select class="form-select mb-2" name="status">{% for s in statuses %}<option value="{{ s }}" {% if ticket.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+
+          <label class="form-label">Priority</label>
+          <select class="form-select mb-2" name="priority">{% for p in ['Low','Medium','High','Urgent'] %}<option value="{{ p }}" {% if ticket.priority==p %}selected{% endif %}>{{ p }}</option>{% endfor %}</select>
+
+          <label class="form-label">Assigned To / Technician</label>
+          <select class="form-select mb-2" name="assigned_employee_id">
+            <option value="">-- select employee from Employees table --</option>
+            {% for e in employees %}<option value="{{ e.id }}" {% if ticket.assigned_employee_id==e.id %}selected{% endif %}>{{ e.full_name }}{% if e.job_title %} - {{ e.job_title }}{% endif %}{% if e.status %} ({{ e.status }}){% endif %}</option>{% endfor %}
+          </select>
+
+          <label class="form-label">Supervisor / Responsible User</label>
+          <select class="form-select mb-2" name="supervisor_user_id">
+            <option value="">-- select responsible user --</option>
+            {% for u in users %}<option value="{{ u.id }}" {% if ticket.supervisor_user_id==u.id %}selected{% endif %}>{{ u.full_name }} - {{ u.role }}</option>{% endfor %}
+          </select>
+
+          <label class="form-label">Due Date</label>
+          <input class="form-control mb-2" type="date" name="due_date" value="{{ ticket.due_date or '' }}">
+
+          <label class="form-label">Warranty / Claim Notes</label>
+          <textarea class="form-control mb-2" name="warranty_note" rows="2">{{ ticket.warranty_note or '' }}</textarea>
+
+          <label class="form-label">Final Result</label>
+          <select class="form-select mb-2" name="final_result"><option value="">-- select --</option>{% for r in service_results %}<option value="{{ r }}" {% if ticket.final_result==r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+
+          <label class="form-label">Customer Confirmation</label>
+          <select class="form-select mb-2" name="customer_confirmation"><option value="">-- select --</option>{% for c in confirmations %}<option value="{{ c }}" {% if ticket.customer_confirmation==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+
+          <button class="btn btn-primary w-100 mt-2">Update</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header fw-bold">Root Cause & CAPA</div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('support.update_ticket', ticket_id=ticket.id) }}">
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label">Root Cause</label><textarea class="form-control" name="root_cause">{{ ticket.root_cause or '' }}</textarea></div>
+        <div class="col-md-4"><label class="form-label">Corrective Action</label><textarea class="form-control" name="corrective_action">{{ ticket.corrective_action or '' }}</textarea></div>
+        <div class="col-md-4"><label class="form-label">Preventive Action</label><textarea class="form-control" name="preventive_action">{{ ticket.preventive_action or '' }}</textarea></div>
+        <div class="col-md-12"><label class="form-label">Resolution Summary</label><textarea class="form-control" name="resolution_summary">{{ ticket.resolution_summary or '' }}</textarea></div>
+      </div>
+      <button class="btn btn-outline-success mt-2">Save RCA / CAPA</button>
+    </form>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header fw-bold">Add Service Visit Report</div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('support.add_visit', ticket_id=ticket.id) }}">
+      <div class="row g-2">
+        <div class="col-md-3"><label class="form-label">Visit Date</label><input class="form-control" type="date" name="visit_date"></div>
+        <div class="col-md-3"><label class="form-label">Technician</label><select class="form-select" name="technician_employee_id"><option value="">Use assigned technician</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }}{% if e.job_title %} - {{ e.job_title }}{% endif %}</option>{% endfor %}</select></div>
+        <div class="col-md-3"><label class="form-label">Visit Status</label><select class="form-select" name="status">{% for s in visit_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div>
+        <div class="col-md-3"><label class="form-label">Result</label><select class="form-select" name="result"><option value="">-- select --</option>{% for r in service_results %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select></div>
+        <div class="col-md-6"><label class="form-label">Fault Found</label><textarea class="form-control" name="fault_found"></textarea></div>
+        <div class="col-md-6"><label class="form-label">Root Cause</label><textarea class="form-control" name="root_cause"></textarea></div>
+        <div class="col-md-6"><label class="form-label">Work Done</label><textarea class="form-control" name="work_done"></textarea></div>
+        <div class="col-md-6"><label class="form-label">Parts Used</label><textarea class="form-control" name="parts_used"></textarea></div>
+        <div class="col-md-4"><label class="form-label">Test Result</label><select class="form-select" name="test_result"><option value="">-- select --</option><option>Pass</option><option>Pass with Comments</option><option>Fail</option><option>Not Tested</option></select></div>
+        <div class="col-md-4"><label class="form-label">Customer Confirmation</label><select class="form-select" name="customer_confirmation"><option value="">-- select --</option>{% for c in confirmations %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select></div>
+        <div class="col-md-4"><label class="form-label">Close Ticket?</label><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="close_ticket" id="close_ticket"><label class="form-check-label" for="close_ticket">Close after this visit</label></div></div>
+        <div class="col-md-6"><label class="form-label">Customer Feedback</label><textarea class="form-control" name="customer_feedback"></textarea></div>
+        <div class="col-md-6"><label class="form-label">Next Action</label><textarea class="form-control" name="next_action"></textarea></div>
+      </div>
+      <button class="btn btn-success mt-3">Save Visit</button>
+    </form>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header fw-bold">Service Visits</div>
+  <div class="card-body table-responsive">
+    <table class="table">
+      <thead><tr><th>Ref</th><th>Date</th><th>Technician</th><th>Fault</th><th>Result</th><th>Customer Confirmation</th></tr></thead>
+      <tbody>
+        {% for v in ticket.service_visits %}
+          <tr><td>{{ v.ref_no }}</td><td>{{ v.visit_date }}</td><td>{{ v.technician.full_name if v.technician else '' }}</td><td>{{ v.fault_found or '' }}</td><td>{{ v.result or '' }}</td><td>{{ v.customer_confirmation or '' }}</td></tr>
+        {% else %}
+          <tr><td colspan="6" class="text-muted">No service visits recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}
