@@ -2,7 +2,7 @@
 {% block content %}
 <div class='d-flex justify-content-between align-items-center mt-3 mb-3 no-print'>
   <div><h2 class='fw-bold mb-0'>Quotation {{ quotation.ref_no }}</h2><p class='text-muted mb-0'>{{ quotation.customer_name }} — {{ quotation.status }}</p></div>
-  <div class='d-flex gap-2'>{% if can_access_module(current_user, 'ai-quotation') %}<a class='btn btn-cmse' href='{{ url_for("ai.quotation_from_record", quotation_id=quotation.id) }}'>AI Draft</a>{% endif %}<button onclick='window.print()' class='btn btn-outline-secondary'>Print</button><a class='btn btn-danger' href='{{ url_for("sales.quotation_pdf", quotation_id=quotation.id) }}'>PDF</a></div>
+  <div class='d-flex gap-2'>{% if can_access_module(current_user, 'ai-quotation') %}<a class='btn btn-cmse' href='{{ url_for("ai.quotation_from_record", quotation_id=quotation.id) }}'>AI Draft</a>{% endif %}<a class='btn btn-primary' href='{{ url_for("sales.edit_quotation", quotation_id=quotation.id) }}'>Edit Form</a><button onclick='window.print()' class='btn btn-outline-secondary'>Print</button><a class='btn btn-danger' href='{{ url_for("sales.quotation_pdf", quotation_id=quotation.id) }}'>PDF</a></div>
 </div>
 <div class='card shadow-sm quotation-card'>
   <div class='card-body'>

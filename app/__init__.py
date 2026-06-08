@@ -102,6 +102,15 @@ def create_app():
     from app.permission_enforcer import register_permission_enforcer
     register_permission_enforcer(app)
 
+    # Keep PostgreSQL ID sequences aligned after imports/restores.
+    # This fixes duplicate primary key errors when saving projects/forms/tickets.
+    try:
+        with app.app_context():
+            from app.db_utils import sync_postgres_sequences
+            sync_postgres_sequences()
+    except Exception:
+        pass
+
     @app.context_processor
     def inject_company_profile():
         try:

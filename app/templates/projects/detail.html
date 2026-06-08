@@ -6,6 +6,9 @@
         <p class="text-muted mb-0">{{ project.customer_name }} — {{ project.location }}</p>
     </div>
     <div>
+        {% if can_access_module(current_user, 'ai-project-manager') %}
+        <a class="btn btn-cmse" href="{{ url_for('ai.project_manager_from_project', project_id=project.id) }}">AI Project Manager</a>
+        {% endif %}
         {% if current_user.role in ["Admin", "Operation Manager"] %}
         <a class="btn btn-outline-primary" href="{{ url_for('projects.edit_project', project_id=project.id) }}">Edit</a>
         {% endif %}
@@ -18,6 +21,13 @@
     <div class="col-md-4"><div class="card p-3"><strong>Type</strong><span>{{ project.project_type }}</span></div></div>
     <div class="col-md-4"><div class="card p-3"><strong>Capacity</strong><span>{{ project.capacity }}</span></div></div>
 </div>
+
+<div class="card mt-3 shadow-sm"><div class="card-header bg-white fw-bold">AI Project Manager Summary</div><div class="card-body row g-2">
+    <div class="col-md-4"><strong>Health Score</strong><br>{{ project.ai_health_score or 'Not provided' }}</div>
+    <div class="col-md-4"><strong>Risk Level</strong><br>{{ project.ai_risk_level or 'Not provided' }}</div>
+    <div class="col-md-4"><strong>Delay Prediction</strong><br>{{ project.ai_delay_prediction or 'Not provided' }}</div>
+    <div class="col-12"><strong>Recommended Actions</strong><br><pre style="white-space:pre-wrap">{{ project.ai_recommended_actions or 'Not provided' }}</pre></div>
+</div></div>
 
 <div class="card mt-3 shadow-sm"><div class="card-body">
 <h5 class="fw-bold">Project Details</h5>

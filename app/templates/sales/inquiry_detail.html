@@ -2,6 +2,8 @@
 {% block content %}
 <div class='d-flex gap-2 mt-3 mb-3'><a class='btn btn-outline-dark' href='javascript:history.back()'>Close / Back</a><a class='btn btn-outline-secondary' href='/'>Home</a></div>
 <div class='d-flex justify-content-between'><div><h2 class='fw-bold'>Inquiry {{ inquiry.ref_no }}</h2><p class='text-muted'>{{ inquiry.customer_name }} — {{ inquiry.status }}</p></div><a class='btn btn-success' href='{{ url_for('sales.create_quotation', inquiry_id=inquiry.id) }}'>Create Quotation</a></div>
+<div class='mb-3'><a class='btn btn-cmse' href='{{ url_for("ai.crm_agent_from_inquiry", inquiry_id=inquiry.id) }}'>AI CRM Agent</a></div>
 <div class='card shadow-sm'><div class='card-body'><table class='table'><tr><th>Customer</th><td>{{ inquiry.customer_name }}</td><th>Phone</th><td>{{ inquiry.phone or '' }}</td></tr><tr><th>Project Type</th><td>{{ inquiry.project_type or '' }}</td><th>Capacity</th><td>{{ inquiry.estimated_capacity or '' }}</td></tr><tr><th>Requirement</th><td colspan='3'>{{ inquiry.requirement_summary or '' }}</td></tr></table></div></div>
+<div class='card shadow-sm mb-3'><div class='card-header fw-bold'>AI CRM Summary</div><div class='card-body row g-2'><div class='col-md-4'><strong>Lead Temperature</strong><br>{{ inquiry.ai_lead_temperature or 'Not provided' }}</div><div class='col-md-4'><strong>Opportunity Score</strong><br>{{ inquiry.ai_opportunity_score or 'Not provided' }}</div><div class='col-md-4'><strong>Last Follow-up</strong><br>{{ inquiry.ai_last_followup or 'Not provided' }}</div><div class='col-12'><strong>Recommended Action</strong><br><pre style='white-space:pre-wrap'>{{ inquiry.ai_recommended_action or 'Not provided' }}</pre></div></div></div>
 
 {% endblock %}

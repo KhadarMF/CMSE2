@@ -28,6 +28,8 @@ FORM_PERMISSION_MAP = {
     "notifications": ["Admin", "Management", "Operation Manager"],
     "ai-assistant": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor", "Sales Officer"],
     "ai-service-ticket-agent": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor"],
+    "ai-crm-agent": ["Admin", "Management", "Operation Manager", "Sales Officer"],
+    "ai-project-manager": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor"],
     "reports": ["Admin", "Management", "Operation Manager", "Finance Officer"],
     "daily-site-report": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor"],
     "delivery-note": ["Admin", "Management", "Operation Manager", "Warehouse Officer", "Transport Officer"],
@@ -254,7 +256,7 @@ PARENT_CHILD_PERMISSION_KEYS = {
     "employees": ["employees"],
     "teams": ["teams"],
     "notifications": ["notifications", "notification-log", "sms-queue", "whatsapp-integration", "production-readiness"],
-    "ai-assistant": ["ai-assistant", "ai-project-report", "ai-quotation", "ai-stock", "ai-service-ticket-agent", "ai-reports", "ai-logs", "ai-settings"],
+    "ai-assistant": ["ai-assistant", "ai-project-report", "ai-quotation", "ai-stock", "ai-service-ticket-agent", "ai-crm-agent", "ai-project-manager", "ai-reports", "ai-logs", "ai-settings"],
 }
 
 FORM_CHILD_KEYS = ["site-survey", "load-assessment", "daily-site-report", "delivery-note", "testing", "commissioning", "handover"]

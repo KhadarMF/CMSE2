@@ -60,6 +60,14 @@ class Project(db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Phase 16B: AI Project Manager fields
+    ai_health_score = db.Column(db.String(80), nullable=True)
+    ai_risk_level = db.Column(db.String(80), nullable=True)
+    ai_delay_prediction = db.Column(db.String(120), nullable=True)
+    ai_project_summary = db.Column(db.Text, nullable=True)
+    ai_recommended_actions = db.Column(db.Text, nullable=True)
+    ai_last_analysis = db.Column(db.DateTime, nullable=True)
+
     documents = db.relationship("Document", backref="project", lazy=True, cascade="all, delete-orphan")
     site_surveys = db.relationship("SiteSurveyForm", backref="project", lazy=True, cascade="all, delete-orphan")
     load_assessments = db.relationship("LoadAssessmentForm", backref="project", lazy=True, cascade="all, delete-orphan")
@@ -833,6 +841,13 @@ class SalesInquiry(db.Model):
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Phase 16B: AI CRM Agent fields
+    ai_opportunity_score = db.Column(db.String(80), nullable=True)
+    ai_lead_temperature = db.Column(db.String(80), nullable=True)
+    ai_followup_text = db.Column(db.Text, nullable=True)
+    ai_recommended_action = db.Column(db.Text, nullable=True)
+    ai_last_followup = db.Column(db.DateTime, nullable=True)
+
     customer = db.relationship("Customer")
     assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
@@ -1049,6 +1064,8 @@ FORM_PERMISSION_KEYS = [
     ("ai-quotation", "AI Quotation Draft Generator", "AI"),
     ("ai-stock", "AI Stock Assistant", "AI"),
     ("ai-service-ticket-agent", "AI Service Ticket Agent", "AI"),
+    ("ai-crm-agent", "AI CRM Agent", "AI"),
+    ("ai-project-manager", "AI Project Manager", "AI"),
     ("ai-reports", "AI Reports", "AI"),
     ("ai-logs", "AI Logs", "AI"),
     ("ai-settings", "AI Settings", "AI"),
@@ -1143,6 +1160,7 @@ AI_CONTEXT_TYPES = [
     "General ERP Question", "Service Ticket Help", "CRM Follow-up", "Quotation Note",
     "Project Summary", "Weekly Report", "Technical Troubleshooting", "Somali/English Translation",
     "AI Project Report Writer", "AI Quotation Draft Generator", "AI Stock Assistant", "AI Service Ticket Agent",
+    "AI CRM Agent", "AI Project Manager",
 ]
 AI_RESPONSE_STATUSES = ["Draft", "Reviewed", "Used", "Archived"]
 

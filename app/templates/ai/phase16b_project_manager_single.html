@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h3>AI Project Manager — {{ project.project_name }}</h3><p class="text-muted mb-0">{{ project.customer_name }} — {{ project.status }}</p></div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('projects.detail', project_id=project.id) }}">Back to Project</a>
+</div>
+<div class="row g-3">
+  <div class="col-lg-5">
+    <form method="post" class="card p-3 shadow-sm mb-3">
+      <label class="form-label fw-bold">AI Instruction</label>
+      <textarea name="prompt" rows="8" class="form-control">{{ default_prompt }}</textarea>
+      <button class="btn btn-cmse mt-3">Analyze Project</button>
+    </form>
+    <div class="card shadow-sm"><div class="card-header fw-bold">Context Sent to AI</div><div class="card-body"><pre class="small" style="white-space:pre-wrap; max-height:460px; overflow:auto">{{ context_data }}</pre></div></div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card shadow-sm mb-3"><div class="card-header fw-bold">Saved AI Project Summary</div><div class="card-body row g-2">
+      <div class="col-md-4"><strong>Health Score</strong><br>{{ project.ai_health_score or 'Not provided' }}</div>
+      <div class="col-md-4"><strong>Risk Level</strong><br>{{ project.ai_risk_level or 'Not provided' }}</div>
+      <div class="col-md-4"><strong>Delay Prediction</strong><br>{{ project.ai_delay_prediction or 'Not provided' }}</div>
+      <div class="col-12"><strong>Recommended Actions</strong><br><pre style="white-space:pre-wrap">{{ project.ai_recommended_actions or 'Not provided' }}</pre></div>
+    </div></div>
+    {% if result %}<div class="card shadow-sm"><div class="card-header fw-bold">AI Output</div><div class="card-body"><pre style="white-space:pre-wrap">{{ result }}</pre></div></div>{% endif %}
+  </div>
+</div>
+{% endblock %}

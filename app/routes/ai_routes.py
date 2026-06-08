@@ -2,11 +2,12 @@ from datetime import datetime, date, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
+from sqlalchemy import text
 from app.ai_service import call_ai, make_ai_ref, CADCEED_SYSTEM_PROMPT, test_ai_connection, get_api_key
 from app.permissions import can_access_module
 from app.models import (
     AISetting, AIInteractionLog, AI_CONTEXT_TYPES, AI_RESPONSE_STATUSES,
-    Project, ProjectTask, SupportTicket, SalesInquiry, SalesQuotation, SalesQuotationLine,
+    Project, ProjectTask, ProjectIssue, SupportTicket, SalesInquiry, SalesQuotation, SalesQuotationLine,
     MaterialItem, SiteSurveyForm, LoadAssessmentForm, DailySiteReport, DeliveryNoteForm,
     TestingForm, CommissioningForm, HandoverForm, SystemNotification
 )
@@ -118,8 +119,36 @@ def _default_stock_prompt(question):
 def ensure_ai_tables():
     try:
         db.create_all()
+        inspector = db.inspect(db.engine)
+        # Phase 16B lightweight database upgrade for PostgreSQL/SQLite existing deployments.
+        if inspector.has_table("sales_inquiry"):
+            inquiry_cols = [c["name"] for c in inspector.get_columns("sales_inquiry")]
+            inquiry_ai_columns = {
+                "ai_opportunity_score": "VARCHAR(80)",
+                "ai_lead_temperature": "VARCHAR(80)",
+                "ai_followup_text": "TEXT",
+                "ai_recommended_action": "TEXT",
+                "ai_last_followup": "TIMESTAMP",
+            }
+            for col, col_type in inquiry_ai_columns.items():
+                if col not in inquiry_cols:
+                    db.session.execute(text(f"ALTER TABLE sales_inquiry ADD COLUMN {col} {col_type}"))
+        if inspector.has_table("project"):
+            project_cols = [c["name"] for c in inspector.get_columns("project")]
+            project_ai_columns = {
+                "ai_health_score": "VARCHAR(80)",
+                "ai_risk_level": "VARCHAR(80)",
+                "ai_delay_prediction": "VARCHAR(120)",
+                "ai_project_summary": "TEXT",
+                "ai_recommended_actions": "TEXT",
+                "ai_last_analysis": "TIMESTAMP",
+            }
+            for col, col_type in project_ai_columns.items():
+                if col not in project_cols:
+                    db.session.execute(text(f"ALTER TABLE project ADD COLUMN {col} {col_type}"))
+        db.session.commit()
     except Exception:
-        pass
+        db.session.rollback()
 
 def get_setting():
     setting = AISetting.query.first()
@@ -422,6 +451,220 @@ def stock_ai():
             result = response
             flash('AI stock answer generated and saved in AI logs.', 'success' if not error else 'warning')
     return render_template('ai/phase1_stock.html', result=result, log=log, question=question, stock_data=stock_data, include_cost=include_cost)
+
+
+
+
+def _crm_inquiry_context(inquiry):
+    quotes = SalesQuotation.query.filter_by(inquiry_id=inquiry.id).order_by(SalesQuotation.created_at.desc()).limit(5).all()
+    quote_lines = []
+    for q in quotes:
+        quote_lines.append(f"- {q.ref_no} | Status: {q.status} | Total: {q.total_amount:.2f} | Date: {_format_value(q.quotation_date)} | Scope: {q.scope_of_work or ''}")
+    return f"""
+CRM Inquiry Ref: {inquiry.ref_no}
+Customer: {inquiry.customer_name}
+Phone: {inquiry.phone or 'Not provided'}
+Location: {inquiry.location or 'Not provided'}
+Source: {inquiry.source or 'Not provided'}
+Project Type: {inquiry.project_type or 'Not provided'}
+Estimated Capacity: {inquiry.estimated_capacity or 'Not provided'}
+Status: {inquiry.status}
+Requirement Summary: {inquiry.requirement_summary or 'Not provided'}
+Next Follow-up Date: {_format_value(inquiry.next_followup_date)}
+Notes: {inquiry.notes or 'Not provided'}
+Created At: {_format_value(inquiry.created_at)}
+Previous AI Opportunity Score: {inquiry.ai_opportunity_score or 'Not provided'}
+Previous AI Lead Temperature: {inquiry.ai_lead_temperature or 'Not provided'}
+Related Quotations:
+{chr(10).join(quote_lines) if quote_lines else 'No quotations found for this inquiry.'}
+""".strip()
+
+
+def _crm_agent_prompt():
+    return """PHASE16B_AI_CRM_AGENT: Analyze this CRM inquiry for Cadceed-Maal Solar Energy.
+Return a practical CRM output with these sections:
+1. Lead Temperature: Hot / Warm / Cold
+2. Opportunity Score: 0-100%
+3. Customer Need Summary
+4. Recommended Next Action
+5. WhatsApp Follow-up Message in Somali
+6. WhatsApp Follow-up Message in English
+7. Email Follow-up Draft
+8. Sales Objection Handling Notes
+9. Manager Notes
+Rules: Be professional, concise, customer-friendly, and do not invent prices or stock."""
+
+
+def _project_manager_context(project):
+    tasks = ProjectTask.query.filter_by(project_id=project.id).order_by(ProjectTask.created_at.desc()).limit(20).all()
+    issues = ProjectIssue.query.filter_by(project_id=project.id).order_by(ProjectIssue.reported_at.desc()).limit(20).all()
+    forms_summary = f"Site Surveys: {len(project.site_surveys)} | Load Assessments: {len(project.load_assessments)} | Daily Reports: {len(project.daily_reports)} | Delivery Notes: {len(project.delivery_notes)} | Testing: {len(project.testing_forms)} | Commissioning: {len(project.commissioning_forms)} | Handover: {len(project.handover_forms)}"
+    task_lines = []
+    for t in tasks:
+        task_lines.append(f"- {t.title} | Status: {t.status} | Priority: {t.priority} | Due: {_format_value(t.due_date)} | Assigned: {t.assigned_to.full_name if t.assigned_to else 'Not assigned'}")
+    issue_lines = []
+    for i in issues:
+        issue_lines.append(f"- {i.title} | Severity: {i.severity} | Status: {i.status} | Responsible: {i.responsible_user.full_name if i.responsible_user else 'Not assigned'}")
+    return f"""
+Project Name: {project.project_name}
+Customer: {project.customer_name}
+Location: {project.location}
+Project Type: {project.project_type}
+Capacity: {project.capacity or 'Not provided'}
+Status: {project.status}
+Start Date: {_format_value(project.start_date)}
+Expected Completion: {_format_value(project.expected_completion_date)}
+Assigned Team: {project.assigned_team or 'Not provided'}
+Description: {project.description or 'Not provided'}
+Forms Summary: {forms_summary}
+Tasks:
+{chr(10).join(task_lines) if task_lines else 'No tasks found.'}
+Issues/Risks:
+{chr(10).join(issue_lines) if issue_lines else 'No issues/risks found.'}
+Previous AI Health Score: {project.ai_health_score or 'Not provided'}
+Previous AI Risk Level: {project.ai_risk_level or 'Not provided'}
+""".strip()
+
+
+def _project_manager_prompt():
+    return """PHASE16B_AI_PROJECT_MANAGER: Analyze this project for Cadceed-Maal Solar Energy.
+Return a practical project management output with these sections:
+1. Project Health Score: 0-100%
+2. Risk Level: Low / Medium / High / Critical
+3. Delay Prediction
+4. Progress Summary
+5. Key Risks
+6. Recommended Actions
+7. Required Management Decisions
+8. Team / Resource Notes
+9. Customer Communication Note
+Rules: Use only the ERP data provided. If dates/tasks are missing, clearly say what data is missing."""
+
+
+def _extract_value_from_response(response, label):
+    """Best-effort extraction for common lines like 'Opportunity Score: 80%'."""
+    if not response:
+        return None
+    import re
+    pattern = rf"{re.escape(label)}\s*[:\-]\s*([^\n\r]+)"
+    match = re.search(pattern, response, flags=re.IGNORECASE)
+    return match.group(1).strip()[:120] if match else None
+
+
+@ai_bp.route('/crm-agent', methods=['GET', 'POST'])
+@login_required
+def crm_agent():
+    if not _require_ai_permission('ai-crm-agent'):
+        return redirect(url_for('ai.dashboard'))
+    setting = get_setting(); result = None; log = None
+    inquiries = SalesInquiry.query.order_by(SalesInquiry.created_at.desc()).limit(150).all()
+    selected_inquiry_id = request.values.get('inquiry_id') or ''
+    inquiry = SalesInquiry.query.get(selected_inquiry_id) if selected_inquiry_id else None
+    context_data = _crm_inquiry_context(inquiry) if inquiry else ''
+    default_prompt = _crm_agent_prompt()
+    if request.method == 'POST':
+        inquiry = SalesInquiry.query.get(request.form.get('inquiry_id')) if request.form.get('inquiry_id') else None
+        if not inquiry:
+            flash('Please select a CRM inquiry/lead.', 'danger')
+        else:
+            context_data = _crm_inquiry_context(inquiry)
+            prompt = request.form.get('prompt') or default_prompt
+            response, error = call_ai(setting, prompt, context_data=context_data)
+            log = save_log('AI CRM Agent', prompt, response, context_data=context_data, related_module='Sales Inquiry', related_ref=inquiry.ref_no, error=error)
+            result = response
+            if response:
+                inquiry.ai_opportunity_score = _extract_value_from_response(response, 'Opportunity Score') or inquiry.ai_opportunity_score
+                inquiry.ai_lead_temperature = _extract_value_from_response(response, 'Lead Temperature') or inquiry.ai_lead_temperature
+                inquiry.ai_followup_text = response
+                inquiry.ai_recommended_action = _extract_value_from_response(response, 'Recommended Next Action') or inquiry.ai_recommended_action
+                inquiry.ai_last_followup = datetime.utcnow()
+                db.session.commit()
+            flash('AI CRM Agent output generated and saved on inquiry.' if not error else 'AI CRM output saved, but live API returned an error/local response. Check AI Logs.', 'success' if not error else 'warning')
+    return render_template('ai/phase16b_crm_agent.html', inquiries=inquiries, selected_inquiry_id=str(selected_inquiry_id), inquiry=inquiry, context_data=context_data, default_prompt=default_prompt, result=result, log=log)
+
+
+@ai_bp.route('/crm-agent/inquiry/<int:inquiry_id>', methods=['GET', 'POST'])
+@login_required
+def crm_agent_from_inquiry(inquiry_id):
+    if not _require_ai_permission('ai-crm-agent'):
+        return redirect(url_for('sales.inquiry_detail', inquiry_id=inquiry_id))
+    inquiry = SalesInquiry.query.get_or_404(inquiry_id)
+    setting = get_setting(); result = None; log = None
+    context_data = _crm_inquiry_context(inquiry)
+    default_prompt = _crm_agent_prompt()
+    if request.method == 'POST':
+        prompt = request.form.get('prompt') or default_prompt
+        response, error = call_ai(setting, prompt, context_data=context_data)
+        log = save_log('AI CRM Agent', prompt, response, context_data=context_data, related_module='Sales Inquiry', related_ref=inquiry.ref_no, error=error)
+        result = response
+        if response:
+            inquiry.ai_opportunity_score = _extract_value_from_response(response, 'Opportunity Score') or inquiry.ai_opportunity_score
+            inquiry.ai_lead_temperature = _extract_value_from_response(response, 'Lead Temperature') or inquiry.ai_lead_temperature
+            inquiry.ai_followup_text = response
+            inquiry.ai_recommended_action = _extract_value_from_response(response, 'Recommended Next Action') or inquiry.ai_recommended_action
+            inquiry.ai_last_followup = datetime.utcnow()
+            db.session.commit()
+        flash('AI CRM Agent output generated and saved on inquiry.' if not error else 'AI CRM output saved, but live API returned an error/local response. Check AI Logs.', 'success' if not error else 'warning')
+    return render_template('ai/phase16b_crm_agent_single.html', inquiry=inquiry, context_data=context_data, default_prompt=default_prompt, result=result, log=log)
+
+
+@ai_bp.route('/project-manager', methods=['GET', 'POST'])
+@login_required
+def project_manager():
+    if not _require_ai_permission('ai-project-manager'):
+        return redirect(url_for('ai.dashboard'))
+    setting = get_setting(); result = None; log = None
+    projects = Project.query.order_by(Project.created_at.desc()).limit(150).all()
+    selected_project_id = request.values.get('project_id') or ''
+    project = Project.query.get(selected_project_id) if selected_project_id else None
+    context_data = _project_manager_context(project) if project else ''
+    default_prompt = _project_manager_prompt()
+    if request.method == 'POST':
+        project = Project.query.get(request.form.get('project_id')) if request.form.get('project_id') else None
+        if not project:
+            flash('Please select a project.', 'danger')
+        else:
+            context_data = _project_manager_context(project)
+            prompt = request.form.get('prompt') or default_prompt
+            response, error = call_ai(setting, prompt, context_data=context_data)
+            log = save_log('AI Project Manager', prompt, response, context_data=context_data, related_module='Project', related_ref=project.project_name, error=error)
+            result = response
+            if response:
+                project.ai_health_score = _extract_value_from_response(response, 'Project Health Score') or project.ai_health_score
+                project.ai_risk_level = _extract_value_from_response(response, 'Risk Level') or project.ai_risk_level
+                project.ai_delay_prediction = _extract_value_from_response(response, 'Delay Prediction') or project.ai_delay_prediction
+                project.ai_project_summary = response
+                project.ai_recommended_actions = _extract_value_from_response(response, 'Recommended Actions') or project.ai_recommended_actions
+                project.ai_last_analysis = datetime.utcnow()
+                db.session.commit()
+            flash('AI Project Manager analysis generated and saved on project.' if not error else 'AI Project Manager output saved, but live API returned an error/local response. Check AI Logs.', 'success' if not error else 'warning')
+    return render_template('ai/phase16b_project_manager.html', projects=projects, selected_project_id=str(selected_project_id), project=project, context_data=context_data, default_prompt=default_prompt, result=result, log=log)
+
+
+@ai_bp.route('/project-manager/project/<int:project_id>', methods=['GET', 'POST'])
+@login_required
+def project_manager_from_project(project_id):
+    if not _require_ai_permission('ai-project-manager'):
+        return redirect(url_for('projects.detail', project_id=project_id))
+    project = Project.query.get_or_404(project_id)
+    setting = get_setting(); result = None; log = None
+    context_data = _project_manager_context(project)
+    default_prompt = _project_manager_prompt()
+    if request.method == 'POST':
+        prompt = request.form.get('prompt') or default_prompt
+        response, error = call_ai(setting, prompt, context_data=context_data)
+        log = save_log('AI Project Manager', prompt, response, context_data=context_data, related_module='Project', related_ref=project.project_name, error=error)
+        result = response
+        if response:
+            project.ai_health_score = _extract_value_from_response(response, 'Project Health Score') or project.ai_health_score
+            project.ai_risk_level = _extract_value_from_response(response, 'Risk Level') or project.ai_risk_level
+            project.ai_delay_prediction = _extract_value_from_response(response, 'Delay Prediction') or project.ai_delay_prediction
+            project.ai_project_summary = response
+            project.ai_recommended_actions = _extract_value_from_response(response, 'Recommended Actions') or project.ai_recommended_actions
+            project.ai_last_analysis = datetime.utcnow()
+            db.session.commit()
+        flash('AI Project Manager analysis generated and saved on project.' if not error else 'AI Project Manager output saved, but live API returned an error/local response. Check AI Logs.', 'success' if not error else 'warning')
+    return render_template('ai/phase16b_project_manager_single.html', project=project, context_data=context_data, default_prompt=default_prompt, result=result, log=log)
 
 
 @ai_bp.route('/settings', methods=['GET','POST'])

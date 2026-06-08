@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h3>Phase 16B — AI CRM Agent</h3><p class="text-muted mb-0">Generate follow-ups, lead temperature, opportunity score, and sales next actions from CRM inquiries.</p></div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('ai.dashboard') }}">AI Dashboard</a>
+</div>
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card shadow-sm"><div class="card-body">
+      <form method="post">
+        <label class="form-label fw-bold">Select CRM Inquiry / Lead</label>
+        <select name="inquiry_id" class="form-select mb-3" onchange="this.form.submit()">
+          <option value="">-- Select inquiry --</option>
+          {% for i in inquiries %}
+          <option value="{{ i.id }}" {% if selected_inquiry_id == i.id|string %}selected{% endif %}>{{ i.ref_no }} — {{ i.customer_name }} — {{ i.status }}</option>
+          {% endfor %}
+        </select>
+        <label class="form-label fw-bold">AI Instruction</label>
+        <textarea name="prompt" rows="7" class="form-control mb-3">{{ default_prompt }}</textarea>
+        <button class="btn btn-cmse w-100">Generate CRM Follow-up</button>
+      </form>
+    </div></div>
+    <div class="card shadow-sm mt-3"><div class="card-header fw-bold">Context Sent to AI</div><div class="card-body"><pre class="small" style="white-space:pre-wrap; max-height:420px; overflow:auto">{{ context_data or 'Select an inquiry to preview context.' }}</pre></div></div>
+  </div>
+  <div class="col-lg-7">
+    {% if inquiry %}<div class="card shadow-sm mb-3"><div class="card-header fw-bold">Current AI CRM Fields</div><div class="card-body row g-2">
+      <div class="col-md-4"><strong>Lead Temperature</strong><br>{{ inquiry.ai_lead_temperature or 'Not provided' }}</div>
+      <div class="col-md-4"><strong>Opportunity Score</strong><br>{{ inquiry.ai_opportunity_score or 'Not provided' }}</div>
+      <div class="col-md-4"><strong>Last AI Follow-up</strong><br>{{ inquiry.ai_last_followup or 'Not provided' }}</div>
+      <div class="col-12"><strong>Recommended Action</strong><br><pre style="white-space:pre-wrap">{{ inquiry.ai_recommended_action or 'Not provided' }}</pre></div>
+    </div></div>{% endif %}
+    <div class="card shadow-sm"><div class="card-header fw-bold">AI Output</div><div class="card-body">{% if result %}<pre style="white-space:pre-wrap">{{ result }}</pre>{% else %}<p class="text-muted mb-0">Select an inquiry and generate a CRM follow-up.</p>{% endif %}</div></div>
+  </div>
+</div>
+{% endblock %}

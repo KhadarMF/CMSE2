@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h3>Phase 16B — AI Project Manager</h3><p class="text-muted mb-0">Analyze project health, risk, delay prediction, and management actions.</p></div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('ai.dashboard') }}">AI Dashboard</a>
+</div>
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card shadow-sm"><div class="card-body">
+      <form method="post">
+        <label class="form-label fw-bold">Select Project</label>
+        <select name="project_id" class="form-select mb-3" onchange="this.form.submit()">
+          <option value="">-- Select project --</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if selected_project_id == p.id|string %}selected{% endif %}>{{ p.project_name }} — {{ p.customer_name }} — {{ p.status }}</option>
+          {% endfor %}
+        </select>
+        <label class="form-label fw-bold">AI Instruction</label>
+        <textarea name="prompt" rows="7" class="form-control mb-3">{{ default_prompt }}</textarea>
+        <button class="btn btn-cmse w-100">Analyze Project</button>
+      </form>
+    </div></div>
+    <div class="card shadow-sm mt-3"><div class="card-header fw-bold">Context Sent to AI</div><div class="card-body"><pre class="small" style="white-space:pre-wrap; max-height:420px; overflow:auto">{{ context_data or 'Select a project to preview context.' }}</pre></div></div>
+  </div>
+  <div class="col-lg-7">
+    {% if project %}<div class="card shadow-sm mb-3"><div class="card-header fw-bold">Current AI Project Fields</div><div class="card-body row g-2">
+      <div class="col-md-4"><strong>Health Score</strong><br>{{ project.ai_health_score or 'Not provided' }}</div>
+      <div class="col-md-4"><strong>Risk Level</strong><br>{{ project.ai_risk_level or 'Not provided' }}</div>
+      <div class="col-md-4"><strong>Delay Prediction</strong><br>{{ project.ai_delay_prediction or 'Not provided' }}</div>
+      <div class="col-12"><strong>Recommended Actions</strong><br><pre style="white-space:pre-wrap">{{ project.ai_recommended_actions or 'Not provided' }}</pre></div>
+    </div></div>{% endif %}
+    <div class="card shadow-sm"><div class="card-header fw-bold">AI Output</div><div class="card-body">{% if result %}<pre style="white-space:pre-wrap">{{ result }}</pre>{% else %}<p class="text-muted mb-0">Select a project and generate analysis.</p>{% endif %}</div></div>
+  </div>
+</div>
+{% endblock %}

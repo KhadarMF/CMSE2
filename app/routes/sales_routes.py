@@ -156,6 +156,34 @@ def quotations():
     quotations=SalesQuotation.query.order_by(SalesQuotation.created_at.desc()).all()
     return render_template('sales/quotations.html', quotations=quotations)
 
+def _quotation_form_context(**extra):
+    context = dict(
+        projects=Project.query.order_by(Project.project_name.asc()).all(),
+        customers=Customer.query.filter_by(is_active=True).order_by(Customer.customer_name.asc()).all(),
+        project_types=ProjectType.query.order_by(ProjectType.type_name.asc()).all(),
+        statuses=QUOTATION_STATUSES,
+        quotation_items=QuotationItem.query.filter_by(is_active=True).order_by(QuotationItem.item_name.asc()).all(),
+    )
+    context.update(extra)
+    return context
+
+
+def _save_quotation_lines(quotation):
+    # Rebuild quotation lines from the editable form. This keeps edit simple and reliable.
+    SalesQuotationLine.query.filter_by(quotation_id=quotation.id).delete()
+    db.session.flush()
+    for idx, item in enumerate(request.form.getlist('item'), start=1):
+        if not item:
+            continue
+        db.session.add(SalesQuotationLine(
+            quotation_id=quotation.id,
+            item=item,
+            description=request.form.get(f'description_{idx}'),
+            quantity=parse_float(request.form.get(f'quantity_{idx}')),
+            unit=request.form.get(f'unit_{idx}'),
+            unit_price=parse_float(request.form.get(f'unit_price_{idx}')),
+        ))
+
 @sales_bp.route('/quotations/create', methods=['GET','POST'])
 @login_required
 def create_quotation():
@@ -164,20 +192,39 @@ def create_quotation():
     if request.method=='POST':
         quotation=SalesQuotation(ref_no=make_ref('QTN'), inquiry_id=inquiry_id, project_id=request.form.get('project_id') or None, quotation_date=parse_date(request.form.get('quotation_date')) or date.today(), customer_name=request.form.get('customer_name'), project_type=request.form.get('project_type'), capacity=request.form.get('capacity'), scope_of_work=request.form.get('scope_of_work'), validity_days=int(request.form.get('validity_days') or 15), status=request.form.get('status') or 'Draft', prepared_by_id=current_user.id, notes=request.form.get('notes'))
         db.session.add(quotation); db.session.flush()
-        for idx,item in enumerate(request.form.getlist('item'), start=1):
-            if not item: continue
-            db.session.add(SalesQuotationLine(quotation_id=quotation.id, item=item, description=request.form.get(f'description_{idx}'), quantity=parse_float(request.form.get(f'quantity_{idx}')), unit=request.form.get(f'unit_{idx}'), unit_price=parse_float(request.form.get(f'unit_price_{idx}'))))
+        _save_quotation_lines(quotation)
         if inquiry:
             inquiry.status='Quoted'
         db.session.commit(); flash(f'Quotation {quotation.ref_no} created.', 'success')
-        return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
-    return render_template('sales/quotation_form.html', inquiry=inquiry, projects=Project.query.order_by(Project.project_name.asc()).all(), project_types=ProjectType.query.order_by(ProjectType.type_name.asc()).all(), statuses=QUOTATION_STATUSES, quotation_items=QuotationItem.query.filter_by(is_active=True).order_by(QuotationItem.item_name.asc()).all())
+        return redirect(url_for('sales.edit_quotation', quotation_id=quotation.id))
+    return render_template('sales/quotation_form.html', **_quotation_form_context(inquiry=inquiry, quotation=None, mode='create', max_rows=15))
 
 @sales_bp.route('/quotations/<int:quotation_id>')
 @login_required
 def quotation_detail(quotation_id):
     quotation=SalesQuotation.query.get_or_404(quotation_id)
     return render_template('sales/quotation_detail.html', quotation=quotation)
+
+@sales_bp.route('/quotations/<int:quotation_id>/edit', methods=['GET','POST'])
+@login_required
+def edit_quotation(quotation_id):
+    quotation=SalesQuotation.query.get_or_404(quotation_id)
+    inquiry=quotation.inquiry
+    if request.method=='POST':
+        quotation.project_id=request.form.get('project_id') or None
+        quotation.quotation_date=parse_date(request.form.get('quotation_date')) or quotation.quotation_date or date.today()
+        quotation.customer_name=request.form.get('customer_name')
+        quotation.project_type=request.form.get('project_type')
+        quotation.capacity=request.form.get('capacity')
+        quotation.scope_of_work=request.form.get('scope_of_work')
+        quotation.validity_days=int(request.form.get('validity_days') or 15)
+        quotation.status=request.form.get('status') or 'Draft'
+        quotation.notes=request.form.get('notes')
+        _save_quotation_lines(quotation)
+        db.session.commit(); flash(f'Quotation {quotation.ref_no} updated.', 'success')
+        return redirect(url_for('sales.edit_quotation', quotation_id=quotation.id))
+    max_rows=max(15, len(quotation.lines)+5)
+    return render_template('sales/quotation_form.html', **_quotation_form_context(inquiry=inquiry, quotation=quotation, mode='edit', max_rows=max_rows))
 
 @sales_bp.route('/quotations/<int:quotation_id>/pdf')
 @login_required
