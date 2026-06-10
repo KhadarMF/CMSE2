@@ -114,6 +114,7 @@
                         <li><a class="dropdown-item" href="{{ url_for('ai.reports') }}">AI Report Generator</a></li>{% endif %}{% if can_access_module(current_user, 'ai-logs') %}
                         <li><a class="dropdown-item" href="{{ url_for('ai.logs') }}">AI Logs</a></li>{% endif %}
                         {% if current_user.role == "Admin" %}<li><a class="dropdown-item" href="{{ url_for('ai.settings') }}">AI Settings</a></li>{% endif %}
+                        {% if current_user.role == "Admin" %}<li><a class="dropdown-item" href="{{ url_for('whatsapp.test_send') }}">WhatsApp API Test</a></li>{% endif %}
                     </ul>
                 </li>
                 {% endif %}

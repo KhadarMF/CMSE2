@@ -2,7 +2,35 @@
 {% block content %}
 <div class='d-flex justify-content-between align-items-center mt-3 mb-3 no-print'>
   <div><h2 class='fw-bold mb-0'>Quotation {{ quotation.ref_no }}</h2><p class='text-muted mb-0'>{{ quotation.customer_name }} — {{ quotation.status }}</p></div>
-  <div class='d-flex gap-2'>{% if can_access_module(current_user, 'ai-quotation') %}<a class='btn btn-cmse' href='{{ url_for("ai.quotation_from_record", quotation_id=quotation.id) }}'>AI Draft</a>{% endif %}<a class='btn btn-primary' href='{{ url_for("sales.edit_quotation", quotation_id=quotation.id) }}'>Edit Form</a><button onclick='window.print()' class='btn btn-outline-secondary'>Print</button><a class='btn btn-danger' href='{{ url_for("sales.quotation_pdf", quotation_id=quotation.id) }}'>PDF</a></div>
+  <div class='d-flex gap-2'>{% if can_access_module(current_user, 'ai-quotation') %}<a class='btn btn-cmse' href='{{ url_for("ai.quotation_from_record", quotation_id=quotation.id) }}'>AI Draft</a>{% endif %}<a class='btn btn-success' data-bs-toggle='collapse' href='#whatsappSendBox' role='button'>Send WhatsApp</a><a class='btn btn-primary' href='{{ url_for("sales.edit_quotation", quotation_id=quotation.id) }}'>Edit Form</a><button onclick='window.print()' class='btn btn-outline-secondary'>Print</button><a class='btn btn-danger' href='{{ url_for("sales.quotation_pdf", quotation_id=quotation.id) }}'>PDF</a></div>
+</div>
+<div class='collapse no-print mb-3' id='whatsappSendBox'>
+  <div class='card border-success shadow-sm'>
+    <div class='card-header bg-success text-white fw-bold'>Send Quotation by WhatsApp</div>
+    <div class='card-body'>
+      <form method='post' action='{{ url_for("sales.send_quotation_whatsapp", quotation_id=quotation.id) }}'>
+        <div class='row g-2'>
+          <div class='col-md-4'>
+            <label class='form-label'>Customer WhatsApp Number</label>
+            <input name='phone' class='form-control' placeholder='+25263xxxxxxx' required>
+            <div class='form-text'>Use international format, e.g. +252638888044.</div>
+          </div>
+          <div class='col-md-8'>
+            <label class='form-label'>Message</label>
+            <textarea name='message' class='form-control' rows='6'>Assalaamu Calaykum,
+Cadceed-Maal Solar Energy waxay kuu diyaarisay quotation: {{ quotation.ref_no }}.
+Customer: {{ quotation.customer_name }}
+Project Type: {{ quotation.project_type or '-' }}
+Capacity: {{ quotation.capacity or '-' }}
+Total Amount: ${{ '%.2f'|format(quotation.total_amount) }}
+Mahadsanid,
+Cadceed-Maal Solar Energy</textarea>
+          </div>
+        </div>
+        <button class='btn btn-success mt-3'>Send WhatsApp</button>
+      </form>
+    </div>
+  </div>
 </div>
 <div class='card shadow-sm quotation-card'>
   <div class='card-body'>

@@ -1,10 +1,12 @@
 from datetime import datetime, date
 from io import BytesIO
 import csv
+import json
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, make_response
 from flask_login import login_required, current_user
 from app import db
-from app.models import Customer, Project, ProjectType, User, SalesInquiry, SalesQuotation, SalesQuotationLine, QuotationItem, INQUIRY_STATUSES, INQUIRY_SOURCES, QUOTATION_STATUSES
+from app.whatsapp_service import send_whatsapp_text, build_quotation_message, normalize_whatsapp_number
+from app.models import Customer, Project, ProjectType, User, SalesInquiry, SalesQuotation, SalesQuotationLine, QuotationItem, NotificationLog, INQUIRY_STATUSES, INQUIRY_SOURCES, QUOTATION_STATUSES
 
 sales_bp = Blueprint('sales', __name__, url_prefix='/sales')
 
@@ -156,6 +158,23 @@ def quotations():
     quotations=SalesQuotation.query.order_by(SalesQuotation.created_at.desc()).all()
     return render_template('sales/quotations.html', quotations=quotations)
 
+
+
+def _customer_phone_for_quotation(quotation):
+    """Best-effort lookup of customer phone for a quotation."""
+    try:
+        if quotation.inquiry and quotation.inquiry.phone:
+            return quotation.inquiry.phone
+    except Exception:
+        pass
+    try:
+        customer = Customer.query.filter(Customer.customer_name == quotation.customer_name).first()
+        if customer and getattr(customer, 'phone', None):
+            return customer.phone
+    except Exception:
+        pass
+    return ''
+
 def _quotation_form_context(**extra):
     context = dict(
         projects=Project.query.order_by(Project.project_name.asc()).all(),
@@ -225,6 +244,38 @@ def edit_quotation(quotation_id):
         return redirect(url_for('sales.edit_quotation', quotation_id=quotation.id))
     max_rows=max(15, len(quotation.lines)+5)
     return render_template('sales/quotation_form.html', **_quotation_form_context(inquiry=inquiry, quotation=quotation, mode='edit', max_rows=max_rows))
+
+
+
+@sales_bp.route('/quotations/<int:quotation_id>/whatsapp', methods=['POST'])
+@login_required
+def send_quotation_whatsapp(quotation_id):
+    quotation = SalesQuotation.query.get_or_404(quotation_id)
+    phone = request.form.get('phone') or _customer_phone_for_quotation(quotation)
+    message = request.form.get('message') or build_quotation_message(quotation)
+    ok, response = send_whatsapp_text(phone, message, preview_url=True)
+    log = NotificationLog(
+        recipient_user_id=None,
+        recipient_name=quotation.customer_name,
+        channel='WhatsApp',
+        recipient=normalize_whatsapp_number(phone),
+        subject=f'Quotation {quotation.ref_no}',
+        message=message,
+        related_module='Sales Quotation',
+        related_ref=quotation.ref_no,
+        status='Sent' if ok else 'Failed',
+        provider_response=json.dumps(response)[:4000],
+        error_message=None if ok else json.dumps(response)[:1000],
+        sent_at=datetime.utcnow() if ok else None,
+        created_by_id=current_user.id,
+    )
+    db.session.add(log)
+    db.session.commit()
+    if ok:
+        flash(f'Quotation {quotation.ref_no} sent to WhatsApp number {phone}.', 'success')
+    else:
+        flash(f'WhatsApp sending failed: {response}', 'danger')
+    return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
 
 @sales_bp.route('/quotations/<int:quotation_id>/pdf')
 @login_required

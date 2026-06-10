@@ -76,6 +76,7 @@ ENDPOINT_KEYS = {
     "sales.create_quotation": "quotation",
     "sales.quotation_detail": "quotation",
     "sales.quotation_pdf": "quotation",
+    "sales.send_quotation_whatsapp": "quotation",
     "sales.quotation_items": "quotation-items",
     "sales.quotation_items_template": "quotation-items",
     # Support
@@ -100,6 +101,8 @@ ENDPOINT_KEYS = {
     "notifications.create_sms_queue": "sms-queue",
     "notifications.mark_sms_sent": "sms-queue",
     "notifications.whatsapp_settings": "whatsapp-integration",
+    "whatsapp.test_send": "whatsapp-integration",
+    "whatsapp.health": "whatsapp-integration",
     # Production
     "production.readiness": "production-readiness",
     # AI
@@ -168,7 +171,7 @@ ACTION_WORDS = {
 }
 
 READ_ONLY_ENDPOINTS = {"dashboard.dashboard"}
-PUBLIC_PREFIXES = ("static", "auth", "health")
+PUBLIC_PREFIXES = ("static", "auth", "health", "whatsapp.webhook_verify", "whatsapp.webhook_receive")
 
 
 def action_for_endpoint(endpoint, method):

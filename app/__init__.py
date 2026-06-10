@@ -76,6 +76,7 @@ def create_app():
     from app.routes.notifications_routes import notifications_bp
     from app.routes.production_routes import production_bp
     from app.routes.ai_routes import ai_bp
+    from app.routes.whatsapp_routes import whatsapp_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -98,6 +99,7 @@ def create_app():
     app.register_blueprint(notifications_bp)
     app.register_blueprint(production_bp)
     app.register_blueprint(ai_bp)
+    app.register_blueprint(whatsapp_bp)
 
     from app.permission_enforcer import register_permission_enforcer
     register_permission_enforcer(app)

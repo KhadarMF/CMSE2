@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-3">
+  <div>
+    <h2 class="fw-bold mb-0">WhatsApp Cloud API Test</h2>
+    <p class="text-muted mb-0">Send a manual test message through Cadceed-Maal ERP.</p>
+  </div>
+</div>
+<div class="row g-3">
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-header bg-white fw-bold">Configuration Status</div>
+      <div class="card-body">
+        <p>Status: {% if configured %}<span class="badge bg-success">Configured</span>{% else %}<span class="badge bg-danger">Not Configured</span>{% endif %}</p>
+        <p class="small text-muted">{{ config_message }}</p>
+        <table class="table table-sm">
+          <tr><th>Phone Number ID</th><td>{{ cfg.phone_number_id or '-' }}</td></tr>
+          <tr><th>WABA ID</th><td>{{ cfg.business_account_id or '-' }}</td></tr>
+          <tr><th>Webhook URL</th><td>{{ cfg.public_base_url }}/whatsapp/webhook</td></tr>
+          <tr><th>Verify Token</th><td>{{ cfg.verify_token }}</td></tr>
+        </table>
+        <div class="alert alert-warning small mb-0">Do not paste the access token into any page. Store it only in Render Environment Variables.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="card shadow-sm">
+      <div class="card-header bg-white fw-bold">Send Test Message</div>
+      <div class="card-body">
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label">Recipient WhatsApp Number</label>
+            <input name="phone" class="form-control" placeholder="Example: +252638888044" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Message</label>
+            <textarea name="message" class="form-control" rows="5">Assalaamu Calaykum. This is a test message from Cadceed-Maal ERP WhatsApp integration.</textarea>
+          </div>
+          <button class="btn btn-success" {% if not configured %}disabled{% endif %}>Send WhatsApp</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
