@@ -135,7 +135,30 @@ def build_quotation_message(quotation, base_url: Optional[str] = None) -> str:
         "Cadceed-Maal Solar Energy",
     ])
     return "\n".join(lines)
+def send_whatsapp_template(to_phone: str, template_name: str = "cmse_test", language_code: str = "en"):
+    cfg = whatsapp_config()
+    ok, msg = is_whatsapp_configured()
 
+    if not ok:
+        return False, {"error": {"message": msg}}
+
+    to = normalize_whatsapp_number(to_phone)
+
+    url = f"{GRAPH_API_BASE}/{GRAPH_API_VERSION}/{cfg['phone_number_id']}/messages"
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {
+                "code": language_code
+            }
+        }
+    }
+
+    return _post_json(url, payload, cfg["access_token"])
 
 def parse_incoming_whatsapp(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Extract useful fields from WhatsApp webhook payload for logging."""
