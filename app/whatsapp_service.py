@@ -112,13 +112,9 @@ def send_whatsapp_text(to_phone: str, message: str, preview_url: bool = False) -
 def send_whatsapp_template(to_phone: str, template_name: Optional[str] = None, language_code: Optional[str] = None) -> Tuple[bool, Dict[str, Any]]:
     """Send an approved WhatsApp template message via Meta Cloud API.
 
-    Default template is controlled by environment variables:
-    - WHATSAPP_TEMPLATE_NAME, default: cmse_test
-    - WHATSAPP_TEMPLATE_LANGUAGE, default: en
-
-    This is useful for starting a WhatsApp conversation when free-form text
-    messages are not delivered because the 24-hour customer-service window is
-    closed.
+    Default template is controlled by Render env vars:
+    WHATSAPP_TEMPLATE_NAME=cmse_test
+    WHATSAPP_TEMPLATE_LANGUAGE=en
     """
     cfg = whatsapp_config()
     ok, msg = is_whatsapp_configured()
@@ -129,17 +125,18 @@ def send_whatsapp_template(to_phone: str, template_name: Optional[str] = None, l
     if not to:
         return False, {"error": {"message": "Recipient phone number is required."}}
 
-    template = (template_name or os.environ.get("WHATSAPP_TEMPLATE_NAME") or "cmse_test").strip()
-    language = (language_code or os.environ.get("WHATSAPP_TEMPLATE_LANGUAGE") or "en").strip()
+    template_name = (template_name or os.environ.get("WHATSAPP_TEMPLATE_NAME") or "cmse_test").strip()
+    language_code = (language_code or os.environ.get("WHATSAPP_TEMPLATE_LANGUAGE") or "en").strip()
 
     url = f"{GRAPH_API_BASE}/{GRAPH_API_VERSION}/{cfg['phone_number_id']}/messages"
     payload = {
         "messaging_product": "whatsapp",
+        "recipient_type": "individual",
         "to": to,
         "type": "template",
         "template": {
-            "name": template,
-            "language": {"code": language},
+            "name": template_name,
+            "language": {"code": language_code},
         },
     }
     return _post_json(url, payload, cfg["access_token"])

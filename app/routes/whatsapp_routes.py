@@ -81,15 +81,14 @@ def test_send():
     if request.method == 'POST':
         phone = request.form.get('phone')
         message = request.form.get('message') or 'Test message from Cadceed-Maal ERP.'
-        # Use approved template for reliable delivery outside the 24-hour WhatsApp window.
         ok, response = send_whatsapp_template(phone)
         log = NotificationLog(
             recipient_user_id=current_user.id,
             recipient_name=getattr(current_user, 'full_name', None),
             channel='WhatsApp',
             recipient=normalize_whatsapp_number(phone),
-            subject='Manual WhatsApp Test',
-            message=message,
+            subject='Manual WhatsApp Template Test',
+            message='Template: cmse_test',
             related_module='WhatsApp Test',
             status='Sent' if ok else 'Failed',
             provider_response=json.dumps(response)[:4000],
@@ -98,7 +97,7 @@ def test_send():
             created_by_id=current_user.id,
         )
         db.session.add(log); db.session.commit()
-        flash('WhatsApp test message sent.' if ok else f'WhatsApp failed: {response}', 'success' if ok else 'danger')
+        flash('WhatsApp template test sent. Meta response: ' + json.dumps(response)[:300] if ok else f'WhatsApp failed: {response}', 'success' if ok else 'danger')
         return redirect(url_for('whatsapp.test_send'))
     cfg = whatsapp_config()
     return render_template('whatsapp/test.html', configured=configured, config_message=config_message, cfg=cfg)

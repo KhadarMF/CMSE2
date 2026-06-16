@@ -256,8 +256,6 @@ def send_quotation_whatsapp(quotation_id):
         flash('No phone number provided and no customer phone found. Please enter a WhatsApp number.', 'danger')
         return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
     message = request.form.get('message') or build_quotation_message(quotation)
-    # Start/notify using approved WhatsApp template for reliable delivery.
-    # The full quotation summary is still saved in NotificationLog.message.
     ok, response = send_whatsapp_template(phone)
     log = NotificationLog(
         recipient_user_id=None,
