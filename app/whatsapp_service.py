@@ -40,17 +40,22 @@ def normalize_whatsapp_number(raw: str) -> str:
     +252 63 8888044 -> 252638888044
     0638888044      -> 252638888044
     638888044       -> 252638888044
+    +1 555 123 4567 -> 15551234567  (non-Somali numbers preserved as-is)
     """
     digits = re.sub(r"\D+", "", raw or "")
     if not digits:
         return ""
+    # Strip leading 00 international prefix
     if digits.startswith("00"):
         digits = digits[2:]
+    # Already a full international number (10+ digits starting with country code)
+    if len(digits) >= 10 and not digits.startswith("0") and not digits.startswith("6"):
+        return digits
+    # Somali local format: leading 0 + 9 digits
     if digits.startswith("0") and len(digits) >= 9:
         digits = "252" + digits[1:]
-    elif digits.startswith("63") and len(digits) == 9:
-        digits = "252" + digits
-    elif digits.startswith("6") and len(digits) == 9:
+    # Somali format: 63/61/62/65 + 7 digits (no country code)
+    elif len(digits) == 9 and digits[0] in ("6",):
         digits = "252" + digits
     return digits
 
@@ -100,6 +105,42 @@ def send_whatsapp_text(to_phone: str, message: str, preview_url: bool = False) -
         "to": to,
         "type": "text",
         "text": {"preview_url": bool(preview_url), "body": message[:4096]},
+    }
+    return _post_json(url, payload, cfg["access_token"])
+
+
+def send_whatsapp_template(to_phone: str, template_name: Optional[str] = None, language_code: Optional[str] = None) -> Tuple[bool, Dict[str, Any]]:
+    """Send an approved WhatsApp template message via Meta Cloud API.
+
+    Default template is controlled by environment variables:
+    - WHATSAPP_TEMPLATE_NAME, default: cmse_test
+    - WHATSAPP_TEMPLATE_LANGUAGE, default: en
+
+    This is useful for starting a WhatsApp conversation when free-form text
+    messages are not delivered because the 24-hour customer-service window is
+    closed.
+    """
+    cfg = whatsapp_config()
+    ok, msg = is_whatsapp_configured()
+    if not ok:
+        return False, {"error": {"message": msg}}
+
+    to = normalize_whatsapp_number(to_phone)
+    if not to:
+        return False, {"error": {"message": "Recipient phone number is required."}}
+
+    template = (template_name or os.environ.get("WHATSAPP_TEMPLATE_NAME") or "cmse_test").strip()
+    language = (language_code or os.environ.get("WHATSAPP_TEMPLATE_LANGUAGE") or "en").strip()
+
+    url = f"{GRAPH_API_BASE}/{GRAPH_API_VERSION}/{cfg['phone_number_id']}/messages"
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": template,
+            "language": {"code": language},
+        },
     }
     return _post_json(url, payload, cfg["access_token"])
 

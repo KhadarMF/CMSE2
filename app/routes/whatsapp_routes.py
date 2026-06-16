@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 from datetime import datetime
 from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for
@@ -8,6 +10,7 @@ from app.whatsapp_service import (
     whatsapp_config,
     is_whatsapp_configured,
     send_whatsapp_text,
+    send_whatsapp_template,
     normalize_whatsapp_number,
     parse_incoming_whatsapp,
 )
@@ -34,6 +37,20 @@ def webhook_verify():
 
 @whatsapp_bp.route('/webhook', methods=['POST'])
 def webhook_receive():
+    # Verify Meta webhook signature (X-Hub-Signature-256)
+    cfg = whatsapp_config()
+    app_secret = cfg.get('verify_token', '')
+    if app_secret:
+        sig_header = request.headers.get('X-Hub-Signature-256', '')
+        if sig_header:
+            expected = 'sha256=' + hmac.new(
+                app_secret.encode('utf-8'),
+                request.get_data(),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(sig_header, expected):
+                return jsonify({'status': 'invalid signature'}), 403
+
     payload = request.get_json(silent=True) or {}
     info = parse_incoming_whatsapp(payload)
     try:
@@ -64,7 +81,8 @@ def test_send():
     if request.method == 'POST':
         phone = request.form.get('phone')
         message = request.form.get('message') or 'Test message from Cadceed-Maal ERP.'
-        ok, response = send_whatsapp_text(phone, message)
+        # Use approved template for reliable delivery outside the 24-hour WhatsApp window.
+        ok, response = send_whatsapp_template(phone)
         log = NotificationLog(
             recipient_user_id=current_user.id,
             recipient_name=getattr(current_user, 'full_name', None),

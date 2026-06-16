@@ -5,7 +5,7 @@ import json
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, make_response
 from flask_login import login_required, current_user
 from app import db
-from app.whatsapp_service import send_whatsapp_text, build_quotation_message, normalize_whatsapp_number
+from app.whatsapp_service import send_whatsapp_text, send_whatsapp_template, build_quotation_message, normalize_whatsapp_number
 from app.models import Customer, Project, ProjectType, User, SalesInquiry, SalesQuotation, SalesQuotationLine, QuotationItem, NotificationLog, INQUIRY_STATUSES, INQUIRY_SOURCES, QUOTATION_STATUSES
 
 sales_bp = Blueprint('sales', __name__, url_prefix='/sales')
@@ -251,9 +251,14 @@ def edit_quotation(quotation_id):
 @login_required
 def send_quotation_whatsapp(quotation_id):
     quotation = SalesQuotation.query.get_or_404(quotation_id)
-    phone = request.form.get('phone') or _customer_phone_for_quotation(quotation)
+    phone = (request.form.get('phone') or '').strip() or _customer_phone_for_quotation(quotation)
+    if not phone:
+        flash('No phone number provided and no customer phone found. Please enter a WhatsApp number.', 'danger')
+        return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
     message = request.form.get('message') or build_quotation_message(quotation)
-    ok, response = send_whatsapp_text(phone, message, preview_url=True)
+    # Start/notify using approved WhatsApp template for reliable delivery.
+    # The full quotation summary is still saved in NotificationLog.message.
+    ok, response = send_whatsapp_template(phone)
     log = NotificationLog(
         recipient_user_id=None,
         recipient_name=quotation.customer_name,
