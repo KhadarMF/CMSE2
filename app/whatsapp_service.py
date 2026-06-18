@@ -109,12 +109,20 @@ def send_whatsapp_text(to_phone: str, message: str, preview_url: bool = False) -
     return _post_json(url, payload, cfg["access_token"])
 
 
-def send_whatsapp_template(to_phone: str, template_name: Optional[str] = None, language_code: Optional[str] = None) -> Tuple[bool, Dict[str, Any]]:
+def send_whatsapp_template(
+    to_phone: str,
+    template_name: Optional[str] = None,
+    language_code: Optional[str] = None,
+    components: Optional[list] = None,
+) -> Tuple[bool, Dict[str, Any]]:
     """Send an approved WhatsApp template message via Meta Cloud API.
 
     Default template is controlled by Render env vars:
     WHATSAPP_TEMPLATE_NAME=cmse_test
     WHATSAPP_TEMPLATE_LANGUAGE=en
+
+    Optional ``components`` supports templates with body variables and buttons.
+    Example: [{"type": "body", "parameters": [{"type": "text", "text": "Customer"}]}]
     """
     cfg = whatsapp_config()
     ok, msg = is_whatsapp_configured()
@@ -139,6 +147,8 @@ def send_whatsapp_template(to_phone: str, template_name: Optional[str] = None, l
             "language": {"code": language_code},
         },
     }
+    if components:
+        payload["template"]["components"] = components
     return _post_json(url, payload, cfg["access_token"])
 
 
@@ -173,30 +183,7 @@ def build_quotation_message(quotation, base_url: Optional[str] = None) -> str:
         "Cadceed-Maal Solar Energy",
     ])
     return "\n".join(lines)
-def send_whatsapp_template(to_phone: str, template_name: str = "cmse_test", language_code: str = "en"):
-    cfg = whatsapp_config()
-    ok, msg = is_whatsapp_configured()
 
-    if not ok:
-        return False, {"error": {"message": msg}}
-
-    to = normalize_whatsapp_number(to_phone)
-
-    url = f"{GRAPH_API_BASE}/{GRAPH_API_VERSION}/{cfg['phone_number_id']}/messages"
-
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "template",
-        "template": {
-            "name": template_name,
-            "language": {
-                "code": language_code
-            }
-        }
-    }
-
-    return _post_json(url, payload, cfg["access_token"])
 
 def parse_incoming_whatsapp(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Extract useful fields from WhatsApp webhook payload for logging."""

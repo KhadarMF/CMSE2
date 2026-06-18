@@ -255,8 +255,38 @@ def send_quotation_whatsapp(quotation_id):
     if not phone:
         flash('No phone number provided and no customer phone found. Please enter a WhatsApp number.', 'danger')
         return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
-    message = request.form.get('message') or build_quotation_message(quotation)
-    ok, response = send_whatsapp_template(phone)
+    quotation_link = url_for('sales.quotation_detail', quotation_id=quotation.id, _external=True)
+    customer_name = (quotation.customer_name or 'Customer').strip()
+    quotation_ref = (quotation.ref_no or f'Quotation-{quotation.id}').strip()
+    message = (request.form.get('message') or build_quotation_message(quotation, request.url_root.rstrip('/'))).strip()
+
+    # Use the approved Utility template created in Meta WhatsApp Manager:
+    # quotation_ready (English) with body variables:
+    # {{1}} Customer Name, {{2}} Quotation Number, {{3}} Quotation URL.
+    # The button URL also receives the quotation URL as its dynamic parameter.
+    ok, response = send_whatsapp_template(
+        phone,
+        template_name='quotation_ready',
+        language_code='en',
+        components=[
+            {
+                'type': 'body',
+                'parameters': [
+                    {'type': 'text', 'text': customer_name},
+                    {'type': 'text', 'text': quotation_ref},
+                    {'type': 'text', 'text': quotation_link},
+                ],
+            },
+            {
+                'type': 'button',
+                'sub_type': 'url',
+                'index': '0',
+                'parameters': [
+                    {'type': 'text', 'text': quotation_link},
+                ],
+            },
+        ],
+    )
     log = NotificationLog(
         recipient_user_id=None,
         recipient_name=quotation.customer_name,
