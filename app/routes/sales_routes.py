@@ -2,7 +2,8 @@ from datetime import datetime, date
 from io import BytesIO
 import csv
 import json
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, make_response
+from itsdangerous import URLSafeSerializer, BadSignature
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, make_response, current_app, abort
 from flask_login import login_required, current_user
 from app import db
 from app.whatsapp_service import send_whatsapp_text, send_whatsapp_template, build_quotation_message, normalize_whatsapp_number
@@ -175,6 +176,39 @@ def _customer_phone_for_quotation(quotation):
         pass
     return ''
 
+
+def _quotation_public_serializer():
+    """Serializer used to create secure customer quotation links without login."""
+    return URLSafeSerializer(current_app.config.get('SECRET_KEY', 'change-this-secret-key'), salt='quotation-public-link')
+
+
+def _quotation_public_token(quotation):
+    """Create a signed token tied to the quotation id and ref_no."""
+    return _quotation_public_serializer().dumps({
+        'qid': quotation.id,
+        'ref': quotation.ref_no,
+    })
+
+
+def _verify_quotation_public_token(quotation, token):
+    """Validate a public quotation token. Returns True/False."""
+    try:
+        data = _quotation_public_serializer().loads(token or '')
+    except BadSignature:
+        return False
+    return int(data.get('qid') or 0) == int(quotation.id) and data.get('ref') == quotation.ref_no
+
+
+def _quotation_public_url(quotation):
+    """Public customer-facing quotation URL that does not require ERP login."""
+    return url_for(
+        'sales.public_quotation',
+        quotation_id=quotation.id,
+        token=_quotation_public_token(quotation),
+        _external=True,
+    )
+
+
 def _quotation_form_context(**extra):
     context = dict(
         projects=Project.query.order_by(Project.project_name.asc()).all(),
@@ -255,7 +289,7 @@ def send_quotation_whatsapp(quotation_id):
     if not phone:
         flash('No phone number provided and no customer phone found. Please enter a WhatsApp number.', 'danger')
         return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
-    quotation_link = url_for('sales.quotation_detail', quotation_id=quotation.id, _external=True)
+    quotation_link = _quotation_public_url(quotation)
     customer_name = (quotation.customer_name or 'Customer').strip()
     quotation_ref = (quotation.ref_no or f'Quotation-{quotation.id}').strip()
     message = (request.form.get('message') or build_quotation_message(quotation, request.url_root.rstrip('/'))).strip()
@@ -309,6 +343,16 @@ def send_quotation_whatsapp(quotation_id):
     else:
         flash(f'WhatsApp sending failed: {response}', 'danger')
     return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
+
+
+
+@sales_bp.route('/public/quotations/<int:quotation_id>/<token>')
+def public_quotation(quotation_id, token):
+    """Public customer quotation view opened from WhatsApp without ERP login."""
+    quotation = SalesQuotation.query.get_or_404(quotation_id)
+    if not _verify_quotation_public_token(quotation, token):
+        abort(404)
+    return render_template('sales/public_quotation.html', quotation=quotation, generated_at=datetime.utcnow())
 
 @sales_bp.route('/quotations/<int:quotation_id>/pdf')
 @login_required
