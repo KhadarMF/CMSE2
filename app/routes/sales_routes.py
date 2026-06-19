@@ -183,44 +183,46 @@ def _quotation_public_serializer():
 
 
 def _quotation_public_token(quotation):
-    """Create a signed token tied to the quotation id and ref_no."""
+    """Create a signed token tied to the quotation id and ref_no.
+
+    The token is URL-safe and contains the quotation id internally, so the
+    customer link can be short: /sales/q/<token>. This avoids Meta's dynamic URL
+    limitation that only one variable may be added at the end of a button URL.
+    """
     return _quotation_public_serializer().dumps({
         'qid': quotation.id,
         'ref': quotation.ref_no,
     })
 
 
+def _quotation_token_data(token):
+    """Decode a public quotation token and return its data or None."""
+    try:
+        return _quotation_public_serializer().loads(token or '')
+    except BadSignature:
+        return None
+
+
 def _verify_quotation_public_token(quotation, token):
     """Validate a public quotation token. Returns True/False."""
-    try:
-        data = _quotation_public_serializer().loads(token or '')
-    except BadSignature:
+    data = _quotation_token_data(token)
+    if not data:
         return False
     return int(data.get('qid') or 0) == int(quotation.id) and data.get('ref') == quotation.ref_no
 
 
-def _quotation_public_path(quotation):
-    """Path-only public quotation link for WhatsApp dynamic URL buttons.
+def _quotation_public_url(quotation):
+    """Full public customer-facing quotation URL for body text, button, and testing.
 
-    Meta WhatsApp dynamic URL buttons must receive only the variable part
-    of the URL. The template should be configured as:
-        https://cmse2.onrender.com/{{1}}
-    and this function supplies:
-        sales/public/quotations/<id>/<token>
+    The Meta template button should be configured as a one-variable dynamic URL:
+        Website URL: {{1}}
+
+    The ERP passes the complete public URL as that single button variable. This
+    avoids Meta's UI confusion around splitting domain/path variables and keeps
+    every quotation link unique while still opening without ERP login.
     """
     return url_for(
-        'sales.public_quotation',
-        quotation_id=quotation.id,
-        token=_quotation_public_token(quotation),
-        _external=False,
-    ).lstrip('/')
-
-
-def _quotation_public_url(quotation):
-    """Full public customer-facing quotation URL for message body text."""
-    return url_for(
-        'sales.public_quotation',
-        quotation_id=quotation.id,
+        'sales.public_quotation_short',
         token=_quotation_public_token(quotation),
         _external=True,
     )
@@ -307,7 +309,7 @@ def send_quotation_whatsapp(quotation_id):
         flash('No phone number provided and no customer phone found. Please enter a WhatsApp number.', 'danger')
         return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
     quotation_link = _quotation_public_url(quotation)
-    quotation_button_path = _quotation_public_path(quotation)
+    quotation_button_url = quotation_link
     customer_name = (quotation.customer_name or 'Customer').strip()
     quotation_ref = (quotation.ref_no or f'Quotation-{quotation.id}').strip()
     message = (request.form.get('message') or build_quotation_message(quotation, request.url_root.rstrip('/'))).strip()
@@ -315,12 +317,12 @@ def send_quotation_whatsapp(quotation_id):
     # Use the approved Utility template created in Meta WhatsApp Manager:
     # quotation_ready (English) with body variables:
     # {{1}} Customer Name, {{2}} Quotation Number, {{3}} Quotation URL.
-    # The body receives the full public URL.
-    # The URL button receives only the path variable, because Meta combines it with
-    # the template button base URL: https://cmse2.onrender.com/{{1}}
+    # The body receives the full public quotation URL.
+    # The URL button also receives the full public URL as one variable.
+    # Configure the Meta button as a Dynamic URL with Website URL: {{1}}
     ok, response = send_whatsapp_template(
         phone,
-        template_name='quotation_ready',
+        template_name=(current_app.config.get('WHATSAPP_QUOTATION_TEMPLATE_NAME') or 'quotation_ready'),
         language_code='en',
         components=[
             {
@@ -336,7 +338,7 @@ def send_quotation_whatsapp(quotation_id):
                 'sub_type': 'url',
                 'index': '0',
                 'parameters': [
-                    {'type': 'text', 'text': quotation_button_path},
+                    {'type': 'text', 'text': quotation_button_url},
                 ],
             },
         ],
@@ -364,6 +366,44 @@ def send_quotation_whatsapp(quotation_id):
         flash(f'WhatsApp sending failed: {response}', 'danger')
     return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
 
+
+
+@sales_bp.route('/q/<token>')
+def public_quotation_short(token):
+    """Short public customer quotation view opened from WhatsApp without ERP login.
+
+    This route opens the signed public quotation link without ERP login.
+    The WhatsApp button receives the complete URL, for example:
+        https://cmse2.onrender.com/sales/q/<signed-token>
+    """
+    data = _quotation_token_data(token)
+    if not data:
+        abort(404)
+    quotation = SalesQuotation.query.get_or_404(int(data.get('qid') or 0))
+    if data.get('ref') != quotation.ref_no:
+        abort(404)
+    return render_template('sales/public_quotation.html', quotation=quotation, generated_at=datetime.utcnow())
+
+
+@sales_bp.route('/q/<token>/pdf')
+def public_quotation_short_pdf(token):
+    """Public PDF view/download for the signed customer quotation link."""
+    data = _quotation_token_data(token)
+    if not data:
+        abort(404)
+    quotation = SalesQuotation.query.get_or_404(int(data.get('qid') or 0))
+    if data.get('ref') != quotation.ref_no:
+        abort(404)
+    html = render_template('sales/quotation_pdf.html', quotation=quotation, generated_at=datetime.utcnow())
+    try:
+        from weasyprint import HTML
+        pdf = HTML(string=html, base_url=request.host_url).write_pdf()
+        response = make_response(pdf)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'inline; filename={quotation.ref_no}.pdf'
+        return response
+    except Exception:
+        return render_template('sales/public_quotation.html', quotation=quotation, generated_at=datetime.utcnow(), pdf_error=True)
 
 
 @sales_bp.route('/public/quotations/<int:quotation_id>/<token>')

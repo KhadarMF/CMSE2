@@ -18,7 +18,10 @@
         <h3 class="fw-bold mb-0">Quotation {{ quotation.ref_no }}</h3>
         <div class="text-muted">{{ quotation.customer_name }}</div>
       </div>
-      <button onclick="window.print()" class="btn btn-outline-secondary">Print / Save PDF</button>
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('sales.public_quotation_short_pdf', token=request.view_args.get('token')) }}" class="btn btn-primary">Download PDF</a>
+        <button onclick="window.print()" class="btn btn-outline-secondary">Print / Save PDF</button>
+      </div>
     </div>
 
     <div class="card shadow-sm">
