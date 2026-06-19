@@ -199,8 +199,25 @@ def _verify_quotation_public_token(quotation, token):
     return int(data.get('qid') or 0) == int(quotation.id) and data.get('ref') == quotation.ref_no
 
 
+def _quotation_public_path(quotation):
+    """Path-only public quotation link for WhatsApp dynamic URL buttons.
+
+    Meta WhatsApp dynamic URL buttons must receive only the variable part
+    of the URL. The template should be configured as:
+        https://cmse2.onrender.com/{{1}}
+    and this function supplies:
+        sales/public/quotations/<id>/<token>
+    """
+    return url_for(
+        'sales.public_quotation',
+        quotation_id=quotation.id,
+        token=_quotation_public_token(quotation),
+        _external=False,
+    ).lstrip('/')
+
+
 def _quotation_public_url(quotation):
-    """Public customer-facing quotation URL that does not require ERP login."""
+    """Full public customer-facing quotation URL for message body text."""
     return url_for(
         'sales.public_quotation',
         quotation_id=quotation.id,
@@ -290,6 +307,7 @@ def send_quotation_whatsapp(quotation_id):
         flash('No phone number provided and no customer phone found. Please enter a WhatsApp number.', 'danger')
         return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
     quotation_link = _quotation_public_url(quotation)
+    quotation_button_path = _quotation_public_path(quotation)
     customer_name = (quotation.customer_name or 'Customer').strip()
     quotation_ref = (quotation.ref_no or f'Quotation-{quotation.id}').strip()
     message = (request.form.get('message') or build_quotation_message(quotation, request.url_root.rstrip('/'))).strip()
@@ -297,7 +315,9 @@ def send_quotation_whatsapp(quotation_id):
     # Use the approved Utility template created in Meta WhatsApp Manager:
     # quotation_ready (English) with body variables:
     # {{1}} Customer Name, {{2}} Quotation Number, {{3}} Quotation URL.
-    # The button URL also receives the quotation URL as its dynamic parameter.
+    # The body receives the full public URL.
+    # The URL button receives only the path variable, because Meta combines it with
+    # the template button base URL: https://cmse2.onrender.com/{{1}}
     ok, response = send_whatsapp_template(
         phone,
         template_name='quotation_ready',
@@ -316,7 +336,7 @@ def send_quotation_whatsapp(quotation_id):
                 'sub_type': 'url',
                 'index': '0',
                 'parameters': [
-                    {'type': 'text', 'text': quotation_link},
+                    {'type': 'text', 'text': quotation_button_path},
                 ],
             },
         ],
