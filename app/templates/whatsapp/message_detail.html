@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>WhatsApp Message Detail</h3>
+  <div class="d-flex gap-2">
+    {% if item.direction == 'Outbound' %}
+    <form method="post" action="{{ url_for('whatsapp.resend_message', message_id=item.id) }}" onsubmit="return confirm('Resend this WhatsApp message?');">
+      <button class="btn btn-success">Resend</button>
+    </form>
+    {% endif %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('whatsapp.messages') }}">Back</a>
+  </div>
+</div>
+<div class="card mb-3"><div class="card-body">
+  <div class="row">
+    <div class="col-md-6">
+      <p><strong>Status:</strong> {{ item.status }}</p>
+      <p><strong>Direction:</strong> {{ item.direction }}</p>
+      <p><strong>Customer:</strong> {{ item.recipient_name or '-' }}</p>
+      <p><strong>Phone:</strong> {{ item.phone_number or '-' }}</p>
+      <p><strong>Template:</strong> {{ item.template_name or '-' }}</p>
+      <p><strong>Document:</strong> {{ item.document_label }}</p>
+    </div>
+    <div class="col-md-6">
+      <p><strong>Created:</strong> {{ item.created_at }}</p>
+      <p><strong>Sent:</strong> {{ item.sent_at or '-' }}</p>
+      <p><strong>Delivered:</strong> {{ item.delivered_at or '-' }}</p>
+      <p><strong>Read:</strong> {{ item.read_at or '-' }}</p>
+      <p><strong>Failed:</strong> {{ item.failed_at or '-' }}</p>
+      <p><strong>Meta Message ID:</strong><br><small>{{ item.meta_message_id or '-' }}</small></p>
+    </div>
+  </div>
+</div></div>
+
+<div class="card mb-3"><div class="card-header">Message / Variables</div><div class="card-body">
+  <h6>Message Body</h6>
+  <pre class="bg-light p-2 border rounded">{{ item.message_body or '-' }}</pre>
+  <h6>Variables</h6>
+  <pre class="bg-light p-2 border rounded">{{ item.variables_json or '-' }}</pre>
+</div></div>
+
+<div class="card mb-3"><div class="card-header">Provider Response</div><div class="card-body">
+  {% if item.error_message %}<div class="alert alert-danger">{{ item.error_message }}</div>{% endif %}
+  <pre class="bg-light p-2 border rounded">{{ item.provider_response or '-' }}</pre>
+</div></div>
+
+<div class="card mb-3"><div class="card-header">Raw Webhook Payload</div><div class="card-body">
+  <pre class="bg-light p-2 border rounded">{{ item.raw_webhook_payload or '-' }}</pre>
+</div></div>
+{% endblock %}

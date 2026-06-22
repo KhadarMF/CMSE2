@@ -1,4 +1,5 @@
 from datetime import datetime, date
+import os
 from io import BytesIO
 import csv
 import json
@@ -6,8 +7,8 @@ from itsdangerous import URLSafeSerializer, BadSignature
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, make_response, current_app, abort
 from flask_login import login_required, current_user
 from app import db
-from app.whatsapp_service import send_whatsapp_text, send_whatsapp_template, build_quotation_message, normalize_whatsapp_number
-from app.models import Customer, Project, ProjectType, User, SalesInquiry, SalesQuotation, SalesQuotationLine, QuotationItem, NotificationLog, INQUIRY_STATUSES, INQUIRY_SOURCES, QUOTATION_STATUSES
+from app.whatsapp_service import send_whatsapp_text, send_whatsapp_template, build_quotation_message, normalize_whatsapp_number, extract_whatsapp_message_id, whatsapp_config
+from app.models import Customer, Project, ProjectType, User, SalesInquiry, SalesQuotation, SalesQuotationLine, QuotationItem, NotificationLog, WhatsAppMessage, INQUIRY_STATUSES, INQUIRY_SOURCES, QUOTATION_STATUSES
 
 sales_bp = Blueprint('sales', __name__, url_prefix='/sales')
 
@@ -162,16 +163,33 @@ def quotations():
 
 
 def _customer_phone_for_quotation(quotation):
-    """Best-effort lookup of customer phone for a quotation."""
+    """Best-effort lookup of the customer's WhatsApp/phone number for a quotation.
+
+    The quotation table stores customer_name as text, so this lookup is made
+    deliberately tolerant: inquiry phone first, then exact trimmed customer
+    name, then case-insensitive customer name. This makes the WhatsApp number
+    box auto-fill even when the customer was selected from the quotation
+    dropdown but spacing/case differs slightly.
+    """
     try:
-        if quotation.inquiry and quotation.inquiry.phone:
-            return quotation.inquiry.phone
+        inquiry_phone = (getattr(getattr(quotation, 'inquiry', None), 'phone', '') or '').strip()
+        if inquiry_phone:
+            return inquiry_phone
     except Exception:
         pass
+
+    customer_name = (getattr(quotation, 'customer_name', '') or '').strip()
+    if not customer_name:
+        return ''
+
     try:
-        customer = Customer.query.filter(Customer.customer_name == quotation.customer_name).first()
-        if customer and getattr(customer, 'phone', None):
-            return customer.phone
+        customer = Customer.query.filter(Customer.customer_name == customer_name).first()
+        if not customer:
+            customer = Customer.query.filter(Customer.customer_name.ilike(customer_name)).first()
+        if customer:
+            phone = (getattr(customer, 'phone', '') or '').strip()
+            if phone:
+                return phone
     except Exception:
         pass
     return ''
@@ -195,6 +213,30 @@ def _quotation_public_token(quotation):
     })
 
 
+def _quotation_public_token_value(quotation):
+    """Return the signed token only, without a URL prefix."""
+    return _quotation_public_token(quotation)
+
+
+def _quotation_public_base_url():
+    """Return the production-safe public base URL.
+
+    This intentionally prefers PUBLIC_BASE_URL instead of request.host_url so
+    locally generated WhatsApp links do not become http://127.0.0.1:5000/...
+    """
+    cfg = whatsapp_config()
+    return (cfg.get('public_base_url') or os.environ.get('PUBLIC_BASE_URL') or 'https://cmse2.onrender.com').rstrip('/')
+
+
+def _quotation_template_name():
+    """Approved Meta template used for quotation messages.
+
+    WHATSAPP_TEMPLATE_NAME remains available for the manual cmse_test page.
+    Quotations use WHATSAPP_QUOTATION_TEMPLATE_NAME or quotation_ready_v2.
+    """
+    return (os.environ.get('WHATSAPP_QUOTATION_TEMPLATE_NAME') or 'quotation_ready_v2').strip()
+
+
 def _quotation_token_data(token):
     """Decode a public quotation token and return its data or None."""
     try:
@@ -212,20 +254,14 @@ def _verify_quotation_public_token(quotation, token):
 
 
 def _quotation_public_url(quotation):
-    """Full public customer-facing quotation URL for body text, button, and testing.
+    """Full public customer-facing quotation URL without requiring ERP login.
 
-    The Meta template button should be configured as a one-variable dynamic URL:
-        Website URL: {{1}}
-
-    The ERP passes the complete public URL as that single button variable. This
-    avoids Meta's UI confusion around splitting domain/path variables and keeps
-    every quotation link unique while still opening without ERP login.
+    Always uses PUBLIC_BASE_URL (default: https://cmse2.onrender.com) instead
+    of request.host_url. This prevents WhatsApp links generated during local
+    testing from becoming http://127.0.0.1:5000/...
     """
-    return url_for(
-        'sales.public_quotation_short',
-        token=_quotation_public_token(quotation),
-        _external=True,
-    )
+    token = _quotation_public_token_value(quotation)
+    return f"{_quotation_public_base_url()}{url_for('sales.public_quotation_short', token=token)}"
 
 
 def _quotation_form_context(**extra):
@@ -275,7 +311,8 @@ def create_quotation():
 @login_required
 def quotation_detail(quotation_id):
     quotation=SalesQuotation.query.get_or_404(quotation_id)
-    return render_template('sales/quotation_detail.html', quotation=quotation)
+    customer_phone = _customer_phone_for_quotation(quotation)
+    return render_template('sales/quotation_detail.html', quotation=quotation, customer_phone=customer_phone)
 
 @sales_bp.route('/quotations/<int:quotation_id>/edit', methods=['GET','POST'])
 @login_required
@@ -308,29 +345,38 @@ def send_quotation_whatsapp(quotation_id):
     if not phone:
         flash('No phone number provided and no customer phone found. Please enter a WhatsApp number.', 'danger')
         return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
-    quotation_link = _quotation_public_url(quotation)
-    quotation_button_url = quotation_link
+
     customer_name = (quotation.customer_name or 'Customer').strip()
     quotation_ref = (quotation.ref_no or f'Quotation-{quotation.id}').strip()
-    message = (request.form.get('message') or build_quotation_message(quotation, request.url_root.rstrip('/'))).strip()
+    quotation_token = _quotation_public_token_value(quotation)
+    quotation_link = _quotation_public_url(quotation)
 
-    # Use the approved Utility template created in Meta WhatsApp Manager:
-    # quotation_ready (English) with body variables:
-    # {{1}} Customer Name, {{2}} Quotation Number, {{3}} Quotation URL.
-    # The body receives the full public quotation URL.
-    # The URL button also receives the full public URL as one variable.
-    # Configure the Meta button as a Dynamic URL with Website URL: {{1}}
+    # quotation_ready_v2 Meta template:
+    # Body variables:
+    #   {{1}} Customer Name
+    #   {{2}} Quotation Number
+    # Button:
+    #   Dynamic URL configured in Meta as https://cmse2.onrender.com/sales/q/{{1}}
+    #   ERP sends only the signed token as the button variable.
+    template_name = _quotation_template_name()
+    message = (
+        f"Hello {customer_name}\n\n"
+        f"Your quotation from Cadceed-Maal Solar Energy is ready.\n\n"
+        f"Quotation Number: {quotation_ref}\n\n"
+        f"Please click the Open Quotation button to view your quotation.\n\n"
+        f"Public Link: {quotation_link}"
+    )
+
     ok, response = send_whatsapp_template(
         phone,
-        template_name=(current_app.config.get('WHATSAPP_QUOTATION_TEMPLATE_NAME') or 'quotation_ready'),
-        language_code='en',
+        template_name=template_name,
+        language_code=os.environ.get('WHATSAPP_QUOTATION_TEMPLATE_LANGUAGE', 'en'),
         components=[
             {
                 'type': 'body',
                 'parameters': [
                     {'type': 'text', 'text': customer_name},
                     {'type': 'text', 'text': quotation_ref},
-                    {'type': 'text', 'text': quotation_link},
                 ],
             },
             {
@@ -338,7 +384,7 @@ def send_quotation_whatsapp(quotation_id):
                 'sub_type': 'url',
                 'index': '0',
                 'parameters': [
-                    {'type': 'text', 'text': quotation_button_url},
+                    {'type': 'text', 'text': quotation_token},
                 ],
             },
         ],
@@ -359,6 +405,31 @@ def send_quotation_whatsapp(quotation_id):
         created_by_id=current_user.id,
     )
     db.session.add(log)
+
+    whatsapp_log = WhatsAppMessage(
+        direction='Outbound',
+        recipient_name=quotation.customer_name,
+        phone_number=normalize_whatsapp_number(phone),
+        template_name=template_name,
+        message_body=message,
+        variables_json=json.dumps({
+            'customer_name': customer_name,
+            'quotation_ref': quotation_ref,
+            'quotation_token': quotation_token,
+            'quotation_link': quotation_link,
+        })[:3000],
+        document_type='Sales Quotation',
+        document_id=quotation.id,
+        document_ref=quotation.ref_no,
+        meta_message_id=extract_whatsapp_message_id(response),
+        status='Sent' if ok else 'Failed',
+        error_message=None if ok else json.dumps(response)[:1000],
+        provider_response=json.dumps(response)[:4000],
+        sent_by_id=current_user.id,
+        sent_at=datetime.utcnow() if ok else None,
+        failed_at=datetime.utcnow() if not ok else None,
+    )
+    db.session.add(whatsapp_log)
     db.session.commit()
     if ok:
         flash(f'Quotation {quotation.ref_no} sent to WhatsApp number {phone}.', 'success')

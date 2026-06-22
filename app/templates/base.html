@@ -115,6 +115,7 @@
                         <li><a class="dropdown-item" href="{{ url_for('ai.logs') }}">AI Logs</a></li>{% endif %}
                         {% if current_user.role == "Admin" %}<li><a class="dropdown-item" href="{{ url_for('ai.settings') }}">AI Settings</a></li>{% endif %}
                         {% if current_user.role == "Admin" %}<li><a class="dropdown-item" href="{{ url_for('whatsapp.test_send') }}">WhatsApp API Test</a></li>{% endif %}
+                        {% if current_user.role == "Admin" %}<li><a class="dropdown-item" href="{{ url_for('whatsapp.messages') }}">WhatsApp Messages</a></li>{% endif %}
                     </ul>
                 </li>
                 {% endif %}
@@ -127,7 +128,7 @@
                         <li><a class="dropdown-item" href="{{ url_for('notifications.create_notification') }}">Create Notification</a></li>{% endif %}{% if can_access_module(current_user, 'notification-log') %}
                         <li><a class="dropdown-item" href="{{ url_for('notifications.logs') }}">Notification Log</a></li>{% endif %}{% if can_access_module(current_user, 'sms-queue') %}
                         <li><a class="dropdown-item" href="{{ url_for('notifications.sms_queue') }}">SMS Queue (No API)</a></li>{% endif %}{% if can_access_module(current_user, 'whatsapp-integration') %}
-                        <li><a class="dropdown-item" href="{{ url_for('notifications.whatsapp_settings') }}">WhatsApp Legacy Settings</a></li>{% endif %}{% if can_access_module(current_user, 'production-readiness') %}
+                        <li><a class="dropdown-item" href="{{ url_for('notifications.whatsapp_settings') }}">WhatsApp Legacy Settings</a></li>{% endif %}{% if can_access_module(current_user, 'whatsapp-integration') or current_user.role == "Admin" %}<li><a class="dropdown-item" href="{{ url_for('whatsapp.messages') }}">WhatsApp Messages</a></li>{% endif %}{% if can_access_module(current_user, 'production-readiness') %}
                         <li><a class="dropdown-item" href="{{ url_for('production.readiness') }}">Production Readiness</a></li>{% endif %}
                     </ul>
                 </li>

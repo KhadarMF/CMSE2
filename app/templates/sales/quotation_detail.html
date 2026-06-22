@@ -12,8 +12,8 @@
         <div class='row g-2'>
           <div class='col-md-4'>
             <label class='form-label'>Customer WhatsApp Number</label>
-            <input name='phone' class='form-control' placeholder='+25263xxxxxxx' required>
-            <div class='form-text'>Use international format, e.g. +252638888044.</div>
+            <input name='phone' id='customerWhatsappNumber' class='form-control' placeholder='+25263xxxxxxx' value='{{ customer_phone or "" }}' required>
+            <div class='form-text'>Auto-filled from the Customers table when available. Use international format, e.g. +252638888044.</div>{% if not customer_phone %}<div class='text-danger small mt-1'>No phone number found for this customer. Add the phone in Master Data → Customers, or type it here manually.</div>{% endif %}
           </div>
           <div class='col-md-8'>
             <label class='form-label'>Message</label>

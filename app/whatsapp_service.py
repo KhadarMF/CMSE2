@@ -185,6 +185,44 @@ def build_quotation_message(quotation, base_url: Optional[str] = None) -> str:
     return "\n".join(lines)
 
 
+
+def extract_whatsapp_message_id(response: Dict[str, Any]) -> str:
+    """Return Meta wamid from a send-message API response."""
+    try:
+        return ((response.get("messages") or [{}])[0] or {}).get("id") or ""
+    except Exception:
+        return ""
+
+
+def extract_whatsapp_statuses(payload: Dict[str, Any]) -> list:
+    """Extract WhatsApp delivery status updates from Meta webhook payload."""
+    results = []
+    try:
+        for entry in payload.get("entry") or []:
+            for change in entry.get("changes") or []:
+                value = change.get("value") or {}
+                for st in value.get("statuses") or []:
+                    conversation = st.get("conversation") or {}
+                    pricing = st.get("pricing") or {}
+                    error_items = st.get("errors") or []
+                    error_text = ""
+                    if error_items:
+                        first = error_items[0] or {}
+                        error_text = first.get("message") or first.get("title") or json.dumps(first)
+                    results.append({
+                        "message_id": st.get("id") or "",
+                        "recipient_id": st.get("recipient_id") or "",
+                        "status": st.get("status") or "",
+                        "timestamp": st.get("timestamp") or "",
+                        "conversation_id": conversation.get("id") or "",
+                        "pricing_category": pricing.get("category") or "",
+                        "error_message": error_text,
+                    })
+    except Exception:
+        return []
+    return results
+
+
 def parse_incoming_whatsapp(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Extract useful fields from WhatsApp webhook payload for logging."""
     try:

@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>WhatsApp Messages</h3>
+  <a class="btn btn-outline-success" href="{{ url_for('whatsapp.test_send') }}">WhatsApp API Test</a>
+</div>
+
+<div class="row g-2 mb-3">
+  <div class="col-md-2"><div class="card"><div class="card-body py-2"><small>Total</small><h4>{{ stats.total }}</h4></div></div></div>
+  <div class="col-md-2"><div class="card"><div class="card-body py-2"><small>Sent</small><h4>{{ stats.sent }}</h4></div></div></div>
+  <div class="col-md-2"><div class="card"><div class="card-body py-2"><small>Delivered</small><h4>{{ stats.delivered }}</h4></div></div></div>
+  <div class="col-md-2"><div class="card"><div class="card-body py-2"><small>Read</small><h4>{{ stats.read }}</h4></div></div></div>
+  <div class="col-md-2"><div class="card"><div class="card-body py-2"><small>Failed</small><h4>{{ stats.failed }}</h4></div></div></div>
+  <div class="col-md-2"><div class="card"><div class="card-body py-2"><small>Received</small><h4>{{ stats.received }}</h4></div></div></div>
+</div>
+
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label">Status</label>
+      <select name="status" class="form-select">
+        <option value="">All</option>
+        {% for s in statuses %}<option value="{{ s }}" {% if filters.get('status') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Phone</label>
+      <input name="phone" class="form-control" value="{{ filters.get('phone','') }}" placeholder="25263...">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Template</label>
+      <input name="template" class="form-control" value="{{ filters.get('template','') }}" placeholder="quotation_ready_v2">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Document Type</label>
+      <select name="document_type" class="form-select">
+        <option value="">All</option>
+        {% for d in document_types %}<option value="{{ d }}" {% if filters.get('document_type') == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-primary w-100">Filter</button>
+    </div>
+  </div>
+</form>
+
+<div class="table-responsive">
+<table class="table table-sm table-striped align-middle">
+  <thead><tr><th>Date</th><th>Customer</th><th>Phone</th><th>Template</th><th>Document</th><th>Status</th><th>Meta ID</th><th></th></tr></thead>
+  <tbody>
+  {% for item in items %}
+    <tr>
+      <td>{{ item.created_at.strftime('%Y-%m-%d %H:%M') if item.created_at else '-' }}</td>
+      <td>{{ item.recipient_name or '-' }}</td>
+      <td>{{ item.phone_number or '-' }}</td>
+      <td>{{ item.template_name or '-' }}</td>
+      <td>{{ item.document_label }}</td>
+      <td>
+        {% set color = {'Sent':'primary','Delivered':'success','Read':'success','Failed':'danger','Received':'info','Queued':'secondary'}.get(item.status,'secondary') %}
+        <span class="badge bg-{{ color }}">{{ item.status }}</span>
+      </td>
+      <td><small>{{ (item.meta_message_id or '-')[:24] }}{% if item.meta_message_id and item.meta_message_id|length > 24 %}...{% endif %}</small></td>
+      <td><a class="btn btn-sm btn-outline-dark" href="{{ url_for('whatsapp.message_detail', message_id=item.id) }}">View</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="text-center text-muted py-4">No WhatsApp messages found.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

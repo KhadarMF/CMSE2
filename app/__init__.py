@@ -18,7 +18,13 @@ def normalize_database_url(url):
     return url
 
 def create_app():
-    load_dotenv()
+    # Load local environment variables reliably from the project root.
+    # This is important when the app is started from VS Code/Visual Studio,
+    # because the current working directory can sometimes differ from the
+    # folder that contains .env.
+    project_root = Path(__file__).resolve().parent.parent
+    load_dotenv(project_root / ".env", override=True)
+    load_dotenv(override=False)
     app = Flask(__name__)
 
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-secret-key")

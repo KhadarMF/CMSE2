@@ -1104,6 +1104,43 @@ class NotificationLog(db.Model):
     recipient_user = db.relationship("User", foreign_keys=[recipient_user_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
+
+class WhatsAppMessage(db.Model):
+    """Phase 16L.2: WhatsApp outbound/inbound message tracking.
+
+    Stores Meta message IDs and delivery/read/failed status updates from webhooks.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    direction = db.Column(db.String(30), default="Outbound")  # Outbound / Inbound / Status
+    recipient_name = db.Column(db.String(180), nullable=True)
+    phone_number = db.Column(db.String(80), nullable=True, index=True)
+    template_name = db.Column(db.String(150), nullable=True)
+    message_body = db.Column(db.Text, nullable=True)
+    variables_json = db.Column(db.Text, nullable=True)
+    document_type = db.Column(db.String(120), nullable=True)
+    document_id = db.Column(db.Integer, nullable=True)
+    document_ref = db.Column(db.String(150), nullable=True)
+    meta_message_id = db.Column(db.String(300), nullable=True, index=True)
+    status = db.Column(db.String(80), default="Queued", index=True)
+    error_message = db.Column(db.Text, nullable=True)
+    provider_response = db.Column(db.Text, nullable=True)
+    raw_webhook_payload = db.Column(db.Text, nullable=True)
+    sent_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    sent_at = db.Column(db.DateTime, nullable=True)
+    delivered_at = db.Column(db.DateTime, nullable=True)
+    read_at = db.Column(db.DateTime, nullable=True)
+    failed_at = db.Column(db.DateTime, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    sent_by = db.relationship("User", foreign_keys=[sent_by_id])
+
+    @property
+    def document_label(self):
+        if self.document_type and self.document_ref:
+            return f"{self.document_type} {self.document_ref}"
+        return self.document_type or self.document_ref or "-"
+
 class SMSQueue(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     ref_no = db.Column(db.String(120), unique=True, nullable=False)

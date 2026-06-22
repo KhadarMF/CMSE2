@@ -11,44 +11,150 @@
     <a class='btn btn-outline-primary' href='{{ url_for("sales.quotation_items") }}'>Quotation Item Master / Excel Import</a>
   </div>
 </div>
+
 <form method='post'>
 <input type='hidden' name='inquiry_id' value='{{ inquiry.id if inquiry else (quotation.inquiry_id if is_edit else "") }}'>
-<div class='card shadow-sm mb-3'><div class='card-body'><div class='row g-3'>
-<div class='col-md-3'><label class='form-label'>Date</label><input class='form-control' type='date' name='quotation_date' value='{{ quotation.quotation_date if is_edit and quotation.quotation_date else "" }}'></div>
-<div class='col-md-4'><label class='form-label'>Customer</label><input class='form-control' list='customerOptions' name='customer_name' value='{% if is_edit %}{{ quotation.customer_name }}{% elif inquiry %}{{ inquiry.customer_name }}{% endif %}' placeholder='Select existing customer or type new customer'><datalist id='customerOptions'>{% for c in customers %}<option value='{{ c.customer_name }}'>{% endfor %}</datalist></div>
-<div class='col-md-3'><label class='form-label'>Project</label><select class='form-select' name='project_id'><option value=''>-- optional --</option>{% for p in projects %}<option value='{{ p.id }}' {% if is_edit and quotation.project_id==p.id %}selected{% endif %}>{{ p.project_name }} - {{ p.customer_name }}</option>{% endfor %}</select></div>
-<div class='col-md-2'><label class='form-label'>Capacity</label><input class='form-control' name='capacity' value='{% if is_edit %}{{ quotation.capacity or "" }}{% elif inquiry %}{{ inquiry.estimated_capacity or "" }}{% endif %}'></div>
-<div class='col-md-3'><label class='form-label'>Project Type</label><select class='form-select' name='project_type'><option value=''>-- select --</option>{% for t in project_types %}<option value='{{ t.type_name }}' {% if (is_edit and quotation.project_type==t.type_name) or (not is_edit and inquiry and inquiry.project_type==t.type_name) %}selected{% endif %}>{{ t.type_name }}</option>{% endfor %}</select></div>
-<div class='col-md-3'><label class='form-label'>Status</label><select class='form-select' name='status'>{% for s in statuses %}<option value='{{ s }}' {% if is_edit and quotation.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
-<div class='col-md-2'><label class='form-label'>Validity Days</label><input class='form-control' type='number' name='validity_days' value='{{ quotation.validity_days if is_edit else 15 }}'></div>
-<div class='col-md-12'><label class='form-label'>Scope of Work</label><textarea class='form-control' name='scope_of_work' rows='3'>{{ quotation.scope_of_work if is_edit else '' }}</textarea></div>
-<div class='col-md-12'><label class='form-label'>Notes / Terms</label><textarea class='form-control' name='notes' rows='2'>{{ quotation.notes if is_edit else '' }}</textarea></div>
-</div></div></div>
-<div class='card shadow-sm'><div class='card-header bg-white fw-bold d-flex justify-content-between'><span>Quotation Lines</span><small class='text-muted'>Use dropdown items imported from Excel</small></div><div class='card-body table-responsive'>
-<table class='table table-bordered table-sm align-middle'><thead class='table-light'><tr><th style='width:24%'>Item</th><th>Description</th><th style='width:9%'>Qty</th><th style='width:9%'>Unit</th><th style='width:13%'>Unit Price</th></tr></thead><tbody>
-{% set lines = quotation.lines if is_edit else [] %}
-{% for i in range(1, max_rows + 1) %}
-{% set line = lines[i-1] if i <= lines|length else None %}
-<tr>
-<td><select class='form-select form-select-sm quote-item-select' name='item' data-row='{{ i }}'><option value=''>-- Select item --</option>{% for qi in quotation_items %}<option value='{{ qi.item_name }}' data-description='{{ qi.description or "" }}' data-unit='{{ qi.unit or "" }}' data-price='{{ qi.unit_price or 0 }}' {% if line and line.item==qi.item_name %}selected{% endif %}>{{ qi.item_name }}{% if qi.category %} - {{ qi.category }}{% endif %}</option>{% endfor %}{% if line and line.item and not quotation_items|selectattr('item_name','equalto',line.item)|list %}<option value='{{ line.item }}' selected>{{ line.item }}</option>{% endif %}</select></td>
-<td><input class='form-control form-control-sm' name='description_{{ i }}' id='description_{{ i }}' value='{{ line.description if line else "" }}'></td>
-<td><input class='form-control form-control-sm' type='number' step='0.01' name='quantity_{{ i }}' value='{{ line.quantity if line else 1 }}'></td>
-<td><input class='form-control form-control-sm' name='unit_{{ i }}' id='unit_{{ i }}' value='{{ line.unit if line else "" }}'></td>
-<td><input class='form-control form-control-sm' type='number' step='0.01' name='unit_price_{{ i }}' id='unit_price_{{ i }}' value='{{ line.unit_price if line else 0 }}'></td>
-</tr>{% endfor %}</tbody></table>
-<div class='alert alert-info small'>Tip: Haddii item-ku uusan dropdown-ka ku jirin, gal <b>Quotation Item Master / Excel Import</b>, kadib Excel ka import garee items-kaaga.</div>
-<button class='btn btn-primary'>{% if is_edit %}Update Quotation{% else %}Save Quotation{% endif %}</button>
-{% if is_edit %}<a class='btn btn-outline-dark' href='{{ url_for("sales.quotation_detail", quotation_id=quotation.id) }}'>Cancel / View Report</a>{% endif %}
-</div></div></form>
+
+<div class='card shadow-sm mb-3'>
+  <div class='card-body'>
+    <div class='row g-3'>
+      <div class='col-md-3'>
+        <label class='form-label'>Date</label>
+        <input class='form-control' type='date' name='quotation_date' value='{{ quotation.quotation_date if is_edit and quotation.quotation_date else "" }}'>
+      </div>
+
+      <div class='col-md-4'>
+        <label class='form-label'>Customer</label>
+        {% set selected_customer = quotation.customer_name if is_edit else (inquiry.customer_name if inquiry else '') %}
+        <select class='form-select' name='customer_name' id='quotationCustomerSelect' required>
+          <option value=''>-- Select customer --</option>
+          {% if selected_customer and (selected_customer not in customers|map(attribute='customer_name')|list) %}
+            <option value='{{ selected_customer }}' selected>{{ selected_customer }}</option>
+          {% endif %}
+          {% for c in customers %}
+            <option value='{{ c.customer_name }}' data-phone='{{ c.phone or "" }}' {% if selected_customer == c.customer_name %}selected{% endif %}>{{ c.customer_name }}{% if c.phone %} — {{ c.phone }}{% endif %}</option>
+          {% endfor %}
+        </select>
+        <div class='form-text'>Customers are loaded from the Customers table.</div>
+        <div class='form-text'>Customer WhatsApp / Phone: <span id='quotationCustomerPhonePreview' class='fw-semibold'></span></div>
+      </div>
+
+      <div class='col-md-3'>
+        <label class='form-label'>Project</label>
+        <select class='form-select' name='project_id'>
+          <option value=''>-- optional --</option>
+          {% for p in projects %}
+            <option value='{{ p.id }}' {% if is_edit and quotation.project_id==p.id %}selected{% endif %}>{{ p.project_name }} - {{ p.customer_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class='col-md-2'>
+        <label class='form-label'>Capacity</label>
+        <input class='form-control' name='capacity' value='{% if is_edit %}{{ quotation.capacity or "" }}{% elif inquiry %}{{ inquiry.estimated_capacity or "" }}{% endif %}'>
+      </div>
+
+      <div class='col-md-3'>
+        <label class='form-label'>Project Type</label>
+        <select class='form-select' name='project_type'>
+          <option value=''>-- select --</option>
+          {% for t in project_types %}
+            <option value='{{ t.type_name }}' {% if (is_edit and quotation.project_type==t.type_name) or (not is_edit and inquiry and inquiry.project_type==t.type_name) %}selected{% endif %}>{{ t.type_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class='col-md-3'>
+        <label class='form-label'>Status</label>
+        <select class='form-select' name='status'>
+          {% for s in statuses %}<option value='{{ s }}' {% if is_edit and quotation.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class='col-md-2'>
+        <label class='form-label'>Validity Days</label>
+        <input class='form-control' type='number' name='validity_days' value='{{ quotation.validity_days if is_edit else 15 }}'>
+      </div>
+
+      <div class='col-md-12'>
+        <label class='form-label'>Scope of Work</label>
+        <textarea class='form-control' name='scope_of_work' rows='3'>{{ quotation.scope_of_work if is_edit else '' }}</textarea>
+      </div>
+
+      <div class='col-md-12'>
+        <label class='form-label'>Notes / Terms</label>
+        <textarea class='form-control' name='notes' rows='2'>{{ quotation.notes if is_edit else '' }}</textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class='card shadow-sm'>
+  <div class='card-header bg-white fw-bold d-flex justify-content-between'>
+    <span>Quotation Lines</span>
+    <small class='text-muted'>Use dropdown items imported from Excel</small>
+  </div>
+  <div class='card-body table-responsive'>
+    <table class='table table-bordered table-sm align-middle'>
+      <thead class='table-light'>
+        <tr><th style='width:24%'>Item</th><th>Description</th><th style='width:9%'>Qty</th><th style='width:9%'>Unit</th><th style='width:13%'>Unit Price</th></tr>
+      </thead>
+      <tbody>
+        {% set lines = quotation.lines if is_edit else [] %}
+        {% for i in range(1, max_rows + 1) %}
+          {% set line = lines[i-1] if i <= lines|length else None %}
+          <tr>
+            <td>
+              <select class='form-select form-select-sm quote-item-select' name='item' data-row='{{ i }}'>
+                <option value=''>-- Select item --</option>
+                {% for qi in quotation_items %}
+                  <option value='{{ qi.item_name }}' data-description='{{ qi.description or "" }}' data-unit='{{ qi.unit or "" }}' data-price='{{ qi.unit_price or 0 }}' {% if line and line.item==qi.item_name %}selected{% endif %}>{{ qi.item_name }}{% if qi.category %} - {{ qi.category }}{% endif %}</option>
+                {% endfor %}
+                {% if line and line.item and not quotation_items|selectattr('item_name','equalto',line.item)|list %}<option value='{{ line.item }}' selected>{{ line.item }}</option>{% endif %}
+              </select>
+            </td>
+            <td><input class='form-control form-control-sm' name='description_{{ i }}' id='description_{{ i }}' value='{{ line.description if line else "" }}'></td>
+            <td><input class='form-control form-control-sm' type='number' step='0.01' name='quantity_{{ i }}' value='{{ line.quantity if line else 1 }}'></td>
+            <td><input class='form-control form-control-sm' name='unit_{{ i }}' id='unit_{{ i }}' value='{{ line.unit if line else "" }}'></td>
+            <td><input class='form-control form-control-sm' type='number' step='0.01' name='unit_price_{{ i }}' id='unit_price_{{ i }}' value='{{ line.unit_price if line else 0 }}'></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class='alert alert-info small'>Tip: Haddii item-ku uusan dropdown-ka ku jirin, gal <b>Quotation Item Master / Excel Import</b>, kadib Excel ka import garee items-kaaga.</div>
+    <button class='btn btn-primary'>{% if is_edit %}Update Quotation{% else %}Save Quotation{% endif %}</button>
+    {% if is_edit %}<a class='btn btn-outline-dark' href='{{ url_for("sales.quotation_detail", quotation_id=quotation.id) }}'>Cancel / View Report</a>{% endif %}
+  </div>
+</div>
+</form>
+
 <script>
 document.querySelectorAll('.quote-item-select').forEach(function(sel){
   sel.addEventListener('change', function(){
-    const opt=this.options[this.selectedIndex]; const row=this.dataset.row;
+    const opt = this.options[this.selectedIndex];
+    const row = this.dataset.row;
     if(!opt) return;
-    if(opt.dataset.description !== undefined) document.getElementById('description_'+row).value = opt.dataset.description || '';
-    if(opt.dataset.unit !== undefined) document.getElementById('unit_'+row).value = opt.dataset.unit || '';
-    if(opt.dataset.price !== undefined) document.getElementById('unit_price_'+row).value = opt.dataset.price || '0';
+    if(opt.dataset.description !== undefined) document.getElementById('description_' + row).value = opt.dataset.description || '';
+    if(opt.dataset.unit !== undefined) document.getElementById('unit_' + row).value = opt.dataset.unit || '';
+    if(opt.dataset.price !== undefined) document.getElementById('unit_price_' + row).value = opt.dataset.price || '0';
   });
 });
+
+(function(){
+  const sel = document.getElementById('quotationCustomerSelect');
+  const preview = document.getElementById('quotationCustomerPhonePreview');
+  function updateCustomerPhonePreview(){
+    if(!sel || !preview) return;
+    const opt = sel.options[sel.selectedIndex];
+    const phone = opt ? (opt.dataset.phone || '') : '';
+    preview.textContent = phone || 'No phone saved in Customers table';
+    preview.classList.toggle('text-danger', !phone);
+  }
+  if(sel){
+    sel.addEventListener('change', updateCustomerPhonePreview);
+    updateCustomerPhonePreview();
+  }
+})();
 </script>
 {% endblock %}
