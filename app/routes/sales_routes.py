@@ -238,7 +238,20 @@ def _quotation_template_name():
 
 
 def _quotation_token_data(token):
-    """Decode a public quotation token and return its data or None."""
+    """Decode a public quotation token and return its data or None.
+
+    Hotfix 16L.3B:
+    Some Meta/WhatsApp dynamic URL templates may leave the literal {{1}}
+    placeholder in the final button URL and then append the real token after it,
+    producing links like /sales/q/%7B%7B1%7D%7D<token>. Flask decodes that as
+    {{1}}<token>. We strip that accidental prefix before validating the signed
+    token so existing customer links open instead of returning 404.
+    """
+    token = (token or '').strip()
+    for prefix in ('{{1}}', '%7B%7B1%7D%7D', '%7b%7b1%7d%7d'):
+        if token.startswith(prefix):
+            token = token[len(prefix):].strip()
+            break
     try:
         return _quotation_public_serializer().loads(token or '')
     except BadSignature:
