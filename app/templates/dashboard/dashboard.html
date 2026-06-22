@@ -15,6 +15,14 @@
 <div class="col-md-4"><div class="stat-card danger"><span>Rejected Forms</span><strong>{{ rejected_forms }}</strong></div></div>
 </div>
 
+{% if can_access_module(current_user, 'whatsapp-integration', 'view') or current_user.role == "Admin" %}
+<div class="row g-3 mt-1">
+  <div class="col-md-4"><a class="text-decoration-none" href="{{ url_for('whatsapp.conversations') }}"><div class="stat-card warning"><span>WhatsApp Unread</span><strong>{{ whatsapp_unread }}</strong></div></a></div>
+  <div class="col-md-4"><a class="text-decoration-none" href="{{ url_for('whatsapp.conversations', status='Failed') }}"><div class="stat-card danger"><span>WhatsApp Failed</span><strong>{{ whatsapp_failed }}</strong></div></a></div>
+  <div class="col-md-4"><a class="text-decoration-none" href="{{ url_for('whatsapp.conversations') }}"><div class="stat-card"><span>WhatsApp Messages</span><strong>{{ whatsapp_total }}</strong></div></a></div>
+</div>
+{% endif %}
+
 <div class="row g-3 mt-1">
 {% if can_access_module(current_user, 'project-tasks', 'view') %}<div class="col-md-3"><a class="text-decoration-none" href="{{ url_for('project_tasks.list_tasks') }}"><div class="stat-card"><span>Open Tasks</span><strong>{{ open_tasks }}</strong></div></a></div>{% endif %}
 {% if can_access_module(current_user, 'project-tasks', 'view') %}<div class="col-md-3"><a class="text-decoration-none" href="{{ url_for('project_tasks.list_tasks') }}"><div class="stat-card danger"><span>Overdue Tasks</span><strong>{{ overdue_tasks }}</strong></div></a></div>{% endif %}

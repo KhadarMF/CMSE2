@@ -8,6 +8,7 @@
       <button class="btn btn-success">Resend</button>
     </form>
     {% endif %}
+    {% if item.phone_number %}<a class="btn btn-outline-primary" href="{{ url_for('whatsapp.conversation_detail', phone=item.phone_number) }}">Conversation</a>{% endif %}
     <a class="btn btn-outline-secondary" href="{{ url_for('whatsapp.messages') }}">Back</a>
   </div>
 </div>

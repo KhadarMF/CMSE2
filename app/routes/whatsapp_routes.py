@@ -7,7 +7,7 @@ from itsdangerous import URLSafeSerializer, BadSignature
 from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for, current_app
 from flask_login import login_required, current_user
 from app import db
-from app.models import NotificationLog, WhatsAppMessage
+from app.models import NotificationLog, WhatsAppMessage, Customer, Project, SalesInquiry, SalesQuotation, SupportTicket
 from app.whatsapp_service import (
     whatsapp_config,
     is_whatsapp_configured,
@@ -381,3 +381,189 @@ def health():
         'business_account_id': cfg.get('business_account_id'),
         'webhook_url': f"{cfg.get('public_base_url')}/whatsapp/webhook" if cfg.get('public_base_url') else None,
     })
+
+
+# -----------------------------
+# Phase 16L.4: WhatsApp Conversation Center
+# -----------------------------
+
+def _safe_dt(value):
+    return value or datetime.utcnow()
+
+
+def _conversation_display_name(phone, messages):
+    for m in messages:
+        if m.recipient_name:
+            return m.recipient_name
+    customer = None
+    try:
+        customer = Customer.query.filter(Customer.phone.contains(phone[-7:])).first() if phone and len(phone) >= 7 else None
+    except Exception:
+        customer = None
+    return customer.customer_name if customer else (phone or 'Unknown Customer')
+
+
+def _conversation_related_records(phone, display_name=None):
+    """Return CRM records linked by phone or customer name.
+
+    This is deliberately best-effort, so 16L.4 works with the existing database
+    without a migration. Future phases can add hard foreign keys.
+    """
+    suffix = phone[-7:] if phone and len(phone) >= 7 else phone
+    data = {'customer': None, 'projects': [], 'inquiries': [], 'quotations': [], 'tickets': []}
+    try:
+        if suffix:
+            data['customer'] = Customer.query.filter(Customer.phone.contains(suffix)).first()
+        if not data['customer'] and display_name:
+            data['customer'] = Customer.query.filter(Customer.customer_name.ilike(f'%{display_name}%')).first()
+        customer_name = data['customer'].customer_name if data['customer'] else display_name
+        if customer_name:
+            data['projects'] = Project.query.filter(Project.customer_name.ilike(f'%{customer_name}%')).order_by(Project.created_at.desc()).limit(8).all()
+            data['inquiries'] = SalesInquiry.query.filter(SalesInquiry.customer_name.ilike(f'%{customer_name}%')).order_by(SalesInquiry.created_at.desc()).limit(8).all()
+            data['quotations'] = SalesQuotation.query.filter(SalesQuotation.customer_name.ilike(f'%{customer_name}%')).order_by(SalesQuotation.created_at.desc()).limit(8).all()
+            data['tickets'] = SupportTicket.query.filter(SupportTicket.customer_name.ilike(f'%{customer_name}%')).order_by(SupportTicket.created_at.desc()).limit(8).all()
+        if suffix:
+            more_inquiries = SalesInquiry.query.filter(SalesInquiry.phone.contains(suffix)).order_by(SalesInquiry.created_at.desc()).limit(8).all()
+            for item in more_inquiries:
+                if item not in data['inquiries']:
+                    data['inquiries'].append(item)
+            more_tickets = SupportTicket.query.filter(SupportTicket.phone.contains(suffix)).order_by(SupportTicket.created_at.desc()).limit(8).all()
+            for item in more_tickets:
+                if item not in data['tickets']:
+                    data['tickets'].append(item)
+    except Exception:
+        pass
+    return data
+
+
+@whatsapp_bp.route('/conversations')
+@login_required
+def conversations():
+    search = request.args.get('q', '').strip()
+    status = request.args.get('status', '').strip()
+    all_items = WhatsAppMessage.query.order_by(WhatsAppMessage.created_at.desc()).limit(2000).all()
+    grouped = {}
+    for m in all_items:
+        phone = m.phone_number or ''
+        if not phone:
+            continue
+        if search and search.lower() not in (phone + ' ' + (m.recipient_name or '') + ' ' + (m.message_body or '')).lower():
+            continue
+        if status and m.status != status:
+            continue
+        bucket = grouped.setdefault(phone, {'phone': phone, 'messages': [], 'unread': 0, 'failed': 0})
+        bucket['messages'].append(m)
+        if m.direction == 'Inbound' and m.status == 'Received':
+            bucket['unread'] += 1
+        if m.status == 'Failed':
+            bucket['failed'] += 1
+    rows = []
+    for phone, bucket in grouped.items():
+        messages = sorted(bucket['messages'], key=lambda x: _safe_dt(x.created_at), reverse=True)
+        last = messages[0]
+        name = _conversation_display_name(phone, messages)
+        rows.append({
+            'phone': phone,
+            'name': name,
+            'last': last,
+            'count': len(messages),
+            'unread': bucket['unread'],
+            'failed': bucket['failed'],
+        })
+    rows.sort(key=lambda r: _safe_dt(r['last'].created_at), reverse=True)
+    stats = {
+        'conversations': len(rows),
+        'unread': sum(r['unread'] for r in rows),
+        'failed': sum(r['failed'] for r in rows),
+        'messages': WhatsAppMessage.query.count(),
+    }
+    return render_template('whatsapp/conversations.html', rows=rows, stats=stats, filters=request.args, statuses=['Received','Failed','Sent','Delivered','Read'])
+
+
+@whatsapp_bp.route('/conversations/<phone>', methods=['GET', 'POST'])
+@login_required
+def conversation_detail(phone):
+    phone = normalize_whatsapp_number(phone) or phone
+    if request.method == 'POST':
+        body = (request.form.get('message') or '').strip()
+        if not body:
+            flash('Message body is required.', 'danger')
+            return redirect(url_for('whatsapp.conversation_detail', phone=phone))
+        ok, response = send_whatsapp_text(phone, body, preview_url=True)
+        log = create_whatsapp_message_log(
+            recipient_name=request.form.get('recipient_name') or None,
+            phone_number=phone,
+            template_name='free_text',
+            message_body=body,
+            variables={'source': 'conversation_center'},
+            document_type='WhatsApp Conversation',
+            response=response,
+            ok=ok,
+            sent_by_id=current_user.id,
+        )
+        db.session.commit()
+        flash('WhatsApp message sent.' if ok else f'WhatsApp send failed: {response}', 'success' if ok else 'danger')
+        return redirect(url_for('whatsapp.conversation_detail', phone=phone))
+
+    items = WhatsAppMessage.query.filter_by(phone_number=phone).order_by(WhatsAppMessage.created_at.asc()).limit(1000).all()
+    if not items:
+        items = WhatsAppMessage.query.filter(WhatsAppMessage.phone_number.contains(phone[-7:])).order_by(WhatsAppMessage.created_at.asc()).limit(1000).all() if len(phone) >= 7 else []
+    display_name = _conversation_display_name(phone, items)
+    related = _conversation_related_records(phone, display_name)
+    return render_template('whatsapp/conversation_detail.html', phone=phone, display_name=display_name, items=items, related=related)
+
+
+@whatsapp_bp.route('/conversations/<phone>/mark-read', methods=['POST'])
+@login_required
+def mark_conversation_read(phone):
+    phone = normalize_whatsapp_number(phone) or phone
+    items = WhatsAppMessage.query.filter_by(phone_number=phone, direction='Inbound', status='Received').all()
+    now = datetime.utcnow()
+    for item in items:
+        item.status = 'Read'
+        item.read_at = item.read_at or now
+    db.session.commit()
+    flash('Conversation marked as read.', 'success')
+    return redirect(url_for('whatsapp.conversation_detail', phone=phone))
+
+
+@whatsapp_bp.route('/conversations/<phone>/retry-failed', methods=['POST'])
+@login_required
+def retry_failed_conversation(phone):
+    phone = normalize_whatsapp_number(phone) or phone
+    failed = WhatsAppMessage.query.filter_by(phone_number=phone, direction='Outbound', status='Failed').order_by(WhatsAppMessage.created_at.desc()).limit(10).all()
+    sent = 0
+    last_error = None
+    for item in failed:
+        ok, response = send_whatsapp_text(item.phone_number, item.message_body or 'WhatsApp resend', preview_url=True)
+        create_whatsapp_message_log(
+            recipient_name=item.recipient_name,
+            phone_number=item.phone_number,
+            template_name=item.template_name or 'retry_text',
+            message_body=item.message_body,
+            variables={'retry_of': item.id, 'source': 'conversation_retry'},
+            document_type=item.document_type,
+            document_id=item.document_id,
+            document_ref=item.document_ref,
+            response=response,
+            ok=ok,
+            sent_by_id=current_user.id,
+        )
+        if ok:
+            sent += 1
+        else:
+            last_error = response
+    db.session.commit()
+    if sent:
+        flash(f'Retried failed messages. Sent: {sent}.', 'success')
+    else:
+        flash(f'No failed message was resent. Last error: {last_error}', 'danger')
+    return redirect(url_for('whatsapp.conversation_detail', phone=phone))
+
+
+@whatsapp_bp.route('/api/unread-count')
+@login_required
+def unread_count():
+    count = WhatsAppMessage.query.filter_by(direction='Inbound', status='Received').count()
+    failed = WhatsAppMessage.query.filter_by(status='Failed').count()
+    return jsonify({'unread': count, 'failed': failed})

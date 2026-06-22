@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="mb-1">{{ display_name }}</h3>
+    <div class="text-muted">{{ phone }}</div>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="post" action="{{ url_for('whatsapp.mark_conversation_read', phone=phone) }}">
+      <button class="btn btn-outline-primary">Mark Read</button>
+    </form>
+    <form method="post" action="{{ url_for('whatsapp.retry_failed_conversation', phone=phone) }}">
+      <button class="btn btn-outline-warning">Retry Failed</button>
+    </form>
+    <a class="btn btn-outline-secondary" href="{{ url_for('whatsapp.conversations') }}">Back</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between"><strong>Conversation Thread</strong><span class="text-muted">{{ items|length }} messages</span></div>
+      <div class="card-body" style="max-height: 620px; overflow-y: auto; background:#f8fafc;">
+        {% for item in items %}
+          {% set outbound = item.direction == 'Outbound' %}
+          <div class="d-flex mb-3 {% if outbound %}justify-content-end{% else %}justify-content-start{% endif %}">
+            <div class="border rounded p-2 {% if outbound %}bg-white{% else %}bg-light{% endif %}" style="max-width: 78%;">
+              <div class="small text-muted mb-1">
+                {{ item.direction }} • {{ item.created_at.strftime('%Y-%m-%d %H:%M') if item.created_at else '-' }}
+                <span class="badge bg-{{ {'Sent':'primary','Delivered':'success','Read':'success','Failed':'danger','Received':'info','Queued':'secondary'}.get(item.status,'secondary') }}">{{ item.status }}</span>
+              </div>
+              <div style="white-space: pre-wrap;">{{ item.message_body or item.document_label or '-' }}</div>
+              {% if item.error_message %}<div class="small text-danger mt-2">{{ item.error_message[:300] }}</div>{% endif %}
+              <div class="mt-2"><a class="small" href="{{ url_for('whatsapp.message_detail', message_id=item.id) }}">Open message detail</a></div>
+            </div>
+          </div>
+        {% else %}
+          <div class="text-center text-muted py-5">No messages in this conversation yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <form method="post" class="card card-body">
+      <input type="hidden" name="recipient_name" value="{{ display_name }}">
+      <label class="form-label"><strong>Send WhatsApp text</strong></label>
+      <textarea name="message" class="form-control" rows="4" placeholder="Write customer message..." required></textarea>
+      <div class="d-flex justify-content-between align-items-center mt-2">
+        <small class="text-muted">Uses Meta free-text session messaging. If the 24-hour window is closed, use an approved template instead.</small>
+        <button class="btn btn-success">Send</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-3"><div class="card-header"><strong>Customer Profile</strong></div><div class="card-body">
+      {% if related.customer %}
+        <p class="mb-1"><strong>{{ related.customer.customer_name }}</strong></p>
+        <p class="mb-1">Phone: {{ related.customer.phone or '-' }}</p>
+        <p class="mb-1">Email: {{ related.customer.email or '-' }}</p>
+        <p class="mb-0">Address: {{ related.customer.address or '-' }}</p>
+      {% else %}
+        <p class="text-muted mb-0">No matching customer record found by phone/name.</p>
+      {% endif %}
+    </div></div>
+
+    <div class="card mb-3"><div class="card-header"><strong>Linked Quotations</strong></div><div class="list-group list-group-flush">
+      {% for q in related.quotations %}
+        <a class="list-group-item list-group-item-action" href="{{ url_for('sales.quotation_detail', quotation_id=q.id) }}">{{ q.ref_no }} • {{ q.status }}<br><small>{{ q.project_type or '-' }} {{ q.capacity or '' }}</small></a>
+      {% else %}<div class="list-group-item text-muted">No quotations found.</div>{% endfor %}
+    </div></div>
+
+    <div class="card mb-3"><div class="card-header"><strong>Linked Projects</strong></div><div class="list-group list-group-flush">
+      {% for p in related.projects %}
+        <a class="list-group-item list-group-item-action" href="{{ url_for('projects.detail', project_id=p.id) }}">{{ p.project_name }}<br><small>{{ p.status }} • {{ p.capacity or '-' }}</small></a>
+      {% else %}<div class="list-group-item text-muted">No projects found.</div>{% endfor %}
+    </div></div>
+
+    <div class="card mb-3"><div class="card-header"><strong>Inquiries / Tickets</strong></div><div class="list-group list-group-flush">
+      {% for i in related.inquiries %}
+        <a class="list-group-item list-group-item-action" href="{{ url_for('sales.inquiry_detail', inquiry_id=i.id) }}">Inquiry {{ i.ref_no }} • {{ i.status }}</a>
+      {% endfor %}
+      {% for t in related.tickets %}
+        <a class="list-group-item list-group-item-action" href="{{ url_for('support.ticket_detail', ticket_id=t.id) }}">Ticket {{ t.ref_no }} • {{ t.status }}</a>
+      {% endfor %}
+      {% if not related.inquiries and not related.tickets %}<div class="list-group-item text-muted">No inquiries or tickets found.</div>{% endif %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}

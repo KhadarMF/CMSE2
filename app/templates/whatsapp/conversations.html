@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="mb-1">WhatsApp Conversation Center</h3>
+    <div class="text-muted">Phase 16L.4 - CRM conversation inbox</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('whatsapp.messages') }}">Message Log</a>
+    <a class="btn btn-outline-success" href="{{ url_for('whatsapp.test_send') }}">API Test</a>
+  </div>
+</div>
+
+<div class="row g-2 mb-3">
+  <div class="col-md-3"><div class="card"><div class="card-body py-2"><small>Conversations</small><h4>{{ stats.conversations }}</h4></div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body py-2"><small>Unread Incoming</small><h4>{{ stats.unread }}</h4></div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body py-2"><small>Failed / Retry Needed</small><h4>{{ stats.failed }}</h4></div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body py-2"><small>Total Messages</small><h4>{{ stats.messages }}</h4></div></div></div>
+</div>
+
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-7">
+      <label class="form-label">Search customer, phone, or message</label>
+      <input name="q" class="form-control" value="{{ filters.get('q','') }}" placeholder="Customer name, 25263..., message text">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Status</label>
+      <select name="status" class="form-select">
+        <option value="">All</option>
+        {% for s in statuses %}<option value="{{ s }}" {% if filters.get('status') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2"><button class="btn btn-primary w-100">Filter</button></div>
+  </div>
+</form>
+
+<div class="card">
+  <div class="list-group list-group-flush">
+    {% for row in rows %}
+    <a class="list-group-item list-group-item-action" href="{{ url_for('whatsapp.conversation_detail', phone=row.phone) }}">
+      <div class="d-flex justify-content-between align-items-start gap-3">
+        <div class="flex-grow-1">
+          <div class="d-flex align-items-center gap-2">
+            <strong>{{ row.name }}</strong>
+            {% if row.unread %}<span class="badge bg-danger">{{ row.unread }} unread</span>{% endif %}
+            {% if row.failed %}<span class="badge bg-warning text-dark">{{ row.failed }} failed</span>{% endif %}
+          </div>
+          <div class="small text-muted">{{ row.phone }} • {{ row.count }} messages</div>
+          <div class="mt-1">{{ (row.last.message_body or row.last.document_label or '-')[:140] }}{% if row.last.message_body and row.last.message_body|length > 140 %}...{% endif %}</div>
+        </div>
+        <div class="text-end small text-muted" style="min-width: 140px;">
+          {{ row.last.created_at.strftime('%Y-%m-%d %H:%M') if row.last.created_at else '-' }}<br>
+          <span class="badge bg-{{ {'Sent':'primary','Delivered':'success','Read':'success','Failed':'danger','Received':'info','Queued':'secondary'}.get(row.last.status,'secondary') }}">{{ row.last.status }}</span>
+        </div>
+      </div>
+    </a>
+    {% else %}
+    <div class="text-center text-muted py-5">No WhatsApp conversations found.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

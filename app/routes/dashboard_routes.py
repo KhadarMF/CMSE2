@@ -2,7 +2,7 @@ from flask import Blueprint, render_template
 from flask_login import login_required
 from app.models import (
     Project, Document, SiteSurveyForm, LoadAssessmentForm, DailySiteReport,
-    DeliveryNoteForm, TestingForm, CommissioningForm, HandoverForm, ProjectTask, ProjectIssue
+    DeliveryNoteForm, TestingForm, CommissioningForm, HandoverForm, ProjectTask, ProjectIssue, WhatsAppMessage
 )
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -26,6 +26,9 @@ def dashboard():
     open_issues = ProjectIssue.query.filter(ProjectIssue.status.notin_(["Resolved", "Closed"])).count()
     critical_issues = ProjectIssue.query.filter(ProjectIssue.severity == "Critical", ProjectIssue.status.notin_(["Resolved", "Closed"])).count()
     upcoming_tasks = ProjectTask.query.filter(ProjectTask.status.notin_(["Completed", "Cancelled"])).order_by(ProjectTask.due_date.asc().nullslast()).limit(8).all()
+    whatsapp_unread = WhatsAppMessage.query.filter_by(direction="Inbound", status="Received").count()
+    whatsapp_failed = WhatsAppMessage.query.filter_by(status="Failed").count()
+    whatsapp_total = WhatsAppMessage.query.count()
     return render_template(
         "dashboard/dashboard.html",
         total_projects=total_projects,
@@ -43,4 +46,7 @@ def dashboard():
         open_issues=open_issues,
         critical_issues=critical_issues,
         upcoming_tasks=upcoming_tasks,
+        whatsapp_unread=whatsapp_unread,
+        whatsapp_failed=whatsapp_failed,
+        whatsapp_total=whatsapp_total,
     )

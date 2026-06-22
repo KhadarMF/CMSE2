@@ -154,12 +154,13 @@ def create_app():
     def inject_notification_badge():
         try:
             from flask_login import current_user
-            from app.models import SystemNotification
+            from app.models import SystemNotification, WhatsAppMessage
             if current_user.is_authenticated:
                 count = SystemNotification.query.filter(SystemNotification.status == "Unread").filter((SystemNotification.target_user_id == current_user.id) | (SystemNotification.target_user_id == None)).count()
-                return {"unread_notification_count": count}
+                whatsapp_unread = WhatsAppMessage.query.filter_by(direction="Inbound", status="Received").count()
+                return {"unread_notification_count": count, "whatsapp_unread_count": whatsapp_unread}
         except Exception:
             pass
-        return {"unread_notification_count": 0}
+        return {"unread_notification_count": 0, "whatsapp_unread_count": 0}
 
     return app
