@@ -54,3 +54,184 @@ body { background: linear-gradient(180deg, #fff7ed 0%, #f8fafc 180px); }
 @media print { .global-action-toolbar, .no-print, nav { display:none!important; } body { background:#fff!important; } }
 
 .ai-response{white-space:pre-wrap;font-family:inherit;background:#fff7ed;border-left:4px solid #f97316;padding:12px;border-radius:10px;}
+
+/* Phase 17A.1 - Navigation & UI Redesign */
+:root{
+    --cmse-sidebar-width: 288px;
+    --cmse-bg: #f5f7fb;
+    --cmse-card: #ffffff;
+    --cmse-text: #111827;
+    --cmse-muted: #6b7280;
+    --cmse-border: #e5e7eb;
+    --cmse-dark: #0f172a;
+    --cmse-dark-2: #111827;
+    --cmse-accent: #f97316;
+    --cmse-primary: #0f766e;
+}
+.cmse-body{background:var(--cmse-bg); color:var(--cmse-text);}
+.cmse-shell{min-height:100vh; display:flex;}
+.cmse-sidebar{width:var(--cmse-sidebar-width); background:linear-gradient(180deg,var(--cmse-dark),var(--cmse-dark-2)); color:#fff; position:fixed; inset:0 auto 0 0; z-index:1040; overflow-y:auto; box-shadow:10px 0 30px rgba(15,23,42,.18);}
+.cmse-sidebar-header{height:64px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom:1px solid rgba(255,255,255,.08);}
+.cmse-brand{display:flex; align-items:center; gap:10px; color:#fff; text-decoration:none; font-weight:800; letter-spacing:.02em;}
+.cmse-brand-mark{display:inline-grid; place-items:center; width:34px; height:34px; border-radius:10px; background:var(--cmse-accent); color:#111827;}
+.cmse-brand-text{white-space:nowrap;}
+.cmse-sidebar-close{display:none; background:transparent; border:0; color:#fff; font-size:28px; line-height:1;}
+.cmse-nav{padding:12px;}
+.cmse-nav-link,.cmse-nav-toggle{width:100%; display:flex; align-items:center; gap:10px; border:0; background:transparent; color:#d1d5db; text-decoration:none; padding:11px 12px; border-radius:12px; font-size:.95rem; text-align:left;}
+.cmse-nav-link:hover,.cmse-nav-toggle:hover{background:rgba(255,255,255,.08); color:#fff;}
+.cmse-nav-section{margin:4px 0;}
+.cmse-nav-sub{padding:3px 0 7px 32px;}
+.cmse-nav-sub a{display:block; color:#cbd5e1; text-decoration:none; padding:7px 10px; border-radius:10px; font-size:.89rem;}
+.cmse-nav-sub a:hover{background:rgba(255,255,255,.08); color:#fff;}
+.cmse-main-wrap{margin-left:var(--cmse-sidebar-width); min-width:0; flex:1; display:flex; flex-direction:column;}
+.cmse-topbar{height:64px; position:sticky; top:0; z-index:1020; background:rgba(255,255,255,.92); backdrop-filter:blur(10px); border-bottom:1px solid var(--cmse-border); display:flex; align-items:center; justify-content:space-between; padding:0 20px; gap:16px;}
+.cmse-top-brand{font-weight:800; color:var(--cmse-dark); text-decoration:none; white-space:nowrap;}
+.cmse-icon-btn{border:1px solid var(--cmse-border);}
+.cmse-search{flex:1; max-width:720px; align-items:center; gap:8px; background:#f3f4f6; border:1px solid var(--cmse-border); border-radius:999px; padding:7px 12px;}
+.cmse-search input{border:0; outline:0; background:transparent; width:100%; min-width:160px;}
+.cmse-kbd{font-size:.72rem; color:var(--cmse-muted); border:1px solid #d1d5db; border-radius:6px; padding:1px 6px; background:white;}
+.cmse-top-actions{display:flex; align-items:center; gap:8px;}
+.cmse-content{padding:18px 22px 32px;}
+.cmse-breadcrumb-row{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;}
+.cmse-breadcrumb{display:flex; align-items:center; gap:8px; color:var(--cmse-muted); font-size:.88rem;}
+.cmse-breadcrumb a{color:var(--cmse-primary); text-decoration:none; font-weight:600;}
+.card{border:1px solid var(--cmse-border); border-radius:16px;}
+.btn{border-radius:10px;}
+.table{vertical-align:middle;}
+.badge{border-radius:999px;}
+.cmse-sidebar-backdrop{display:none;}
+@media (max-width: 991.98px){
+    .cmse-sidebar{transform:translateX(-105%); transition:transform .2s ease;}
+    body.cmse-sidebar-open .cmse-sidebar{transform:translateX(0);}
+    .cmse-sidebar-close{display:block;}
+    .cmse-main-wrap{margin-left:0;}
+    .cmse-sidebar-backdrop{position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:1030;}
+    body.cmse-sidebar-open .cmse-sidebar-backdrop{display:block;}
+    .cmse-topbar{padding:0 12px;}
+    .cmse-content{padding:14px 12px 24px;}
+    .cmse-breadcrumb-row{align-items:flex-start; flex-direction:column;}
+}
+@media print{
+    .no-print,.cmse-sidebar,.cmse-topbar,.cmse-sidebar-backdrop,.cmse-breadcrumb-row{display:none!important;}
+    .cmse-main-wrap{margin-left:0!important;}
+    .cmse-content{padding:0!important;}
+}
+
+/* Phase 17A.2 - Menu Reorganization & Navigation UX */
+.cmse-sidebar-tools{padding:12px 12px 4px;border-bottom:1px solid rgba(255,255,255,.06);}
+.cmse-sidebar-tools .form-control{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:10px;}
+.cmse-sidebar-tools .form-control::placeholder{color:#94a3b8;}
+.cmse-nav-toggle{justify-content:flex-start;position:relative;}
+.cmse-nav-toggle::after{content:'›';margin-left:auto;transform:rotate(90deg);opacity:.65;transition:transform .18s ease;}
+.cmse-nav-toggle.collapsed::after{transform:rotate(0deg);}
+.cmse-nav-sub a{position:relative;border-left:2px solid transparent;}
+.cmse-nav-sub a.active{background:rgba(249,115,22,.18);color:#fff;border-left-color:var(--cmse-accent);font-weight:700;}
+.cmse-nav-link.active{background:rgba(249,115,22,.18);color:#fff;}
+.cmse-dynamic-block{border-top:1px solid rgba(255,255,255,.08);padding-top:6px;margin-top:8px;}
+.cmse-dynamic-list a{font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cmse-mini-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#f97316;color:#fff;font-size:.72rem;margin-left:6px;}
+.cmse-notification-btn{font-weight:700;}
+.cmse-user-btn{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.min-w-0{min-width:0;}
+.cmse-top-actions{min-width:0;}
+.cmse-content .card{box-shadow:0 8px 28px rgba(15,23,42,.06);}
+.cmse-content .card-header{border-radius:16px 16px 0 0!important;}
+@media (max-width: 575.98px){
+    .cmse-top-brand{max-width:130px;overflow:hidden;text-overflow:ellipsis;}
+    .cmse-top-actions .btn{padding:.25rem .45rem;font-size:.78rem;}
+    .cmse-user-btn{max-width:92px;}
+}
+
+/* Phase 17A.3A - Tabbed Workspace & Window Manager */
+.cmse-workspace-tabs{
+    position:sticky;
+    top:64px;
+    z-index:1015;
+    background:#fff;
+    border-bottom:1px solid var(--cmse-border);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:7px 14px 7px 20px;
+    box-shadow:0 8px 18px rgba(15,23,42,.04);
+}
+.cmse-tabs-scroll{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    overflow-x:auto;
+    min-width:0;
+    flex:1;
+    scrollbar-width:thin;
+}
+.cmse-workspace-tab{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    max-width:220px;
+    border:1px solid #dbe3ea;
+    background:#f8fafc;
+    border-radius:999px;
+    padding:4px 5px 4px 11px;
+    flex:0 0 auto;
+}
+.cmse-workspace-tab.active{
+    background:#fff7ed;
+    border-color:#fdba74;
+    box-shadow:0 4px 14px rgba(249,115,22,.14);
+}
+.cmse-workspace-tab a{
+    color:#334155;
+    text-decoration:none;
+    font-size:.84rem;
+    font-weight:650;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    min-width:0;
+}
+.cmse-workspace-tab.active a{color:#9a3412;}
+.cmse-tab-close{
+    border:0;
+    background:transparent;
+    color:#64748b;
+    border-radius:999px;
+    width:22px;
+    height:22px;
+    display:inline-grid;
+    place-items:center;
+    line-height:1;
+    font-size:1rem;
+}
+.cmse-tab-close:hover{background:#fee2e2;color:#991b1b;}
+.cmse-tabs-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto;}
+.cmse-window-dropdown{width:280px;max-height:420px;overflow:auto;padding:8px;}
+.cmse-window-dropdown-head{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-weight:800;padding:4px 8px 7px;}
+.cmse-window-row{display:flex;align-items:center;justify-content:space-between;gap:6px;border-radius:10px;}
+.cmse-window-row.active{background:#fff7ed;}
+.cmse-window-row a{display:block;flex:1;min-width:0;padding:8px 8px;color:#334155;text-decoration:none;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cmse-window-row.active a{color:#9a3412;font-weight:800;}
+.cmse-window-row button{border:0;background:transparent;border-radius:999px;width:24px;height:24px;color:#64748b;}
+.cmse-window-row button:hover{background:#fee2e2;color:#991b1b;}
+@media (max-width: 991.98px){
+    .cmse-workspace-tabs{top:64px;padding:7px 10px;}
+    .cmse-tabs-actions{display:none;}
+    .cmse-window-menu{display:none;}
+}
+@media print{
+    .cmse-workspace-tabs{display:none!important;}
+}
+
+/* Phase 17A.3B - Smart Workspace */
+.cmse-workspace-tab.pinned{border-color:#93c5fd;background:#eff6ff;}
+.cmse-workspace-tab.dirty{border-style:dashed;}
+.cmse-workspace-tab.dirty a{font-style:italic;}
+.cmse-tab-pin{
+    border:0;background:transparent;color:#64748b;border-radius:999px;width:22px;height:22px;
+    display:inline-grid;place-items:center;line-height:1;font-size:.82rem;padding:0;
+}
+.cmse-tab-pin:hover{background:#dbeafe;color:#1d4ed8;}
+.cmse-workspace-tab.pinned .cmse-tab-close{opacity:.45;}
+.cmse-window-row.pinned{background:#eff6ff;}
+.cmse-window-row.dirty a{font-style:italic;}
+.cmse-window-row.dirty::before{content:'•';color:#f97316;font-weight:900;padding-left:6px;}
