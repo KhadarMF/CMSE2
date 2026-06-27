@@ -5,7 +5,8 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import (
     Customer, Employee, Team, TeamMember, Project, ProjectTeamAssignment,
-    ProjectEmployeeAssignment, Branch, Department, User,
+    ProjectEmployeeAssignment, Branch, Department, User, SalesInquiry,
+    SalesQuotation, SupportTicket, WarrantyRegistration, WhatsAppMessage, Document,
     EMPLOYEE_STATUSES, EMPLOYEE_TYPES, TEAM_STATUSES, PROJECT_WORK_STATUSES
 )
 from app.permissions import can_manage_users, can_create_project
@@ -39,6 +40,80 @@ def customers():
     customers = query.order_by(Customer.customer_name.asc()).all()
     return render_template("master/customers.html", customers=customers, q=q)
 
+
+
+def _phone_suffix(phone):
+    digits = ''.join(ch for ch in (phone or '') if ch.isdigit())
+    return digits[-7:] if len(digits) >= 7 else digits
+
+def _customer_360_context(customer):
+    name = customer.customer_name
+    phone_suffix = _phone_suffix(customer.phone)
+
+    projects = Project.query.filter(Project.customer_name.ilike(name)).order_by(Project.created_at.desc()).limit(50).all()
+    inquiries = SalesInquiry.query.filter(
+        (SalesInquiry.customer_id == customer.id) | (SalesInquiry.customer_name.ilike(name))
+    ).order_by(SalesInquiry.created_at.desc()).limit(20).all()
+    quotations = SalesQuotation.query.filter(SalesQuotation.customer_name.ilike(name)).order_by(SalesQuotation.created_at.desc()).limit(50).all()
+    tickets = SupportTicket.query.filter(
+        (SupportTicket.customer_id == customer.id) | (SupportTicket.customer_name.ilike(name))
+    ).order_by(SupportTicket.created_at.desc()).limit(20).all()
+    warranties = WarrantyRegistration.query.filter(
+        (WarrantyRegistration.customer_id == customer.id) | (WarrantyRegistration.customer_name.ilike(name))
+    ).order_by(WarrantyRegistration.created_at.desc()).limit(20).all()
+
+    whatsapp_query = WhatsAppMessage.query
+    if phone_suffix:
+        whatsapp_query = whatsapp_query.filter(WhatsAppMessage.phone_number.contains(phone_suffix))
+    else:
+        whatsapp_query = whatsapp_query.filter(WhatsAppMessage.recipient_name.ilike(name))
+    whatsapp_messages = whatsapp_query.order_by(WhatsAppMessage.created_at.desc()).limit(30).all()
+
+    project_ids = [p.id for p in projects]
+    documents = Document.query.filter(Document.project_id.in_(project_ids)).order_by(Document.upload_date.desc()).limit(20).all() if project_ids else []
+
+    total_quotation_value = sum(float(getattr(q, 'total_amount', 0) or 0) for q in quotations)
+    open_quotations = [q for q in quotations if (q.status or '').lower() not in ['rejected', 'expired', 'converted to project']]
+    open_projects = [p for p in projects if (p.status or '').lower() not in ['completed', 'cancelled', 'closed']]
+    open_tickets = [t for t in tickets if (t.status or '').lower() not in ['resolved', 'closed', 'cancelled']]
+    active_warranties = [w for w in warranties if (w.status or '').lower() == 'active']
+
+    timeline = []
+    def add_timeline(label, title, when, url=None, status=None):
+        if when:
+            timeline.append({'label': label, 'title': title, 'when': when, 'url': url, 'status': status})
+    for q in quotations[:8]:
+        add_timeline('Quotation', f'{q.ref_no} - {q.project_type or "Quotation"}', q.created_at, url_for('sales.quotation_detail', quotation_id=q.id), q.status)
+    for p in projects[:8]:
+        add_timeline('Project', p.project_name, p.created_at, url_for('projects.detail', project_id=p.id), p.status)
+    for i in inquiries[:8]:
+        add_timeline('Inquiry', f'{i.ref_no} - {i.project_type or "Inquiry"}', i.created_at, url_for('sales.inquiry_detail', inquiry_id=i.id), i.status)
+    for t in tickets[:8]:
+        add_timeline('Service', f'{t.ref_no} - {t.issue_category or "Ticket"}', t.created_at, url_for('support.ticket_detail', ticket_id=t.id), t.status)
+    for m in whatsapp_messages[:8]:
+        add_timeline('WhatsApp', (m.message_body or m.template_name or 'WhatsApp message')[:80], m.created_at, None, m.status)
+    timeline = sorted(timeline, key=lambda x: x['when'], reverse=True)[:20]
+
+    return {
+        'projects': projects, 'inquiries': inquiries, 'quotations': quotations,
+        'tickets': tickets, 'warranties': warranties, 'whatsapp_messages': whatsapp_messages,
+        'documents': documents, 'timeline': timeline,
+        'summary': {
+            'quotation_count': len(quotations),
+            'quotation_value': total_quotation_value,
+            'open_quotations': len(open_quotations),
+            'project_count': len(projects),
+            'open_projects': len(open_projects),
+            'ticket_count': len(tickets),
+            'open_tickets': len(open_tickets),
+            'active_warranties': len(active_warranties),
+            'whatsapp_count': len(whatsapp_messages),
+            'document_count': len(documents),
+        },
+        'phone_suffix': phone_suffix,
+        'last_activity': timeline[0]['when'] if timeline else customer.created_at,
+    }
+
 @master_bp.route("/customers/create", methods=["GET", "POST"])
 @login_required
 def create_customer():
@@ -64,8 +139,16 @@ def create_customer():
         db.session.add(customer)
         db.session.commit()
         flash("Customer created successfully.", "success")
-        return redirect(url_for("master.customers"))
+        return redirect(url_for("master.customer_360", customer_id=customer.id))
     return render_template("master/customer_form.html", customer=None)
+
+
+@master_bp.route("/customers/<int:customer_id>")
+@login_required
+def customer_360(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    context = _customer_360_context(customer)
+    return render_template("master/customer_360.html", customer=customer, **context)
 
 @master_bp.route("/customers/<int:customer_id>/edit", methods=["GET", "POST"])
 @login_required
@@ -94,7 +177,7 @@ def edit_customer(customer_id):
             Project.query.filter_by(customer_name=old_name).update({"customer_name": new_name})
         db.session.commit()
         flash("Customer updated successfully.", "success")
-        return redirect(url_for("master.customers"))
+        return redirect(url_for("master.customer_360", customer_id=customer.id))
     return render_template("master/customer_form.html", customer=customer)
 
 @master_bp.route("/employees")

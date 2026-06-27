@@ -1,0 +1,5 @@
+<div class="card shadow-sm"><div class="card-body table-responsive">
+<table class="table table-hover align-middle"><thead><tr><th>Ref</th><th>Date</th><th>Source</th><th>Requirement</th><th>Status</th><th>Next Follow-up</th><th></th></tr></thead><tbody>
+{% for i in inquiries %}<tr><td class="fw-semibold">{{ i.ref_no }}</td><td>{{ i.inquiry_date or '' }}</td><td>{{ i.source or '' }}</td><td>{{ i.requirement_summary or i.project_type or '' }}</td><td><span class="badge bg-secondary">{{ i.status }}</span></td><td>{{ i.next_followup_date or '' }}</td><td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('sales.inquiry_detail', inquiry_id=i.id) }}">Open</a></td></tr>
+{% else %}<tr><td colspan="7" class="text-muted">No inquiries found.</td></tr>{% endfor %}
+</tbody></table></div></div>

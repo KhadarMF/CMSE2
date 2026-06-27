@@ -1,0 +1,3 @@
+<div class="card shadow-sm"><div class="card-body table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Title</th><th>Type</th><th>Project</th><th>Uploaded</th><th>Status</th></tr></thead><tbody>
+{% for d in documents %}<tr><td class="fw-semibold">{{ d.document_title }}</td><td>{{ d.document_type }}</td><td>{{ d.project.project_name if d.project else '' }}</td><td>{{ d.upload_date.strftime('%Y-%m-%d') if d.upload_date else '' }}</td><td>{{ d.approval_status }}</td></tr>{% else %}<tr><td colspan="5" class="text-muted">No documents found for this customer's projects.</td></tr>{% endfor %}
+</tbody></table></div></div>

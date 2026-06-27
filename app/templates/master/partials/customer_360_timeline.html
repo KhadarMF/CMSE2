@@ -1,0 +1,4 @@
+<div class="card shadow-sm"><div class="card-body"><div class="cmse-c360-timeline">
+{% for item in timeline %}<div class="cmse-c360-timeitem"><div class="cmse-c360-dot"></div><div><div class="small text-muted">{{ item.when.strftime('%Y-%m-%d %H:%M') if item.when else '' }} · {{ item.label }} {% if item.status %}· {{ item.status }}{% endif %}</div><div class="fw-semibold">{% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}</div></div></div>
+{% else %}<div class="text-muted">No timeline activity found.</div>{% endfor %}
+</div></div></div>

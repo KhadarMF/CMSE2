@@ -1,0 +1,5 @@
+<div class="card shadow-sm"><div class="card-body table-responsive">
+<table class="table table-hover align-middle"><thead><tr><th>Ref</th><th>Date</th><th>Project Type</th><th>Capacity</th><th>Status</th><th class="text-end">Amount</th><th></th></tr></thead><tbody>
+{% for q in quotations %}<tr><td class="fw-semibold">{{ q.ref_no }}</td><td>{{ q.quotation_date or '' }}</td><td>{{ q.project_type or '' }}</td><td>{{ q.capacity or '' }}</td><td><span class="badge bg-info text-dark">{{ q.status }}</span></td><td class="text-end">${{ "{:,.2f}".format(q.total_amount or 0) }}</td><td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('sales.quotation_detail', quotation_id=q.id) }}">Open</a></td></tr>
+{% else %}<tr><td colspan="7" class="text-muted">No quotations found.</td></tr>{% endfor %}
+</tbody></table></div></div>

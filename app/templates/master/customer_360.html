@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="cmse-c360 mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <div class="text-uppercase small text-muted fw-semibold">Master Data / Customer 360°</div>
+            <h2 class="fw-bold mb-0">{{ customer.customer_name }}</h2>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('master.customers') }}">← Customers List</a>
+            <a class="btn btn-dark btn-sm" href="{{ url_for('master.edit_customer', customer_id=customer.id) }}">Edit Customer</a>
+        </div>
+    </div>
+
+    <div class="cmse-c360-hero shadow-sm">
+        <div>
+            <div class="text-uppercase small opacity-75">Customer 360° Workspace</div>
+            <h2 class="fw-bold mb-1">{{ customer.customer_name }}</h2>
+            <div class="d-flex flex-wrap gap-3 small opacity-90">
+                <span>Contact: {{ customer.contact_person or '-' }}</span>
+                <span>Phone: {{ customer.phone or '-' }}</span>
+                <span>Email: {{ customer.email or '-' }}</span>
+                <span>Type: {{ customer.customer_type or '-' }}</span>
+                <span>Status: {{ 'Active' if customer.is_active else 'Inactive' }}</span>
+            </div>
+            {% if customer.address %}<div class="small opacity-90 mt-2">Address: {{ customer.address }}</div>{% endif %}
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-light btn-sm" href="{{ url_for('sales.create_quotation') }}?customer_name={{ customer.customer_name|urlencode }}">+ New Quotation</a>
+            <a class="btn btn-outline-light btn-sm" href="{{ url_for('projects.create_project') }}?customer_name={{ customer.customer_name|urlencode }}">+ New Project</a>
+            {% if customer.phone %}<a class="btn btn-warning btn-sm" href="{{ url_for('whatsapp.conversation_detail', phone=customer.phone) }}">WhatsApp</a>{% endif %}
+        </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-md-3"><div class="cmse-c360-stat"><span>Quotations</span><strong>{{ summary.quotation_count }}</strong><small>{{ summary.open_quotations }} open</small></div></div>
+        <div class="col-md-3"><div class="cmse-c360-stat"><span>Quotation Value</span><strong>${{ "{:,.2f}".format(summary.quotation_value) }}</strong><small>Total quoted</small></div></div>
+        <div class="col-md-3"><div class="cmse-c360-stat"><span>Projects</span><strong>{{ summary.project_count }}</strong><small>{{ summary.open_projects }} open</small></div></div>
+        <div class="col-md-3"><div class="cmse-c360-stat"><span>Service</span><strong>{{ summary.open_tickets }}</strong><small>{{ summary.ticket_count }} total tickets</small></div></div>
+    </div>
+    <div class="row g-3 mt-1">
+        <div class="col-md-3"><div class="cmse-c360-stat"><span>WhatsApp</span><strong>{{ summary.whatsapp_count }}</strong><small>matched by phone</small></div></div>
+        <div class="col-md-3"><div class="cmse-c360-stat"><span>Documents</span><strong>{{ summary.document_count }}</strong><small>project documents</small></div></div>
+        <div class="col-md-3"><div class="cmse-c360-stat"><span>Warranties</span><strong>{{ summary.active_warranties }}</strong><small>active warranties</small></div></div>
+        <div class="col-md-3"><div class="cmse-c360-stat"><span>Last Activity</span><strong class="fs-5">{{ last_activity.strftime('%Y-%m-%d') if last_activity else '-' }}</strong><small>recent ERP activity</small></div></div>
+    </div>
+
+    <ul class="nav nav-pills cmse-c360-tabs mt-4" id="customer360Tabs" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#c360-overview" type="button">Overview</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#c360-quotations" type="button">Quotations <span class="badge text-bg-light">{{ quotations|length }}</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#c360-projects" type="button">Projects <span class="badge text-bg-light">{{ projects|length }}</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#c360-inquiries" type="button">Inquiries <span class="badge text-bg-light">{{ inquiries|length }}</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#c360-whatsapp" type="button">WhatsApp <span class="badge text-bg-light">{{ whatsapp_messages|length }}</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#c360-service" type="button">Service <span class="badge text-bg-light">{{ tickets|length }}</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#c360-documents" type="button">Documents <span class="badge text-bg-light">{{ documents|length }}</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#c360-timeline" type="button">Timeline</button></li>
+    </ul>
+
+    <div class="tab-content mt-3">
+        <div class="tab-pane fade show active" id="c360-overview">
+            <div class="row g-3">
+                <div class="col-lg-8">
+                    <div class="card shadow-sm"><div class="card-header fw-semibold">Customer Information</div><div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6"><div class="text-muted small">Customer Name</div><div class="fw-semibold">{{ customer.customer_name }}</div></div>
+                            <div class="col-md-6"><div class="text-muted small">Contact Person</div><div>{{ customer.contact_person or '-' }}</div></div>
+                            <div class="col-md-6"><div class="text-muted small">Phone</div><div>{{ customer.phone or '-' }}</div></div>
+                            <div class="col-md-6"><div class="text-muted small">Email</div><div>{{ customer.email or '-' }}</div></div>
+                            <div class="col-md-6"><div class="text-muted small">Customer Type</div><div>{{ customer.customer_type or '-' }}</div></div>
+                            <div class="col-md-6"><div class="text-muted small">Created</div><div>{{ customer.created_at.strftime('%Y-%m-%d') if customer.created_at else '-' }}</div></div>
+                            <div class="col-md-12"><div class="text-muted small">Address</div><div>{{ customer.address or '-' }}</div></div>
+                            <div class="col-md-12"><div class="text-muted small">Remarks</div><div>{{ customer.remarks or '-' }}</div></div>
+                        </div>
+                    </div></div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card shadow-sm"><div class="card-header fw-semibold">Quick Actions</div><div class="card-body d-grid gap-2">
+                        <a class="btn btn-outline-primary" href="{{ url_for('sales.create_quotation') }}?customer_name={{ customer.customer_name|urlencode }}">Create Quotation</a>
+                        <a class="btn btn-outline-primary" href="{{ url_for('projects.create_project') }}?customer_name={{ customer.customer_name|urlencode }}">Create Project</a>
+                        {% if customer.phone %}<a class="btn btn-outline-success" href="{{ url_for('whatsapp.conversation_detail', phone=customer.phone) }}">Open WhatsApp Conversation</a>{% endif %}
+                        <a class="btn btn-outline-dark" href="{{ url_for('reports.customer_report_detail', customer_name=customer.customer_name) }}">Customer Report</a>
+                    </div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="c360-quotations">{% include "master/partials/customer_360_quotations.html" %}</div>
+        <div class="tab-pane fade" id="c360-projects">{% include "master/partials/customer_360_projects.html" %}</div>
+        <div class="tab-pane fade" id="c360-inquiries">{% include "master/partials/customer_360_inquiries.html" %}</div>
+        <div class="tab-pane fade" id="c360-whatsapp">{% include "master/partials/customer_360_whatsapp.html" %}</div>
+        <div class="tab-pane fade" id="c360-service">{% include "master/partials/customer_360_service.html" %}</div>
+        <div class="tab-pane fade" id="c360-documents">{% include "master/partials/customer_360_documents.html" %}</div>
+        <div class="tab-pane fade" id="c360-timeline">{% include "master/partials/customer_360_timeline.html" %}</div>
+    </div>
+</div>
+{% endblock %}
