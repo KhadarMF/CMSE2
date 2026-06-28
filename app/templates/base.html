@@ -247,12 +247,23 @@
 
     function getStore(key){ try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch(e){ return []; } }
     function setStore(key, value){ localStorage.setItem(key, JSON.stringify(value.slice(0, 8))); }
+    function cmseIsAuthUrl(url){
+        try { return new URL(url, window.location.origin).pathname.indexOf('/auth/') === 0; }
+        catch(e) { return (url || '').indexOf('/auth/') > -1; }
+    }
+    function cmseCleanAuthWorkspaceItems(){
+        ['cmse_workspace_tabs','cmse_recent_pages','cmse_favorites','cmse_closed_tabs'].forEach(function(key){
+            const clean = getStore(key).filter(function(item){ return item && item.url && !cmseIsAuthUrl(item.url); });
+            localStorage.setItem(key, JSON.stringify(clean));
+        });
+    }
+    cmseCleanAuthWorkspaceItems();
     function uniqueItems(items){
         const seen = new Set();
         return items.filter(function(item){ if (!item || !item.url || seen.has(item.url)) return false; seen.add(item.url); return true; });
     }
     function saveRecent(item){
-        if (!item || !item.url || item.url.indexOf('/logout') > -1) return;
+        if (!item || !item.url || item.url.indexOf('/logout') > -1 || cmseIsAuthUrl(item.url)) return;
         const items = uniqueItems([item].concat(getStore('cmse_recent_pages')));
         setStore('cmse_recent_pages', items);
         renderRecent();
@@ -396,7 +407,7 @@
     function addCurrentTab(){
         if (!tabWrap || !tabsEl) return;
         const item = currentWorkspaceItem();
-        if (!item.url || item.url.indexOf('/logout') > -1 || item.url.indexOf('/auth/') > -1) return;
+        if (!item.url || item.url.indexOf('/logout') > -1 || cmseIsAuthUrl(item.url)) return;
         let items = getTabs().filter(function(i){ return (i.key || normalizeUrl(i.url)) !== item.key; });
         if (isPinned(item.key)) items.push(item); else items.unshift(item);
         saveTabs(items);
