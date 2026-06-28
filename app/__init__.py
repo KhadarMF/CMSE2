@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from flask import Flask
+from flask import Flask, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from dotenv import load_dotenv
@@ -28,6 +28,13 @@ def create_app():
     app = Flask(__name__)
 
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-secret-key")
+    # Phase 17B.1E Security Hardening: use a new session cookie name to invalidate
+    # any browser cookies created by the unsafe 17B.1C/17B.1D builds.
+    app.config["SESSION_COOKIE_NAME"] = os.environ.get("SESSION_COOKIE_NAME", "cmse_erp_session_v17b1e")
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    if os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"):
+        app.config["SESSION_COOKIE_SECURE"] = True
     app.config["SQLALCHEMY_DATABASE_URI"] = normalize_database_url(os.environ.get("DATABASE_URL", "sqlite:///solar_documents.db"))
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -106,6 +113,34 @@ def create_app():
     app.register_blueprint(production_bp)
     app.register_blueprint(ai_bp)
     app.register_blueprint(whatsapp_bp)
+
+    # Phase 17B.1E Security Hardening: strict login gate.
+    # This is a second safety net in addition to @login_required and the
+    # permission enforcer. Internal ERP pages must never be reachable unless
+    # the user is authenticated. Public endpoints are intentionally limited.
+    PUBLIC_ENDPOINTS = {
+        "auth.home", "auth.login", "auth.logout",
+        "health.health",
+        "whatsapp.webhook_verify", "whatsapp.webhook_receive",
+        "sales.public_quotation_short", "sales.public_quotation_short_pdf",
+        "sales.public_quotation",
+    }
+
+    @app.before_request
+    def enforce_authentication_gate():
+        endpoint = request.endpoint or ""
+        if endpoint == "static" or endpoint.startswith("static"):
+            return None
+        if endpoint in PUBLIC_ENDPOINTS:
+            return None
+        try:
+            from flask_login import current_user
+            if not current_user.is_authenticated:
+                flash("Please login to continue.", "warning")
+                return redirect(url_for("auth.login", next=request.full_path if request.query_string else request.path))
+        except Exception:
+            return redirect(url_for("auth.login"))
+        return None
 
     from app.permission_enforcer import register_permission_enforcer
     register_permission_enforcer(app)
