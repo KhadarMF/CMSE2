@@ -171,7 +171,16 @@ ACTION_WORDS = {
 }
 
 READ_ONLY_ENDPOINTS = {"dashboard.dashboard"}
-PUBLIC_PREFIXES = ("static", "auth", "health", "whatsapp.webhook_verify", "whatsapp.webhook_receive")
+PUBLIC_PREFIXES = (
+    "static",
+    "auth",
+    "health",
+    "whatsapp.webhook_verify",
+    "whatsapp.webhook_receive",
+    "sales.public_quotation_short",
+    "sales.public_quotation_short_pdf",
+    "sales.public_quotation",
+)
 
 
 def action_for_endpoint(endpoint, method):
@@ -193,10 +202,17 @@ def register_permission_enforcer(app):
         if not endpoint:
             return None
         blueprint = endpoint.split(".")[0]
+        # Phase 17B.1D Security Hotfix:
+        # Authentication is enforced globally here as a safety net.
+        # Some routes may accidentally miss @login_required, so no internal ERP
+        # endpoint should be reachable unless the user is authenticated.
+        # Public endpoints are limited to auth pages, static assets, health checks,
+        # WhatsApp webhook, and signed public quotation links.
         if endpoint.startswith(PUBLIC_PREFIXES):
             return None
         if not current_user.is_authenticated:
-            return None
+            flash("Please login to continue.", "warning")
+            return redirect(url_for("auth.login", next=request.url))
         if str(getattr(current_user, "role", "") or "").strip().lower() == "admin":
             return None
         if endpoint in READ_ONLY_ENDPOINTS:
