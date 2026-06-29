@@ -1,4 +1,4 @@
-from flask import request, redirect, url_for, flash
+from flask import request, redirect, url_for, flash, session
 from flask_login import current_user
 from app.permissions import can_access_module
 
@@ -220,7 +220,7 @@ def register_permission_enforcer(app):
         # WhatsApp webhook, and signed public quotation links.
         if endpoint.startswith(PUBLIC_PREFIXES):
             return None
-        if not current_user.is_authenticated:
+        if (not current_user.is_authenticated) or (session.get("cmse_logged_in") is not True):
             flash("Please login to continue.", "warning")
             return redirect(url_for("auth.login", next=request.url))
         if str(getattr(current_user, "role", "") or "").strip().lower() == "admin":

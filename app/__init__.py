@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
-from flask import Flask, request, redirect, url_for, flash
+from flask import Flask, request, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
+from flask_login import LoginManager, logout_user
 from dotenv import load_dotenv
 
 db = SQLAlchemy()
@@ -135,10 +135,22 @@ def create_app():
             return None
         try:
             from flask_login import current_user
-            if not current_user.is_authenticated:
+            # Phase 17B.2A Security Fix:
+            # Flask-Login cookies from old unsafe builds must not be trusted by themselves.
+            # A fresh explicit login sets session["cmse_logged_in"] = True.
+            if (not current_user.is_authenticated) or (session.get("cmse_logged_in") is not True):
+                try:
+                    logout_user()
+                    session.clear()
+                except Exception:
+                    pass
                 flash("Please login to continue.", "warning")
                 return redirect(url_for("auth.login", next=request.full_path if request.query_string else request.path))
         except Exception:
+            try:
+                session.clear()
+            except Exception:
+                pass
             return redirect(url_for("auth.login"))
         return None
 
