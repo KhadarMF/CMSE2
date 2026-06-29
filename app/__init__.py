@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
-from flask import Flask, request, redirect, url_for, flash, session
+from flask import Flask, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, logout_user
+from flask_login import LoginManager
 from dotenv import load_dotenv
 
 db = SQLAlchemy()
@@ -30,7 +30,7 @@ def create_app():
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-secret-key")
     # Phase 17B.1E Security Hardening: use a new session cookie name to invalidate
     # any browser cookies created by the unsafe 17B.1C/17B.1D builds.
-    app.config["SESSION_COOKIE_NAME"] = os.environ.get("SESSION_COOKIE_NAME", "cmse_erp_session_v17b1e")
+    app.config["SESSION_COOKIE_NAME"] = os.environ.get("SESSION_COOKIE_NAME", "cmse_erp_session_v17b2b")
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     if os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"):
@@ -135,22 +135,10 @@ def create_app():
             return None
         try:
             from flask_login import current_user
-            # Phase 17B.2A Security Fix:
-            # Flask-Login cookies from old unsafe builds must not be trusted by themselves.
-            # A fresh explicit login sets session["cmse_logged_in"] = True.
-            if (not current_user.is_authenticated) or (session.get("cmse_logged_in") is not True):
-                try:
-                    logout_user()
-                    session.clear()
-                except Exception:
-                    pass
+            if not current_user.is_authenticated:
                 flash("Please login to continue.", "warning")
                 return redirect(url_for("auth.login", next=request.full_path if request.query_string else request.path))
         except Exception:
-            try:
-                session.clear()
-            except Exception:
-                pass
             return redirect(url_for("auth.login"))
         return None
 
