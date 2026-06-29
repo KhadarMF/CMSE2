@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="fw-bold">Permission Inspector</h2>
+    <p class="text-muted mb-0">View effective permissions exactly as the ERP route/menu engine sees them.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin.form_permissions', user_id=selected_user.id if selected_user else None) }}">Edit Permissions</a>
+</div>
+<form method="get" class="card mb-3"><div class="card-body row g-2 align-items-end">
+  <div class="col-md-6"><label class="form-label">Select User</label><select name="user_id" class="form-select">{% for u in users %}<option value="{{ u.id }}" {% if selected_user and selected_user.id==u.id %}selected{% endif %}>{{ u.full_name }} - {{ u.role }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><button class="btn btn-primary w-100">Inspect</button></div>
+</div></form>
+{% if selected_user %}
+<div class="alert alert-light border"><strong>User:</strong> {{ selected_user.full_name }} &nbsp; <strong>Role:</strong> {{ selected_user.role }} &nbsp; <strong>Source:</strong> {% if selected_user.role == 'Admin' %}Admin Full Access{% elif manual_rows %}User/Form Permission Rows ({{ manual_rows }}){% else %}Role Template Fallback{% endif %}</div>
+<div class="table-responsive"><table class="table table-bordered table-sm align-middle">
+  <thead class="table-light"><tr><th>Module/Form</th><th>Key</th><th>Source</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Approve</th><th>Print/Export</th></tr></thead>
+  <tbody>
+  {% set ns = namespace(group='') %}
+  {% for r in matrix %}
+    {% if ns.group != r.group %}{% set ns.group = r.group %}<tr class="table-secondary"><td colspan="9"><strong>{{ r.group }}</strong></td></tr>{% endif %}
+    <tr>
+      <td>{{ r.label }}</td><td><code>{{ r.key }}</code></td><td>{{ r.source }}</td>
+      {% for a in ['view','create','edit','delete','approve','print_export'] %}<td class="text-center">{% if r[a] %}<span class="badge bg-success">✓</span>{% else %}<span class="badge bg-light text-muted">—</span>{% endif %}</td>{% endfor %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endif %}
+{% endblock %}
