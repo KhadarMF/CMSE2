@@ -24,7 +24,9 @@ def login():
         user = User.query.filter_by(email=email).first()
 
         if user and user.is_active and check_password_hash(user.password_hash, password):
+            session.clear()
             login_user(user, remember=False, fresh=True)
+            session["cmse_security_version"] = "17b2c"
             flash("Login successful.", "success")
             next_url = request.args.get("next")
             if next_url and next_url.startswith("/") and not next_url.startswith("//") and not next_url.startswith("/auth"):
