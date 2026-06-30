@@ -230,9 +230,13 @@
     const navLinks = Array.from(document.querySelectorAll('#cmseNav a[href]'));
     const realNavLinks = navLinks.filter(a => !a.closest('.cmse-dynamic-block'));
     let activeLink = null;
+    let activeScore = -1;
     realNavLinks.forEach(function(a){
         const linkPath = new URL(a.href, window.location.origin).pathname.replace(/\/$/, '') || '/';
-        if (linkPath === currentPath) activeLink = a;
+        let score = -1;
+        if (linkPath === currentPath) score = 10000 + linkPath.length;
+        else if (linkPath !== '/' && currentPath.startsWith(linkPath + '/')) score = linkPath.length;
+        if (score > activeScore) { activeScore = score; activeLink = a; }
     });
     if (activeLink) {
         activeLink.classList.add('active');
@@ -240,8 +244,14 @@
         const title = activeLink.dataset.navTitle || activeLink.textContent.trim();
         const crumb = document.getElementById('cmseBreadcrumbCurrent');
         if (crumb) crumb.textContent = group && group !== 'Dashboard' ? group + ' / ' + title : title;
-        const section = activeLink.closest('.collapse');
-        if (section && window.bootstrap) bootstrap.Collapse.getOrCreateInstance(section, {toggle:false}).show();
+        const section = activeLink.closest('.cmse-nav-section');
+        if (section) {
+            section.classList.add('active-section');
+            const toggle = section.querySelector('.cmse-nav-toggle');
+            if (toggle) toggle.classList.add('active-parent');
+        }
+        const collapse = activeLink.closest('.collapse');
+        if (collapse && window.bootstrap) bootstrap.Collapse.getOrCreateInstance(collapse, {toggle:false}).show();
         saveRecent({title:title, group:group, url:activeLink.href});
     }
 
