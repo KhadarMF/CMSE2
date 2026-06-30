@@ -3,13 +3,13 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
     <h2 class="fw-bold">User Access Permissions</h2>
-    <p class="text-muted mb-0">Unified mode: Role waa template; User/Form Permissions waa final access control. Menu, forms iyo routes hal engine ayay wada isticmaalaan.</p>
+    <p class="text-muted mb-0">Strict mode: user-ku wuxuu geli karaa oo keliya waxa halkan looga oggolaado. Wax aan la tick-gareyn = DENIED.</p>
   </div>
-  <div class="d-flex gap-2"><a class="btn btn-outline-secondary" href="{{ url_for('admin.permissions_overview') }}">Role Overview</a><a class="btn btn-outline-primary" href="{{ url_for('admin.permission_inspector', user_id=selected_user.id if selected_user else None) }}">Permission Inspector</a></div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin.permissions_overview') }}">Role Overview</a>
 </div>
 
 <div class="alert alert-warning">
-  <strong>Important:</strong> After saving/syncing permissions, user-ka ha <strong>Logout</strong> sameeyo kadibna ha soo galo mar kale. Direct URL access-na waa la xidhayaa haddii permission uusan haysan.
+  <strong>Important:</strong> After saving permissions, user-ka ha <strong>Logout</strong> sameeyo kadibna ha soo galo mar kale. Direct URL access-na waa la xidhayaa haddii permission uusan haysan.
 </div>
 
 <form method="get" class="card mb-3">
@@ -35,9 +35,7 @@
         Looma baahna in Admin permissions loo save-gareeyo.
       </div>
     {% endif %}
-    <div class="alert alert-light border small mb-3"><strong>Permission Source:</strong> {% if is_admin_user %}Admin Full Access{% elif has_manual_rows %}User/Form Permissions override the role template{% else %}No user rows yet; system falls back to role template until you save or sync{% endif %}</div>
     <div class="d-flex flex-wrap gap-2 mb-3 no-print" {% if is_admin_user %}style="display:none !important"{% endif %}>
-      <button name="action_type" value="sync_role" class="btn btn-sm btn-success" onclick="return confirm('Sync this user permissions from role template? Existing custom rows will be replaced.')">Sync Role → Permissions</button>
       <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllPerms()">Clear All</button>
       <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectTechnicianForms()">Technician Forms Only</button>
       <button type="button" class="btn btn-sm btn-outline-success" onclick="selectSupportUser()">Support User</button>
@@ -76,7 +74,7 @@
     {% if is_admin_user %}
       <button type="button" class="btn btn-success btn-lg" disabled>Admin Already Has Full Access</button>
     {% else %}
-      <button name="action_type" value="save" class="btn btn-success btn-lg">Save Permissions</button>
+      <button class="btn btn-success btn-lg">Save Permissions</button>
     {% endif %}
   </div>
 </form>

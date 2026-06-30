@@ -1,31 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mt-4 mb-3"><div><h2 class="fw-bold">Dashboard</h2><p class="text-muted mb-0">Project documents, online forms, and approvals overview</p></div></div>
-
-{# Phase 17B.2D: Dashboard Navigation Quick Launch - only active/clickable cards are shown. #}
-{% set is_admin = current_user.role == "Admin" %}
-{% set show_master = is_admin or can_access_module(current_user, 'customers', 'view') or can_access_module(current_user, 'employees', 'view') or can_access_module(current_user, 'teams', 'view') or can_access_module(current_user, 'material-items', 'view') %}
-{% set show_sales = is_admin or can_access_module(current_user, 'sales-crm', 'view') or can_access_module(current_user, 'customer-inquiry', 'view') or can_access_module(current_user, 'quotation', 'view') or can_access_module(current_user, 'whatsapp-integration', 'view') %}
-{% set show_projects = is_admin or can_access_module(current_user, 'projects', 'view') or can_access_module(current_user, 'project-tasks', 'view') or can_access_module(current_user, 'forms-home', 'view') or can_access_module(current_user, 'documents', 'view') %}
-{% set show_operations = is_admin or can_access_module(current_user, 'materials', 'view') or can_access_module(current_user, 'material-request', 'view') or can_access_module(current_user, 'service-ticket', 'view') or can_access_module(current_user, 'warranty', 'view') %}
-{% set show_reports = is_admin or can_access_module(current_user, 'reports', 'view') or can_access_module(current_user, 'customer-reports', 'view') or can_access_module(current_user, 'material-reports', 'view') %}
-{% set show_ai = is_admin or can_access_module(current_user, 'ai-assistant', 'view') or can_access_module(current_user, 'ai-crm-agent', 'view') or can_access_module(current_user, 'ai-project-manager', 'view') or can_access_module(current_user, 'ai-reports', 'view') %}
-{% set show_system = is_admin or can_access_module(current_user, 'notifications', 'view') or can_access_module(current_user, 'whatsapp-integration', 'view') or can_access_module(current_user, 'production-readiness', 'view') %}
-<div class="card mt-3 mb-3 shadow-sm border-0 cmse-dashboard-launch">
-  <div class="card-header bg-white fw-bold">Main Navigation / Meelaha Shaqada</div>
-  <div class="card-body">
-    <div class="row g-2">
-      {% if show_master %}<div class="col-md-3 col-lg-2"><a class="cmse-launch-card" href="{{ url_for('master.customers') }}"><span>🧾</span><strong>Master Data</strong><small>Customers first</small></a></div>{% endif %}
-      {% if show_sales %}<div class="col-md-3 col-lg-2"><a class="cmse-launch-card" href="{{ url_for('sales.dashboard') }}"><span>💼</span><strong>Sales</strong><small>CRM & Quotations</small></a></div>{% endif %}
-      {% if show_projects %}<div class="col-md-3 col-lg-2"><a class="cmse-launch-card" href="{{ url_for('projects.list_projects') }}"><span>🏗</span><strong>Projects</strong><small>Forms & Tasks</small></a></div>{% endif %}
-      {% if show_operations %}<div class="col-md-3 col-lg-2"><a class="cmse-launch-card" href="{{ url_for('materials.dashboard') }}"><span>📦</span><strong>Operations</strong><small>Inventory & Service</small></a></div>{% endif %}
-      {% if show_reports %}<div class="col-md-3 col-lg-2"><a class="cmse-launch-card" href="{{ url_for('reports.reports_home') }}"><span>📊</span><strong>Reports</strong><small>Management info</small></a></div>{% endif %}
-      {% if show_ai %}<div class="col-md-3 col-lg-2"><a class="cmse-launch-card" href="{{ url_for('ai.dashboard') }}"><span>🤖</span><strong>AI Center</strong><small>Assistants</small></a></div>{% endif %}
-      {% if show_system %}<div class="col-md-3 col-lg-2"><a class="cmse-launch-card" href="{{ url_for('notifications.list_notifications') if not is_admin else url_for('admin.settings_home') }}"><span>⚙️</span><strong>System</strong><small>Settings & Logs</small></a></div>{% endif %}
-    </div>
-  </div>
-</div>
-
 <div class="row g-3">
 <div class="col-md-2"><div class="stat-card"><span>Total Projects</span><strong>{{ total_projects }}</strong></div></div>
 <div class="col-md-2"><div class="stat-card"><span>Active Projects</span><strong>{{ active_projects }}</strong></div></div>
@@ -84,7 +59,7 @@
       {% if can_access_module(current_user, 'sales-crm', 'view') %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('sales.dashboard') }}">Sales CRM</a></div>{% endif %}
       {% if can_access_module(current_user, 'after-sales', 'view') %}<div class="col-md-3"><a class="btn btn-outline-success w-100" href="{{ url_for('support.dashboard') }}">Warranty & After-Sales</a></div>{% endif %}
       {% if can_access_module(current_user, 'notifications', 'view') %}<div class="col-md-3"><a class="btn btn-outline-warning w-100" href="{{ url_for('notifications.list_notifications') }}">Notifications Center</a></div>{% endif %}
-      {% if can_access_module(current_user, 'production-readiness', 'view') %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('production.readiness') }}">Production Readiness</a></div>{% endif %}
+      {% if can_access_module(current_user, 'production-readiness', 'view') %}<div class="col-md-3"><a class="btn btn-outline-dark w-100" href="{{ url_for('production.readiness') }}">Production Readiness</a></div>{% endif %}
     </div>
   </div>
 </div>

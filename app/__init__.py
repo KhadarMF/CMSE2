@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from flask import Flask, request, redirect, url_for, flash, session
+from flask import Flask, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from dotenv import load_dotenv
@@ -30,9 +30,7 @@ def create_app():
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-secret-key")
     # Phase 17B.1E Security Hardening: use a new session cookie name to invalidate
     # any browser cookies created by the unsafe 17B.1C/17B.1D builds.
-    # Phase 17B.2C: hard reset session cookie name. Do NOT allow Render env override here;
-    # an old SESSION_COOKIE_NAME env var can keep unsafe sessions alive.
-    app.config["SESSION_COOKIE_NAME"] = "cmse_erp_session_v17b2c"
+    app.config["SESSION_COOKIE_NAME"] = os.environ.get("SESSION_COOKIE_NAME", "cmse_erp_session_v17b1e")
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     if os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"):
@@ -68,21 +66,7 @@ def create_app():
 
     @login_manager.user_loader
     def load_user(user_id):
-        # Robust loader: invalid/stale session cookies must not crash the app.
-        try:
-            uid = int(user_id)
-        except (TypeError, ValueError):
-            return None
-        try:
-            return User.query.get(uid)
-        except Exception:
-            return None
-
-    @login_manager.unauthorized_handler
-    def handle_unauthorized():
-        session.clear()
-        flash("Please login to continue.", "warning")
-        return redirect(url_for("auth.login", next=request.path))
+        return User.query.get(int(user_id))
 
     from app.routes.auth_routes import auth_bp
     from app.routes.dashboard_routes import dashboard_bp
@@ -150,14 +134,11 @@ def create_app():
         if endpoint in PUBLIC_ENDPOINTS:
             return None
         try:
-            from flask_login import current_user, logout_user
-            if (not current_user.is_authenticated) or session.get("cmse_security_version") != "17b2c":
-                logout_user()
-                session.clear()
+            from flask_login import current_user
+            if not current_user.is_authenticated:
                 flash("Please login to continue.", "warning")
                 return redirect(url_for("auth.login", next=request.full_path if request.query_string else request.path))
         except Exception:
-            session.clear()
             return redirect(url_for("auth.login"))
         return None
 

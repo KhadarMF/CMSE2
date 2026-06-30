@@ -246,17 +246,17 @@ def can_manage_users(user):
 # ---------------------------------------------------------------------------
 PARENT_CHILD_PERMISSION_KEYS = {
     "forms-home": ["site-survey", "load-assessment", "daily-site-report", "delivery-note", "testing", "commissioning", "handover"],
-    "projects": ["projects", "project-workforce"],
-    "project-tasks": ["project-tasks"],
+    "projects": ["project-workforce"],
+    "project-tasks": [],
     "materials": ["material-items", "material-request", "material-issue", "material-return", "material-reports"],
     "sales-crm": ["customer-inquiry", "quotation", "quotation-items"],
     "after-sales": ["service-ticket", "warranty"],
     "reports": ["project-reports", "customer-reports", "form-reports", "material-reports"],
-    "customers": ["customers"],
-    "employees": ["employees"],
-    "teams": ["teams"],
-    "notifications": ["notifications", "notification-log", "sms-queue", "whatsapp-integration", "production-readiness"],
-    "ai-assistant": ["ai-assistant", "ai-project-report", "ai-quotation", "ai-stock", "ai-service-ticket-agent", "ai-crm-agent", "ai-project-manager", "ai-reports", "ai-logs", "ai-settings"],
+    "customers": [],
+    "employees": [],
+    "teams": [],
+    "notifications": ["notification-log", "sms-queue", "whatsapp-integration", "production-readiness"],
+    "ai-assistant": ["ai-project-report", "ai-quotation", "ai-stock", "ai-service-ticket-agent", "ai-crm-agent", "ai-project-manager", "ai-reports", "ai-logs", "ai-settings"],
 }
 
 FORM_CHILD_KEYS = ["site-survey", "load-assessment", "daily-site-report", "delivery-note", "testing", "commissioning", "handover"]
@@ -380,237 +380,17 @@ def can_access_module(user, key, action="view"):
     if _permission_allows(perm, action):
         return True
     if action == "view" and key in PARENT_CHILD_PERMISSION_KEYS:
-        for child_key in PARENT_CHILD_PERMISSION_KEYS[key]:
+        # Phase 17B.2F: safety guard. Parent containers must never call
+        # themselves or recurse through another parent. Only direct child
+        # permission rows can open the parent menu. This prevents the
+        # RecursionError/login failures seen in the experimental 17B.2 builds.
+        seen = {key}
+        for child_key in PARENT_CHILD_PERMISSION_KEYS.get(key, []):
+            if not child_key or child_key in seen:
+                continue
             if _perm_has_any(_get_perm(user, child_key)):
                 return True
     return False
-
-def can_manage_users(user):
-    return getattr(user, "is_authenticated", False) and _is_admin_user(user)
-
-# ---------------------------------------------------------------------------
-# Phase 17B.2 - Permissions Unification
-# Role permissions and form permissions now use one unified engine.
-# Admin full access remains automatic. Non-admin access is decided by:
-#   1) UserFormPermission rows if the user has any rows (final override), else
-#   2) Role permission template defaults, else denied.
-# Sync Role -> Form Permissions writes all template rows for the selected user.
-# ---------------------------------------------------------------------------
-ACTIONS = ("view", "create", "edit", "delete", "approve", "print_export")
-
-
-def _role_name(user_or_role):
-    role = user_or_role if isinstance(user_or_role, str) else getattr(user_or_role, "role", "")
-    return str(role or "").strip()
-
-
-def _role_template(role):
-    try:
-        from app.role_permissions import ROLE_PERMISSION_DEFAULTS
-        tpl = ROLE_PERMISSION_DEFAULTS.get(_role_name(role), {})
-        if tpl == "FULL_ACCESS":
-            return tpl
-        return tpl or {}
-    except Exception:
-        return {}
-
-
-def get_role_permission_template(role):
-    """Return a normalized permission template for a role."""
-    tpl = _role_template(role)
-    if tpl == "FULL_ACCESS":
-        return "FULL_ACCESS"
-    normalized = {}
-    for key, data in (tpl or {}).items():
-        normalized[key] = {a: bool(data.get(a, False)) for a in ACTIONS}
-    return normalized
-
-
-def _role_allows(role, key, action="view", _visited=None):
-    """Safe role permission lookup.
-
-    Phase 17B.2E fix:
-    The previous version recursively checked parent -> child permissions and could
-    enter an infinite loop when a parent listed itself as a child, for example
-    {"projects": ["projects", ...]}.  That caused Render 500 errors with
-    RecursionError.  This version tracks visited keys and skips self/cyclic
-    references.
-    """
-    if _visited is None:
-        _visited = set()
-    if key in _visited:
-        return False
-    _visited.add(key)
-
-    tpl = get_role_permission_template(role)
-    if tpl == "FULL_ACCESS":
-        return True
-
-    if action in ("print", "export"):
-        action = "print_export"
-
-    pdata = (tpl or {}).get(key)
-    if pdata:
-        if action == "view":
-            return any(bool(pdata.get(a, False)) for a in ACTIONS)
-        return bool(pdata.get(action, False))
-
-    # Parent modules are VIEW-only containers. Check children safely.
-    if action == "view" and key in PARENT_CHILD_PERMISSION_KEYS:
-        for child in PARENT_CHILD_PERMISSION_KEYS.get(key, []):
-            if child == key or child in _visited:
-                continue
-            if _role_allows(role, child, "view", _visited):
-                return True
-    return False
-
-
-def _user_has_permission_rows(user):
-    try:
-        from app.models import UserFormPermission
-        return UserFormPermission.query.filter_by(user_id=user.id).count() > 0
-    except Exception:
-        return False
-
-
-def can_access_module(user, key, action="view"):
-    """Final access decision used by menu, route guard and forms.
-
-    This is the single permission engine for the ERP.
-    """
-    if not getattr(user, "is_authenticated", False):
-        return False
-    if _is_admin_user(user):
-        return True
-    if key == "dashboard" and action == "view":
-        return True
-    if action in ("print", "export"):
-        action = "print_export"
-
-    # If admin has configured this user's form permissions, those rows are final.
-    if _user_has_permission_rows(user):
-        perm = _get_perm(user, key)
-        if _permission_allows(perm, action):
-            return True
-        if action == "view" and key in PARENT_CHILD_PERMISSION_KEYS:
-            return any(_perm_has_any(_get_perm(user, child)) for child in PARENT_CHILD_PERMISSION_KEYS[key])
-        return False
-
-    # Otherwise, use role defaults as a safe template fallback.
-    return _role_allows(getattr(user, "role", ""), key, action)
-
-
-def effective_permission_matrix(user):
-    """Return effective permissions for every known key for admin inspection."""
-    try:
-        from app.models import FORM_PERMISSION_KEYS
-    except Exception:
-        FORM_PERMISSION_KEYS = []
-    rows_exist = _user_has_permission_rows(user) if getattr(user, "id", None) else False
-    matrix = []
-    for item in FORM_PERMISSION_KEYS:
-        key, label = item[0], item[1]
-        group = item[2] if len(item) > 2 else "General"
-        matrix.append({
-            "key": key,
-            "label": label,
-            "group": group,
-            "source": "User Override" if rows_exist else "Role Template",
-            "view": can_access_module(user, key, "view"),
-            "create": can_access_module(user, key, "create"),
-            "edit": can_access_module(user, key, "edit"),
-            "delete": can_access_module(user, key, "delete"),
-            "approve": can_access_module(user, key, "approve"),
-            "print_export": can_access_module(user, key, "print_export"),
-        })
-    return matrix
-
-
-def sync_user_permissions_from_role(user, updated_by_id=None):
-    """Rewrite UserFormPermission rows from the user's role template.
-
-    Returns number of rows written. Admin users do not need rows.
-    """
-    from app import db
-    from app.models import UserFormPermission, FORM_PERMISSION_KEYS
-
-    if _is_admin_user(user):
-        UserFormPermission.query.filter_by(user_id=user.id).delete()
-        db.session.commit()
-        return 0
-
-    template = get_role_permission_template(getattr(user, "role", ""))
-    if template == "FULL_ACCESS":
-        UserFormPermission.query.filter_by(user_id=user.id).delete()
-        db.session.commit()
-        return 0
-
-    labels = {item[0]: item[1] for item in FORM_PERMISSION_KEYS}
-    UserFormPermission.query.filter_by(user_id=user.id).delete()
-    count = 0
-    for key, label in labels.items():
-        data = (template or {}).get(key, {})
-        perm = UserFormPermission(
-            user_id=user.id,
-            form_key=key,
-            form_label=label,
-            can_view=bool(data.get("view", False)),
-            can_create=bool(data.get("create", False)),
-            can_edit=bool(data.get("edit", False)),
-            can_delete=bool(data.get("delete", False)),
-            can_approve=bool(data.get("approve", False)),
-            can_print_export=bool(data.get("print_export", False)),
-            updated_by_id=updated_by_id,
-        )
-        db.session.add(perm)
-        count += 1
-    db.session.commit()
-    return count
-
-
-def has_any_permission(user, keys, action="view"):
-    return any(can_access_module(user, key, action) for key in keys)
-
-
-def allowed_permission_keys(user):
-    try:
-        from app.models import FORM_PERMISSION_KEYS
-        return [item[0] for item in FORM_PERMISSION_KEYS if can_access_module(user, item[0], "view")]
-    except Exception:
-        return []
-
-
-def allowed_form_keys(user, action="view"):
-    return [key for key in FORM_CHILD_KEYS if can_access_module(user, key, action)]
-
-
-def can_view_form(user, form_key):
-    return can_access_module(user, form_key, "view")
-
-
-def can_create_form(user, form_key):
-    return can_access_module(user, form_key, "create")
-
-
-def can_edit_form(user, form_key, entry=None):
-    return can_access_module(user, form_key, "edit")
-
-
-def can_delete_form(user):
-    return getattr(user, "is_authenticated", False) and _is_admin_user(user)
-
-
-def can_upload_document(user):
-    return can_access_module(user, "documents", "create")
-
-
-def can_review_document(user):
-    return can_access_module(user, "documents", "approve")
-
-
-def can_create_project(user):
-    return can_access_module(user, "projects", "create")
-
 
 def can_manage_users(user):
     return getattr(user, "is_authenticated", False) and _is_admin_user(user)

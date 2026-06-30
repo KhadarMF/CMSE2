@@ -244,39 +244,3 @@ body { background: linear-gradient(180deg, #fff7ed 0%, #f8fafc 180px); }
 .cmse-c360-stat small{color:#64748b}
 .cmse-c360-tabs{gap:6px;flex-wrap:wrap}.cmse-c360-tabs .nav-link{border-radius:999px;border:1px solid #e5e7eb;background:#fff;color:#334155}.cmse-c360-tabs .nav-link.active{background:#0f172a;color:#fff;border-color:#0f172a}.cmse-c360-message{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fff}.cmse-c360-message.inbound{border-left:4px solid #16a34a}.cmse-c360-message.outbound{border-left:4px solid #2563eb}.cmse-c360-timeline{position:relative;padding-left:6px}.cmse-c360-timeitem{display:flex;gap:12px;position:relative;padding:0 0 16px}.cmse-c360-dot{width:12px;height:12px;border-radius:50%;background:#2563eb;margin-top:5px;box-shadow:0 0 0 4px #dbeafe}.cmse-c360-timeitem:not(:last-child)::before{content:"";position:absolute;left:5px;top:20px;bottom:0;width:2px;background:#e5e7eb}
 @media (max-width:768px){.cmse-c360-hero{align-items:flex-start}.cmse-c360-stat{min-height:auto}}
-
-/* Phase 17B.2D - Menu Activation & Navigation Consistency */
-.cmse-nav-section.active-section > .cmse-nav-toggle,
-.cmse-nav-toggle.active-parent{
-    background:rgba(249,115,22,.12);
-    color:#fff;
-    font-weight:800;
-}
-.cmse-nav a[href], .cmse-launch-card{cursor:pointer;}
-.cmse-nav-sub a[aria-disabled="true"], .cmse-nav-sub a.disabled{pointer-events:none;opacity:.45;}
-.cmse-dashboard-launch .card-body{padding:14px;}
-.cmse-launch-card{
-    min-height:98px;
-    display:flex;
-    flex-direction:column;
-    justify-content:center;
-    gap:4px;
-    text-decoration:none;
-    color:#0f172a;
-    background:#fff;
-    border:1px solid #e5e7eb;
-    border-left:5px solid var(--cmse-accent);
-    border-radius:16px;
-    padding:14px 14px;
-    box-shadow:0 8px 22px rgba(15,23,42,.06);
-    transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-}
-.cmse-launch-card span{font-size:1.35rem;line-height:1;}
-.cmse-launch-card strong{font-size:.98rem;}
-.cmse-launch-card small{color:#64748b;}
-.cmse-launch-card:hover{
-    color:#7c2d12;
-    transform:translateY(-2px);
-    box-shadow:0 12px 28px rgba(249,115,22,.14);
-    border-color:#fdba74;
-}

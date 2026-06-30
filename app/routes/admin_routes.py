@@ -8,8 +8,7 @@ from app.models import Notification, Branch, Department, CompanyProfile, User, U
 from app.permissions import can_manage_users
 from app.settings import get_email_config, set_setting
 from app.notifications import send_email
-from app.role_permissions import ROLE_PERMISSION_SUMMARY, ROLE_PERMISSION_DEFAULTS
-from app.permissions import sync_user_permissions_from_role, get_role_permission_template, effective_permission_matrix
+from app.role_permissions import ROLE_PERMISSION_SUMMARY
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -111,7 +110,7 @@ def toggle_department(department_id):
 @login_required
 def permissions_overview():
     if not require_admin(): return redirect(url_for("dashboard.dashboard"))
-    return render_template("admin/permissions.html", permissions=ROLE_PERMISSION_SUMMARY, role_templates=ROLE_PERMISSION_DEFAULTS, forms=FORM_PERMISSION_KEYS)
+    return render_template("admin/permissions.html", permissions=ROLE_PERMISSION_SUMMARY)
 
 
 @admin_bp.route("/company", methods=["GET", "POST"])
@@ -148,25 +147,15 @@ def form_permissions():
     selected_user_id = request.args.get("user_id") or request.form.get("user_id") or (users[0].id if users else None)
     selected_user = User.query.get(selected_user_id) if selected_user_id else None
     if request.method == "POST" and selected_user:
-        action_type = request.form.get("action_type", "save")
-
-        if action_type == "sync_role":
-            synced_count = sync_user_permissions_from_role(selected_user, updated_by_id=current_user.id)
-            if selected_user.role == "Admin":
-                flash("Admin users always have FULL ACCESS. Manual permission rows were cleared.", "info")
-            else:
-                flash(f"Role permissions synced successfully for {selected_user.full_name} ({synced_count} rows). User must logout and login again.", "success")
-            return redirect(url_for("admin.form_permissions", user_id=selected_user.id))
-
-        # Phase 17B.2: Admin Full Access stays automatic and uneditable.
+        # Phase 15P: Admin has permanent full access and should not be restricted by the matrix.
+        # The matrix is only for non-admin users such as Technicians, Sales, Support, Managers, etc.
         if selected_user.role == "Admin":
             UserFormPermission.query.filter_by(user_id=selected_user.id).delete()
             db.session.commit()
             flash("Admin users always have FULL ACCESS. No manual permission rows are required for Admin.", "info")
             return redirect(url_for("admin.form_permissions", user_id=selected_user.id))
 
-        # Rebuild permissions cleanly. Empty rows are intentionally skipped; once a user
-        # has any manual rows, missing rows are treated as DENIED by the unified engine.
+        # Rebuild permissions cleanly to avoid stale/duplicate rows.
         UserFormPermission.query.filter_by(user_id=selected_user.id).delete()
         saved_count = 0
         for item in FORM_PERMISSION_KEYS:
@@ -192,16 +181,4 @@ def form_permissions():
     if selected_user:
         for p in UserFormPermission.query.filter_by(user_id=selected_user.id).all():
             existing[p.form_key] = p
-    return render_template("admin/form_permissions.html", users=users, selected_user=selected_user, forms=FORM_PERMISSION_KEYS, existing=existing, role_template=get_role_permission_template(selected_user.role) if selected_user else {}, has_manual_rows=bool(existing))
-
-
-@admin_bp.route("/permission-inspector")
-@login_required
-def permission_inspector():
-    if not require_admin(): return redirect(url_for("dashboard.dashboard"))
-    users = User.query.order_by(User.full_name.asc()).all()
-    selected_user_id = request.args.get("user_id") or (users[0].id if users else None)
-    selected_user = User.query.get(selected_user_id) if selected_user_id else None
-    matrix = effective_permission_matrix(selected_user) if selected_user else []
-    manual_rows = UserFormPermission.query.filter_by(user_id=selected_user.id).count() if selected_user else 0
-    return render_template("admin/permission_inspector.html", users=users, selected_user=selected_user, matrix=matrix, manual_rows=manual_rows)
+    return render_template("admin/form_permissions.html", users=users, selected_user=selected_user, forms=FORM_PERMISSION_KEYS, existing=existing)

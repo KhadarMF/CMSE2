@@ -49,8 +49,8 @@
                 <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navSales" aria-expanded="false"><span>💼</span><strong>Sales</strong></button>
                 <div id="navSales" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'sales-crm') %}<a href="{{ url_for('sales.dashboard') }}" data-nav-title="Sales Dashboard" data-nav-group="Sales">Sales Dashboard</a>{% endif %}
-                    {% if can_access_module(current_user, 'customer-inquiry') %}<a href="{{ url_for('sales.inquiries') }}" data-nav-title="Leads / Inquiries" data-nav-group="Sales">Leads / Inquiries</a>{% if can_access_module(current_user, 'customer-inquiry', 'create') %}<a href="{{ url_for('sales.create_inquiry') }}" data-nav-title="New Inquiry" data-nav-group="Sales">New Inquiry</a>{% endif %}{% endif %}
-                    {% if can_access_module(current_user, 'quotation') %}<a href="{{ url_for('sales.quotations') }}" data-nav-title="Quotations" data-nav-group="Sales">Quotations</a>{% if can_access_module(current_user, 'quotation', 'create') %}<a href="{{ url_for('sales.create_quotation') }}" data-nav-title="New Quotation" data-nav-group="Sales">New Quotation</a>{% endif %}{% endif %}
+                    {% if can_access_module(current_user, 'customer-inquiry') %}<a href="{{ url_for('sales.inquiries') }}" data-nav-title="Leads / Inquiries" data-nav-group="Sales">Leads / Inquiries</a><a href="{{ url_for('sales.create_inquiry') }}" data-nav-title="New Inquiry" data-nav-group="Sales">New Inquiry</a>{% endif %}
+                    {% if can_access_module(current_user, 'quotation') %}<a href="{{ url_for('sales.quotations') }}" data-nav-title="Quotations" data-nav-group="Sales">Quotations</a><a href="{{ url_for('sales.create_quotation') }}" data-nav-title="New Quotation" data-nav-group="Sales">New Quotation</a>{% endif %}
                     {% if can_access_module(current_user, 'quotation-items') %}<a href="{{ url_for('sales.quotation_items') }}" data-nav-title="Quotation Items" data-nav-group="Sales">Quotation Items</a>{% endif %}
                     {% if can_access_module(current_user, 'whatsapp-integration') or current_user.role == "Admin" %}<a href="{{ url_for('whatsapp.conversations') }}" data-nav-title="WhatsApp Inbox" data-nav-group="Sales">WhatsApp Inbox <span class="cmse-mini-badge">{{ whatsapp_unread_count }}</span></a>{% endif %}
                 </div>
@@ -76,13 +76,13 @@
                 <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navOperations" aria-expanded="false"><span>📦</span><strong>Operations</strong></button>
                 <div id="navOperations" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'materials') or can_access_module(current_user, 'material-items') or can_access_module(current_user, 'material-request') or can_access_module(current_user, 'material-issue') or can_access_module(current_user, 'material-return') or can_access_module(current_user, 'material-reports') %}<a href="{{ url_for('materials.dashboard') }}" data-nav-title="Inventory Dashboard" data-nav-group="Operations">Inventory Dashboard</a>{% endif %}
-                    {% if can_access_module(current_user, 'material-request') %}<a href="{{ url_for('materials.requests_list') }}" data-nav-title="Material Requests" data-nav-group="Operations">Material Requests</a>{% if can_access_module(current_user, 'material-request', 'create') %}<a href="{{ url_for('materials.create_request') }}" data-nav-title="New Material Request" data-nav-group="Operations">New Material Request</a>{% endif %}{% endif %}
+                    {% if can_access_module(current_user, 'material-request') %}<a href="{{ url_for('materials.requests_list') }}" data-nav-title="Material Requests" data-nav-group="Operations">Material Requests</a><a href="{{ url_for('materials.create_request') }}" data-nav-title="New Material Request" data-nav-group="Operations">New Material Request</a>{% endif %}
                     {% if can_access_module(current_user, 'material-issue') %}<a href="{{ url_for('materials.issues_list') }}" data-nav-title="Material Issues" data-nav-group="Operations">Material Issues</a>{% endif %}
-                    {% if can_access_module(current_user, 'material-return') %}<a href="{{ url_for('materials.returns_list') }}" data-nav-title="Material Returns" data-nav-group="Operations">Material Returns</a>{% if can_access_module(current_user, 'material-return', 'create') %}<a href="{{ url_for('materials.create_return') }}" data-nav-title="New Return" data-nav-group="Operations">New Return</a>{% endif %}{% endif %}
+                    {% if can_access_module(current_user, 'material-return') %}<a href="{{ url_for('materials.returns_list') }}" data-nav-title="Material Returns" data-nav-group="Operations">Material Returns</a><a href="{{ url_for('materials.create_return') }}" data-nav-title="New Return" data-nav-group="Operations">New Return</a>{% endif %}
                     {% if can_access_module(current_user, 'material-reports') %}<a href="{{ url_for('materials.material_reports') }}" data-nav-title="Inventory Reports" data-nav-group="Operations">Inventory Reports</a>{% endif %}
                     {% if can_access_module(current_user, 'after-sales') %}<a href="{{ url_for('support.dashboard') }}" data-nav-title="Service Dashboard" data-nav-group="Operations">Service Dashboard</a>{% endif %}
-                    {% if can_access_module(current_user, 'service-ticket') %}<a href="{{ url_for('support.tickets') }}" data-nav-title="Service Tickets" data-nav-group="Operations">Service Tickets</a>{% if can_access_module(current_user, 'service-ticket', 'create') %}<a href="{{ url_for('support.create_ticket') }}" data-nav-title="New Service Ticket" data-nav-group="Operations">New Service Ticket</a>{% endif %}{% endif %}
-                    {% if can_access_module(current_user, 'warranty') %}<a href="{{ url_for('support.warranties') }}" data-nav-title="Warranties" data-nav-group="Operations">Warranties</a>{% if can_access_module(current_user, 'warranty', 'create') %}<a href="{{ url_for('support.create_warranty') }}" data-nav-title="Register Warranty" data-nav-group="Operations">Register Warranty</a>{% endif %}{% endif %}
+                    {% if can_access_module(current_user, 'service-ticket') %}<a href="{{ url_for('support.tickets') }}" data-nav-title="Service Tickets" data-nav-group="Operations">Service Tickets</a><a href="{{ url_for('support.create_ticket') }}" data-nav-title="New Service Ticket" data-nav-group="Operations">New Service Ticket</a>{% endif %}
+                    {% if can_access_module(current_user, 'warranty') %}<a href="{{ url_for('support.warranties') }}" data-nav-title="Warranties" data-nav-group="Operations">Warranties</a><a href="{{ url_for('support.create_warranty') }}" data-nav-title="Register Warranty" data-nav-group="Operations">Register Warranty</a>{% endif %}
                 </div>
             </div>
             {% endif %}
@@ -122,7 +122,7 @@
                     {% if can_access_module(current_user, 'whatsapp-integration') %}<a href="{{ url_for('notifications.whatsapp_settings') }}" data-nav-title="WhatsApp API Setup" data-nav-group="System">WhatsApp API Setup</a>{% endif %}
                     {% if can_access_module(current_user, 'whatsapp-integration') or current_user.role == "Admin" %}<a href="{{ url_for('whatsapp.messages') }}" data-nav-title="WhatsApp Message Log" data-nav-group="System">WhatsApp Message Log</a><a href="{{ url_for('whatsapp.test_send') }}" data-nav-title="WhatsApp Test" data-nav-group="System">WhatsApp Test</a>{% endif %}
                     {% if can_access_module(current_user, 'production-readiness') %}<a href="{{ url_for('production.readiness') }}" data-nav-title="Production Readiness" data-nav-group="System">Production Readiness</a>{% endif %}
-                    {% if current_user.role == "Admin" %}<a href="{{ url_for('users.list_users') }}" data-nav-title="Users" data-nav-group="System">Users</a><a href="{{ url_for('admin.settings_home') }}" data-nav-title="Settings" data-nav-group="System">Settings</a><a href="{{ url_for('admin.company_profile') }}" data-nav-title="Company Profile" data-nav-group="System">Company Profile</a><a href="{{ url_for('admin.permissions_overview') }}" data-nav-title="Role Permissions" data-nav-group="System">Role Permissions</a><a href="{{ url_for('admin.form_permissions') }}" data-nav-title="Form Permissions" data-nav-group="System">Form Permissions</a><a href="{{ url_for('admin.permission_inspector') }}" data-nav-title="Permission Inspector" data-nav-group="System">Permission Inspector</a><a href="{{ url_for('activity.activity_log') }}" data-nav-title="Audit Logs" data-nav-group="System">Audit Logs</a><a href="{{ url_for('admin.backup_home') }}" data-nav-title="Backup" data-nav-group="System">Backup</a>{% endif %}
+                    {% if current_user.role == "Admin" %}<a href="{{ url_for('users.list_users') }}" data-nav-title="Users" data-nav-group="System">Users</a><a href="{{ url_for('admin.settings_home') }}" data-nav-title="Settings" data-nav-group="System">Settings</a><a href="{{ url_for('admin.company_profile') }}" data-nav-title="Company Profile" data-nav-group="System">Company Profile</a><a href="{{ url_for('admin.permissions_overview') }}" data-nav-title="Role Permissions" data-nav-group="System">Role Permissions</a><a href="{{ url_for('admin.form_permissions') }}" data-nav-title="Form Permissions" data-nav-group="System">Form Permissions</a><a href="{{ url_for('activity.activity_log') }}" data-nav-title="Audit Logs" data-nav-group="System">Audit Logs</a><a href="{{ url_for('admin.backup_home') }}" data-nav-title="Backup" data-nav-group="System">Backup</a>{% endif %}
                 </div>
             </div>
             {% endif %}
@@ -163,12 +163,12 @@
                 <div class="dropdown">
                     <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown">+ Create</button>
                     <ul class="dropdown-menu dropdown-menu-end">
-                        {% if can_access_module(current_user, 'customers', 'create') %}<li><a class="dropdown-item" href="{{ url_for('master.create_customer') }}">Customer</a></li>{% endif %}
-                        {% if can_access_module(current_user, 'customer-inquiry', 'create') %}<li><a class="dropdown-item" href="{{ url_for('sales.create_inquiry') }}">Inquiry / Lead</a></li>{% endif %}
-                        {% if can_access_module(current_user, 'quotation', 'create') %}<li><a class="dropdown-item" href="{{ url_for('sales.create_quotation') }}">Quotation</a></li>{% endif %}
-                        {% if can_access_module(current_user, 'projects', 'create') %}<li><a class="dropdown-item" href="{{ url_for('projects.create_project') }}">Project</a></li>{% endif %}
-                        {% if can_access_module(current_user, 'material-request', 'create') %}<li><a class="dropdown-item" href="{{ url_for('materials.create_request') }}">Material Request</a></li>{% endif %}
-                        {% if can_access_module(current_user, 'service-ticket', 'create') %}<li><a class="dropdown-item" href="{{ url_for('support.create_ticket') }}">Service Ticket</a></li>{% endif %}
+                        {% if can_access_module(current_user, 'customers') %}<li><a class="dropdown-item" href="{{ url_for('master.create_customer') }}">Customer</a></li>{% endif %}
+                        {% if can_access_module(current_user, 'customer-inquiry') %}<li><a class="dropdown-item" href="{{ url_for('sales.create_inquiry') }}">Inquiry / Lead</a></li>{% endif %}
+                        {% if can_access_module(current_user, 'quotation') %}<li><a class="dropdown-item" href="{{ url_for('sales.create_quotation') }}">Quotation</a></li>{% endif %}
+                        {% if can_access_module(current_user, 'projects') %}<li><a class="dropdown-item" href="{{ url_for('projects.create_project') }}">Project</a></li>{% endif %}
+                        {% if can_access_module(current_user, 'material-request') %}<li><a class="dropdown-item" href="{{ url_for('materials.create_request') }}">Material Request</a></li>{% endif %}
+                        {% if can_access_module(current_user, 'service-ticket') %}<li><a class="dropdown-item" href="{{ url_for('support.create_ticket') }}">Service Ticket</a></li>{% endif %}
                     </ul>
                 </div>
                 {% if can_access_module(current_user, 'notifications', 'view') %}<a class="btn btn-warning btn-sm cmse-notification-btn" href="{{ url_for('notifications.list_notifications') }}">🔔 {{ unread_notification_count }}</a>{% endif %}
@@ -230,13 +230,9 @@
     const navLinks = Array.from(document.querySelectorAll('#cmseNav a[href]'));
     const realNavLinks = navLinks.filter(a => !a.closest('.cmse-dynamic-block'));
     let activeLink = null;
-    let activeScore = -1;
     realNavLinks.forEach(function(a){
         const linkPath = new URL(a.href, window.location.origin).pathname.replace(/\/$/, '') || '/';
-        let score = -1;
-        if (linkPath === currentPath) score = 10000 + linkPath.length;
-        else if (linkPath !== '/' && currentPath.startsWith(linkPath + '/')) score = linkPath.length;
-        if (score > activeScore) { activeScore = score; activeLink = a; }
+        if (linkPath === currentPath) activeLink = a;
     });
     if (activeLink) {
         activeLink.classList.add('active');
@@ -244,14 +240,8 @@
         const title = activeLink.dataset.navTitle || activeLink.textContent.trim();
         const crumb = document.getElementById('cmseBreadcrumbCurrent');
         if (crumb) crumb.textContent = group && group !== 'Dashboard' ? group + ' / ' + title : title;
-        const section = activeLink.closest('.cmse-nav-section');
-        if (section) {
-            section.classList.add('active-section');
-            const toggle = section.querySelector('.cmse-nav-toggle');
-            if (toggle) toggle.classList.add('active-parent');
-        }
-        const collapse = activeLink.closest('.collapse');
-        if (collapse && window.bootstrap) bootstrap.Collapse.getOrCreateInstance(collapse, {toggle:false}).show();
+        const section = activeLink.closest('.collapse');
+        if (section && window.bootstrap) bootstrap.Collapse.getOrCreateInstance(section, {toggle:false}).show();
         saveRecent({title:title, group:group, url:activeLink.href});
     }
 
