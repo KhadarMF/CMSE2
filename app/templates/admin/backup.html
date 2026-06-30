@@ -1,5 +1,73 @@
-{% extends "base.html" %}{% block content %}
-<div class="d-flex justify-content-between align-items-center mt-4 mb-3"><div><h2 class="fw-bold">Backup & Notifications</h2><p class="text-muted mb-0">Database backups and notification status.</p></div><a class="btn btn-primary" href="{{ url_for('admin.create_backup') }}">Create Backup</a></div>
-<div class="card shadow-sm mb-4"><div class="card-header bg-white fw-bold">Backups</div><div class="card-body"><table class="table table-hover"><tbody>{% for f in backups %}<tr><td>{{ f.name }}</td><td><a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.download_backup', filename=f.name) }}">Download</a></td></tr>{% else %}<tr><td class="text-muted">No backups yet.</td></tr>{% endfor %}</tbody></table></div></div>
-<div class="card shadow-sm"><div class="card-header bg-white fw-bold">Recent Notifications</div><div class="card-body"><table class="table table-hover"><thead><tr><th>Date</th><th>Recipient</th><th>Subject</th><th>Status</th><th>Error</th></tr></thead><tbody>{% for n in notifications %}<tr><td>{{ n.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ n.recipient_email or '' }}</td><td>{{ n.subject }}</td><td>{{ n.status }}</td><td>{{ n.error_message or '' }}</td></tr>{% else %}<tr><td colspan="5" class="text-muted">No notifications.</td></tr>{% endfor %}</tbody></table></div></div>
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+  <div>
+    <h2 class="fw-bold">Backup & Maintenance Center</h2>
+    <p class="text-muted mb-0">Phase 18A.1 — PostgreSQL/Render compatible backup foundation.</p>
+  </div>
+  <form method="post" action="{{ url_for('admin.create_backup') }}">
+    <button class="btn btn-primary" type="submit">Create Backup</button>
+  </form>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Database</div><div class="fw-bold">{{ health.database_kind }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Backup Folder</div><div class="fw-bold text-truncate" title="{{ health.backup_root }}">{{ health.backup_root }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Uploads Size</div><div class="fw-bold">{{ health.upload_size }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Health</div><div class="fw-bold {% if health.healthy %}text-success{% else %}text-danger{% endif %}">{% if health.healthy %}Healthy{% else %}Needs Attention{% endif %}</div></div></div></div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-white fw-bold">Health Check</div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for c in health.checks %}
+        <tr>
+          <td>{{ c.name }}</td>
+          <td>
+            {% if c.status == 'OK' %}<span class="badge bg-success">OK</span>
+            {% elif c.status == 'WARNING' %}<span class="badge bg-warning text-dark">Warning</span>
+            {% else %}<span class="badge bg-danger">Error</span>{% endif %}
+          </td>
+          <td class="text-muted small">{{ c.detail }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-white fw-bold">Backup History</div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Filename</th><th>Created</th><th>Size</th><th>SHA256</th><th>Actions</th></tr></thead>
+      <tbody>
+      {% for b in backups %}
+        <tr>
+          <td class="fw-semibold">{{ b.name }}</td>
+          <td>{{ b.created_at }}</td>
+          <td>{{ b.size }}</td>
+          <td><code class="small">{{ b.sha256[:16] }}...</code></td>
+          <td class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.download_backup', filename=b.name) }}">Download</a>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.verify_backup', filename=b.name) }}">Verify</a>
+            <form method="post" action="{{ url_for('admin.delete_backup', filename=b.name) }}" onsubmit="return confirm('Delete this backup file?');">
+              <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-muted p-4">No backups yet. Click Create Backup to generate the first backup package.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="alert alert-info">
+  <strong>Note:</strong> Restore is intentionally not included in 18A.1. This phase creates verified backup packages first. Restore Wizard will be added after backup creation is stable.
+</div>
 {% endblock %}

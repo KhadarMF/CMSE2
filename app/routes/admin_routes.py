@@ -22,32 +22,63 @@ def require_admin():
 @login_required
 def backup_home():
     if not require_admin(): return redirect(url_for("dashboard.dashboard"))
-    backups_dir = Path(current_app.root_path).parent / "backups"; backups_dir.mkdir(exist_ok=True)
-    backups = sorted(backups_dir.glob("*.db"), reverse=True)
+    from app.backup_service import list_backups, health_check
+    backups = list_backups()
+    health = health_check()
     notifications = Notification.query.order_by(Notification.created_at.desc()).limit(100).all()
-    return render_template("admin/backup.html", backups=backups, notifications=notifications)
+    return render_template("admin/backup.html", backups=backups, notifications=notifications, health=health)
 
-@admin_bp.route("/backup/create")
+@admin_bp.route("/backup/create", methods=["POST", "GET"])
 @login_required
 def create_backup():
     if not require_admin(): return redirect(url_for("dashboard.dashboard"))
-    db_path = Path(current_app.instance_path) / "solar_documents.db"
-    if not db_path.exists():
-        flash("Database file not found.", "danger"); return redirect(url_for("admin.backup_home"))
-    backups_dir = Path(current_app.root_path).parent / "backups"; backups_dir.mkdir(exist_ok=True)
-    backup_file = backups_dir / f"solar_documents_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-    shutil.copy2(db_path, backup_file)
-    flash("Backup created successfully.", "success")
+    try:
+        from app.backup_service import create_backup as create_backup_package
+        result = create_backup_package()
+        msg = f"Backup created: {result['filename']} ({result['size_human']})."
+        if not result.get("pg_dump_included"):
+            msg += " PostgreSQL pg_dump was not included; JSON/CSV export was included."
+        flash(msg, "success")
+    except Exception as exc:
+        current_app.logger.exception("Backup creation failed")
+        flash(f"Backup failed: {exc}", "danger")
     return redirect(url_for("admin.backup_home"))
 
 @admin_bp.route("/backup/download/<filename>")
 @login_required
 def download_backup(filename):
     if not require_admin(): return redirect(url_for("dashboard.dashboard"))
-    file_path = Path(current_app.root_path).parent / "backups" / filename
+    from app.backup_service import get_backup_root
+    if "/" in filename or "\\" in filename or not filename.endswith(".zip"):
+        flash("Invalid backup filename.", "danger"); return redirect(url_for("admin.backup_home"))
+    file_path = get_backup_root() / filename
     if not file_path.exists():
         flash("Backup file not found.", "danger"); return redirect(url_for("admin.backup_home"))
     return send_file(file_path, as_attachment=True)
+
+@admin_bp.route("/backup/verify/<filename>")
+@login_required
+def verify_backup(filename):
+    if not require_admin(): return redirect(url_for("dashboard.dashboard"))
+    from app.backup_service import verify_backup as verify_backup_file
+    ok, message = verify_backup_file(filename)
+    flash(message, "success" if ok else "danger")
+    return redirect(url_for("admin.backup_home"))
+
+@admin_bp.route("/backup/delete/<filename>", methods=["POST"])
+@login_required
+def delete_backup(filename):
+    if not require_admin(): return redirect(url_for("dashboard.dashboard"))
+    from app.backup_service import get_backup_root
+    if "/" in filename or "\\" in filename or not filename.endswith(".zip"):
+        flash("Invalid backup filename.", "danger"); return redirect(url_for("admin.backup_home"))
+    file_path = get_backup_root() / filename
+    if file_path.exists():
+        file_path.unlink()
+        flash("Backup deleted.", "success")
+    else:
+        flash("Backup file not found.", "warning")
+    return redirect(url_for("admin.backup_home"))
 
 @admin_bp.route("/settings", methods=["GET", "POST"])
 @login_required
