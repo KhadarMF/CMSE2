@@ -68,6 +68,16 @@ def create_app():
     def load_user(user_id):
         return User.query.get(int(user_id))
 
+    # Phase 17B.2G Admin Account Recovery: disabled unless
+    # ADMIN_RECOVERY_PASSWORD is set in environment variables.
+    # It only resets/creates the admin login and does not touch business data.
+    try:
+        with app.app_context():
+            from app.admin_recovery import run_admin_recovery_if_requested
+            run_admin_recovery_if_requested(app)
+    except Exception:
+        app.logger.exception("Admin recovery bootstrap failed")
+
     from app.routes.auth_routes import auth_bp
     from app.routes.dashboard_routes import dashboard_bp
     from app.routes.project_routes import project_bp
