@@ -426,20 +426,43 @@ def get_role_permission_template(role):
     return normalized
 
 
-def _role_allows(role, key, action="view"):
+def _role_allows(role, key, action="view", _visited=None):
+    """Safe role permission lookup.
+
+    Phase 17B.2E fix:
+    The previous version recursively checked parent -> child permissions and could
+    enter an infinite loop when a parent listed itself as a child, for example
+    {"projects": ["projects", ...]}.  That caused Render 500 errors with
+    RecursionError.  This version tracks visited keys and skips self/cyclic
+    references.
+    """
+    if _visited is None:
+        _visited = set()
+    if key in _visited:
+        return False
+    _visited.add(key)
+
     tpl = get_role_permission_template(role)
     if tpl == "FULL_ACCESS":
         return True
-    pdata = (tpl or {}).get(key)
-    if not pdata:
-        if action == "view" and key in PARENT_CHILD_PERMISSION_KEYS:
-            return any(_role_allows(role, child, "view") for child in PARENT_CHILD_PERMISSION_KEYS[key])
-        return False
-    if action == "view":
-        return any(bool(pdata.get(a, False)) for a in ACTIONS)
+
     if action in ("print", "export"):
         action = "print_export"
-    return bool(pdata.get(action, False))
+
+    pdata = (tpl or {}).get(key)
+    if pdata:
+        if action == "view":
+            return any(bool(pdata.get(a, False)) for a in ACTIONS)
+        return bool(pdata.get(action, False))
+
+    # Parent modules are VIEW-only containers. Check children safely.
+    if action == "view" and key in PARENT_CHILD_PERMISSION_KEYS:
+        for child in PARENT_CHILD_PERMISSION_KEYS.get(key, []):
+            if child == key or child in _visited:
+                continue
+            if _role_allows(role, child, "view", _visited):
+                return True
+    return False
 
 
 def _user_has_permission_rows(user):
