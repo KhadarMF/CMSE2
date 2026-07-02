@@ -186,12 +186,30 @@ def form_permissions():
             flash("Admin users always have FULL ACCESS. No manual permission rows are required for Admin.", "info")
             return redirect(url_for("admin.form_permissions", user_id=selected_user.id))
 
+        # Phase 18A.2: Smart save summary for Permission Tree Manager.
+        actions = ["view", "create", "edit", "delete", "approve", "print_export"]
+        old_active = set()
+        for old_perm in UserFormPermission.query.filter_by(user_id=selected_user.id).all():
+            if old_perm.can_view: old_active.add(f"{old_perm.form_key}_view")
+            if old_perm.can_create: old_active.add(f"{old_perm.form_key}_create")
+            if old_perm.can_edit: old_active.add(f"{old_perm.form_key}_edit")
+            if old_perm.can_delete: old_active.add(f"{old_perm.form_key}_delete")
+            if old_perm.can_approve: old_active.add(f"{old_perm.form_key}_approve")
+            if getattr(old_perm, "can_print_export", False): old_active.add(f"{old_perm.form_key}_print_export")
+
+        new_active = set()
+        for item in FORM_PERMISSION_KEYS:
+            key = item[0]
+            for action in actions:
+                if request.form.get(f"{key}_{action}") == "on":
+                    new_active.add(f"{key}_{action}")
+
         # Rebuild permissions cleanly to avoid stale/duplicate rows.
         UserFormPermission.query.filter_by(user_id=selected_user.id).delete()
         saved_count = 0
         for item in FORM_PERMISSION_KEYS:
             key, label = item[0], item[1]
-            has_any = any(request.form.get(f"{key}_{action}") == "on" for action in ["view", "create", "edit", "delete", "approve", "print_export"])
+            has_any = any(request.form.get(f"{key}_{action}") == "on" for action in actions)
             if not has_any:
                 continue
             perm = UserFormPermission(user_id=selected_user.id, form_key=key, form_label=label)
@@ -206,7 +224,9 @@ def form_permissions():
             db.session.add(perm)
             saved_count += 1
         db.session.commit()
-        flash(f"User permissions saved successfully ({saved_count} permission rows). User must logout and login again.", "success")
+        added_count = len(new_active - old_active)
+        removed_count = len(old_active - new_active)
+        flash(f"Permissions updated successfully. Added: {added_count}, Removed: {removed_count}, Active permissions: {len(new_active)}, Rows saved: {saved_count}. User must logout and login again.", "success")
         return redirect(url_for("admin.form_permissions", user_id=selected_user.id))
     existing = {}
     if selected_user:

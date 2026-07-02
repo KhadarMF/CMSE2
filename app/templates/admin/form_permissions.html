@@ -1,5 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+  .permission-toolbar{position:sticky;top:72px;z-index:10;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px;box-shadow:0 8px 24px rgba(15,23,42,.06)}
+  .permission-group{border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;margin-bottom:14px;background:#fff}
+  .permission-group-header{background:#f8fafc;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+  .permission-group-header:hover{background:#f1f5f9}
+  .permission-group-title{display:flex;align-items:center;gap:10px;font-weight:700}
+  .permission-group-body{padding:0}
+  .permission-row td{vertical-align:middle}
+  .row-master-wrap{display:flex;align-items:center;gap:8px}
+  .perm-counter{font-weight:700;color:#0f172a}
+  .unsaved-dot{display:none;color:#dc2626;font-weight:700}
+  .unsaved-dot.active{display:inline-block}
+  .collapse-indicator{font-size:.85rem;color:#64748b}
+  .permission-actions th,.permission-actions td{text-align:center;white-space:nowrap}
+</style>
+
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
     <h2 class="fw-bold">User Access Permissions</h2>
@@ -14,7 +30,14 @@
 
 <form method="get" class="card mb-3">
   <div class="card-body row g-2 align-items-end">
-    <div class="col-md-6"><label class="form-label">Select User</label><select name="user_id" class="form-select">{% for u in users %}<option value="{{ u.id }}" {% if selected_user and selected_user.id==u.id %}selected{% endif %}>{{ u.full_name }} - {{ u.role }}</option>{% endfor %}</select></div>
+    <div class="col-md-6">
+      <label class="form-label">Select User</label>
+      <select name="user_id" class="form-select">
+        {% for u in users %}
+          <option value="{{ u.id }}" {% if selected_user and selected_user.id==u.id %}selected{% endif %}>{{ u.full_name }} - {{ u.role }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <div class="col-md-2"><button class="btn btn-primary w-100">Load</button></div>
   </div>
 </form>
@@ -28,49 +51,90 @@
   <div class="card-body">
     <input type="hidden" name="user_id" value="{{ selected_user.id }}">
     {% set is_admin_user = selected_user.role == "Admin" %}
+
     {% if is_admin_user %}
       <div class="alert alert-success">
-        <strong>Admin Full Access:</strong> Admin user-ku si joogto ah ayuu u leeyahay dhammaan permissions-ka.
-        Matrix-kan hoose waxaa loo muujinayaa checked si loo caddeeyo in Admin-ku wax walba geli karo.
-        Looma baahna in Admin permissions loo save-gareeyo.
+        <strong>Admin Full Access:</strong> Admin user-ku si joogto ah ayuu u leeyahay dhammaan permissions-ka. Matrix-kan hoose waxaa loo muujinayaa checked si loo caddeeyo in Admin-ku wax walba geli karo. Looma baahna in Admin permissions loo save-gareeyo.
       </div>
     {% endif %}
-    <div class="d-flex flex-wrap gap-2 mb-3 no-print" {% if is_admin_user %}style="display:none !important"{% endif %}>
-      <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllPerms()">Clear All</button>
-      <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectTechnicianForms()">Technician Forms Only</button>
-      <button type="button" class="btn btn-sm btn-outline-success" onclick="selectSupportUser()">Support User</button>
-      <button type="button" class="btn btn-sm btn-outline-warning" onclick="selectSalesUser()">Sales User</button>
-      <button type="button" class="btn btn-sm btn-outline-dark" onclick="selectManagerView()">Manager View</button>
+
+    <div class="permission-toolbar mb-3 no-print" {% if is_admin_user %}style="display:none !important"{% endif %}>
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div class="d-flex flex-wrap gap-2">
+          <button type="button" class="btn btn-sm btn-primary" onclick="selectAllPerms()">Select All</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllPerms()">Clear All</button>
+          <button type="button" class="btn btn-sm btn-outline-dark" onclick="invertPerms()">Invert Selection</button>
+          <button type="button" class="btn btn-sm btn-outline-info" onclick="expandAllGroups()">Expand All</button>
+          <button type="button" class="btn btn-sm btn-outline-info" onclick="collapseAllGroups()">Collapse All</button>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-3">
+          <span class="small text-muted">Selected: <span class="perm-counter" id="permCounter">0 / 0</span></span>
+          <span class="unsaved-dot" id="unsavedDot">● Unsaved Changes</span>
+          <button class="btn btn-sm btn-success">Save Permissions</button>
+        </div>
+      </div>
+      <hr class="my-2">
+      <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectTechnicianForms()">Technician Forms Only</button>
+        <button type="button" class="btn btn-sm btn-outline-success" onclick="selectSupportUser()">Support User</button>
+        <button type="button" class="btn btn-sm btn-outline-warning" onclick="selectSalesUser()">Sales User</button>
+        <button type="button" class="btn btn-sm btn-outline-dark" onclick="selectManagerView()">Manager View</button>
+      </div>
     </div>
-    
+
     <div class="alert alert-success small">
-      <strong>How it works:</strong> Tick permissions, then Save. A user must logout and login again. If only Technician Forms are selected, the user will see Dashboard + Online Forms only. Direct URLs to other modules will be denied.
+      <strong>18A.2 Permission Tree:</strong> Select All, Clear All, Invert, group checkbox, row checkbox iyo partial selection ayaa hadda wada shaqaynaya. Group checkbox hal mar ayuu u calaamadinayaa dhammaan forms-ka ku jira group-ka.
     </div>
     <div class="alert alert-info small">View = arki kara, Create = abuuri/buuxin kara, Edit = beddeli kara, Delete = tirtiri kara, Approve = ansixin kara, Print/Export = report/pdf/excel soo saari kara.</div>
-    {% set ns = namespace(group='') %}
-    <div class="table-responsive">
-    <table class="table table-bordered align-middle table-sm">
-      <thead class="table-light"><tr><th style="min-width:270px">Module / Form / Report</th><th class="text-center">View</th><th class="text-center">Create</th><th class="text-center">Edit</th><th class="text-center">Delete</th><th class="text-center">Approve</th><th class="text-center">Print / Export</th></tr></thead>
-      <tbody>
-      {% for item in forms %}
-        {% set key = item[0] %}{% set label = item[1] %}{% set group = item[2] if item|length > 2 else 'General' %}
-        {% if ns.group != group %}
-          {% set ns.group = group %}<tr class="table-secondary"><td colspan="7"><strong>{{ group }}</strong></td></tr>
+
+    {% set ns = namespace(group='', first=True) %}
+    {% for item in forms %}
+      {% set key = item[0] %}{% set label = item[1] %}{% set group = item[2] if item|length > 2 else 'General' %}
+      {% if ns.group != group %}
+        {% if not ns.first %}
+              </tbody>
+            </table>
+          </div>
+        </div>
         {% endif %}
-        {% set p=existing.get(key) %}
-        <tr data-key="{{ key }}">
-          <td><strong>{{ label }}</strong><br><small class="text-muted">{{ key }}</small></td>
-          <td class="text-center"><input type="checkbox" class="form-check-input perm view" name="{{ key }}_view" {% if is_admin_user or (p and p.can_view) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
-          <td class="text-center"><input type="checkbox" class="form-check-input perm create" name="{{ key }}_create" {% if is_admin_user or (p and p.can_create) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
-          <td class="text-center"><input type="checkbox" class="form-check-input perm edit" name="{{ key }}_edit" {% if is_admin_user or (p and p.can_edit) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
-          <td class="text-center"><input type="checkbox" class="form-check-input perm delete" name="{{ key }}_delete" {% if is_admin_user or (p and p.can_delete) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
-          <td class="text-center"><input type="checkbox" class="form-check-input perm approve" name="{{ key }}_approve" {% if is_admin_user or (p and p.can_approve) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
-          <td class="text-center"><input type="checkbox" class="form-check-input perm print_export" name="{{ key }}_print_export" {% if is_admin_user or (p and p.can_print_export) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    </div>
+        {% set ns.group = group %}
+        {% set ns.first = False %}
+        <div class="permission-group" data-group="{{ group|replace(' ', '-')|replace('/', '-')|replace('&', 'and') }}">
+          <div class="permission-group-header" onclick="toggleGroupBody(this)">
+            <div class="permission-group-title" onclick="event.stopPropagation()">
+              <input type="checkbox" class="form-check-input group-master" data-group="{{ group|replace(' ', '-')|replace('/', '-')|replace('&', 'and') }}" {% if is_admin_user %}checked disabled{% endif %}>
+              <span>📁 {{ group }}</span>
+            </div>
+            <span class="collapse-indicator">Click to expand/collapse</span>
+          </div>
+          <div class="permission-group-body">
+            <table class="table table-bordered table-sm align-middle mb-0 permission-actions">
+              <thead class="table-light"><tr><th style="min-width:300px;text-align:left">Module / Form / Report</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Approve</th><th>Print / Export</th></tr></thead>
+              <tbody>
+      {% endif %}
+      {% set p=existing.get(key) %}
+      <tr class="permission-row" data-key="{{ key }}" data-group="{{ group|replace(' ', '-')|replace('/', '-')|replace('&', 'and') }}">
+        <td style="text-align:left">
+          <div class="row-master-wrap">
+            <input type="checkbox" class="form-check-input row-master" {% if is_admin_user %}checked disabled{% endif %}>
+            <div><strong>{{ label }}</strong><br><small class="text-muted">{{ key }}</small></div>
+          </div>
+        </td>
+        <td><input type="checkbox" class="form-check-input perm view" name="{{ key }}_view" {% if is_admin_user or (p and p.can_view) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+        <td><input type="checkbox" class="form-check-input perm create" name="{{ key }}_create" {% if is_admin_user or (p and p.can_create) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+        <td><input type="checkbox" class="form-check-input perm edit" name="{{ key }}_edit" {% if is_admin_user or (p and p.can_edit) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+        <td><input type="checkbox" class="form-check-input perm delete" name="{{ key }}_delete" {% if is_admin_user or (p and p.can_delete) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+        <td><input type="checkbox" class="form-check-input perm approve" name="{{ key }}_approve" {% if is_admin_user or (p and p.can_approve) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+        <td><input type="checkbox" class="form-check-input perm print_export" name="{{ key }}_print_export" {% if is_admin_user or (p and p.can_print_export) %}checked{% endif %} {% if is_admin_user %}disabled{% endif %}></td>
+      </tr>
+    {% endfor %}
+    {% if not ns.first %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+    {% endif %}
+
     {% if is_admin_user %}
       <button type="button" class="btn btn-success btn-lg" disabled>Admin Already Has Full Access</button>
     {% else %}
@@ -79,28 +143,41 @@
   </div>
 </form>
 <script>
-function allBoxes(){ return document.querySelectorAll('#permissionForm input.perm'); }
+const ACTIONS = ['view','create','edit','delete','approve','print_export'];
+let initialSignature = '';
+function allBoxes(){ return Array.from(document.querySelectorAll('#permissionForm input.perm:not(:disabled)')); }
+function rowMasters(){ return Array.from(document.querySelectorAll('#permissionForm input.row-master:not(:disabled)')); }
+function groupMasters(){ return Array.from(document.querySelectorAll('#permissionForm input.group-master:not(:disabled)')); }
 function row(key){ return document.querySelector('tr[data-key="'+key+'"]'); }
-function setKey(key, actions){ const r=row(key); if(!r) return; actions.forEach(a=>{ const cb=r.querySelector('.'+a); if(cb) cb.checked=true; }); }
-function clearAllPerms(){ allBoxes().forEach(cb=>cb.checked=false); }
-function selectTechnicianForms(){
-  clearAllPerms();
-  ['forms-home','site-survey','daily-site-report','delivery-note','testing','commissioning','handover'].forEach(k=>setKey(k,['view','create','edit','print_export']));
-}
-function selectSupportUser(){
-  clearAllPerms();
-  ['after-sales','service-ticket','warranty'].forEach(k=>setKey(k,['view','create','edit','print_export']));
-  setKey('customers',['view']); setKey('projects',['view']);
-}
-function selectSalesUser(){
-  clearAllPerms();
-  ['sales-crm','customer-inquiry','quotation','quotation-items'].forEach(k=>setKey(k,['view','create','edit','print_export']));
-  setKey('customers',['view','create','edit']);
-}
-function selectManagerView(){
-  clearAllPerms();
-  ['projects','project-tasks','issues-risks','documents','forms-home','site-survey','daily-site-report','delivery-note','testing','commissioning','handover','sales-crm','customer-inquiry','quotation','after-sales','service-ticket','warranty','reports','project-reports','customer-reports','material-reports','notifications','ai-assistant'].forEach(k=>setKey(k,['view','print_export']));
-}
+function groupRows(group){ return Array.from(document.querySelectorAll('tr.permission-row[data-group="'+group+'"]')); }
+function rowPerms(tr){ return Array.from(tr.querySelectorAll('input.perm:not(:disabled)')); }
+function currentSignature(){ return allBoxes().map(cb => cb.name + ':' + (cb.checked ? '1':'0')).join('|'); }
+function markDirty(){ document.getElementById('unsavedDot')?.classList.toggle('active', currentSignature() !== initialSignature); }
+function updateCounter(){ const boxes=allBoxes(); const checked=boxes.filter(cb=>cb.checked).length; const el=document.getElementById('permCounter'); if(el) el.textContent = checked + ' / ' + boxes.length; }
+function updateRowState(tr){ const boxes=rowPerms(tr); const master=tr.querySelector('input.row-master'); if(!master || boxes.length===0) return; const checked=boxes.filter(cb=>cb.checked).length; master.checked = checked === boxes.length; master.indeterminate = checked > 0 && checked < boxes.length; }
+function updateGroupState(group){ const rows=groupRows(group); const groupBox=document.querySelector('input.group-master[data-group="'+group+'"]'); if(!groupBox || rows.length===0) return; const boxes=[]; rows.forEach(tr=>boxes.push(...rowPerms(tr))); const checked=boxes.filter(cb=>cb.checked).length; groupBox.checked = checked === boxes.length; groupBox.indeterminate = checked > 0 && checked < boxes.length; }
+function updateAllStates(){ document.querySelectorAll('tr.permission-row').forEach(updateRowState); groupMasters().forEach(g=>updateGroupState(g.dataset.group)); updateCounter(); markDirty(); }
+function setBoxes(boxes, value){ boxes.forEach(cb=>{ cb.checked=value; cb.indeterminate=false; }); updateAllStates(); }
+function selectAllPerms(){ setBoxes(allBoxes(), true); }
+function clearAllPerms(){ setBoxes(allBoxes(), false); }
+function invertPerms(){ allBoxes().forEach(cb=>cb.checked=!cb.checked); updateAllStates(); }
+function expandAllGroups(){ document.querySelectorAll('.permission-group-body').forEach(b=>b.style.display='block'); }
+function collapseAllGroups(){ document.querySelectorAll('.permission-group-body').forEach(b=>b.style.display='none'); }
+function toggleGroupBody(header){ const body=header.parentElement.querySelector('.permission-group-body'); body.style.display = (body.style.display === 'none') ? 'block' : 'none'; }
+function setKey(key, actions){ const r=row(key); if(!r) return; actions.forEach(a=>{ const cb=r.querySelector('.'+a); if(cb && !cb.disabled) cb.checked=true; }); }
+function selectTechnicianForms(){ clearAllPerms(); ['forms-home','site-survey','daily-site-report','delivery-note','testing','commissioning','handover'].forEach(k=>setKey(k,['view','create','edit','print_export'])); updateAllStates(); }
+function selectSupportUser(){ clearAllPerms(); ['after-sales','service-ticket','warranty'].forEach(k=>setKey(k,['view','create','edit','print_export'])); setKey('customers',['view']); setKey('projects',['view']); updateAllStates(); }
+function selectSalesUser(){ clearAllPerms(); ['sales-crm','customer-inquiry','quotation','quotation-items'].forEach(k=>setKey(k,['view','create','edit','print_export'])); setKey('customers',['view','create','edit']); updateAllStates(); }
+function selectManagerView(){ clearAllPerms(); ['projects','project-tasks','issues-risks','documents','forms-home','site-survey','daily-site-report','delivery-note','testing','commissioning','handover','sales-crm','customer-inquiry','quotation','after-sales','service-ticket','warranty','reports','project-reports','customer-reports','material-reports','notifications','ai-assistant'].forEach(k=>setKey(k,['view','print_export'])); updateAllStates(); }
+
+document.addEventListener('DOMContentLoaded', function(){
+  initialSignature = currentSignature();
+  allBoxes().forEach(cb=>cb.addEventListener('change', updateAllStates));
+  rowMasters().forEach(master=>master.addEventListener('change', function(){ const tr=this.closest('tr'); rowPerms(tr).forEach(cb=>cb.checked=this.checked); updateAllStates(); }));
+  groupMasters().forEach(master=>master.addEventListener('change', function(){ const g=this.dataset.group; groupRows(g).forEach(tr=>rowPerms(tr).forEach(cb=>cb.checked=this.checked)); updateAllStates(); }));
+  document.getElementById('permissionForm')?.addEventListener('submit', function(){ initialSignature = currentSignature(); });
+  updateAllStates();
+});
 </script>
 {% endif %}
 {% endblock %}
