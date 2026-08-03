@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="so">
+<head>
+  <meta charset="utf-8">
+  <title>System Maintenance</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#0f172a; color:#f8fafc; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; text-align:center; padding: 1.5rem; }
+    .box { max-width: 480px; }
+    h1 { font-size: 1.4rem; margin-bottom: .5rem; }
+    p { color:#cbd5e1; line-height: 1.5; }
+    code { background:#1e293b; padding:2px 6px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Cadceed-Maal ERP is temporarily unavailable</h1>
+    <p>A database restore is running. The system will be back automatically once it finishes — this page does not need to be refreshed manually, but you can try again in a few minutes.</p>
+    {% if info %}<p>Started {{ info.get('started_at', '') }} by {{ info.get('started_by', 'Admin') }} from <code>{{ info.get('filename', '') }}</code>.</p>{% endif %}
+  </div>
+</body>
+</html>

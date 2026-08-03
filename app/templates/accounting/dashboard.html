@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+  <div>
+    <h2 class="fw-bold">Accounting</h2>
+    <p class="text-muted mb-0">Double-entry ledger in USD. Journals from Payment Requests and Payroll are created automatically.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-dark" href="{{ url_for('accounting.accounts') }}">Chart of Accounts</a>
+    <a class="btn btn-outline-dark" href="{{ url_for('accounting.journal') }}">Journal</a>
+    <a class="btn btn-outline-dark" href="{{ url_for('accounting.trial_balance_report') }}">Trial Balance</a>
+    <a class="btn btn-outline-dark" href="{{ url_for('accounting.income_statement_report') }}">Profit &amp; Loss</a>
+    <a class="btn btn-outline-dark" href="{{ url_for('accounting.balance_sheet_report') }}">Balance Sheet</a>
+    <a class="btn btn-outline-dark" href="{{ url_for('accounting.mappings') }}">Mappings &amp; Settings</a>
+    {% if can_post %}
+    <a class="btn btn-outline-primary" href="{{ url_for('accounting.opening_balances') }}">Opening Balances</a>
+    <a class="btn btn-primary" href="{{ url_for('accounting.create_journal') }}">New Journal Entry</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if not slsh_rate %}
+<div class="alert alert-warning">
+  No SLSH exchange rate is set. SLSH payments will not get automatic journal entries until you set "SLSH per USD" in <a href="{{ url_for('accounting.mappings') }}">Mappings &amp; Settings</a>.
+</div>
+{% endif %}
+{% if draft_count %}
+<div class="alert alert-info">
+  {{ draft_count }} draft journal {{ 'entry' if draft_count == 1 else 'entries' }} awaiting posting. <a href="{{ url_for('accounting.journal', status='Draft') }}">Review drafts</a>.
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  {% for t, total in type_totals.items() %}
+  <div class="col-md-2"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">{{ t }}</div><h5>{{ "%.2f"|format(total) }}</h5></div></div></div>
+  {% endfor %}
+</div>
+
+<div class="row">
+  <div class="col-lg-5">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-bold">Cash &amp; Mobile Money</div>
+      <div class="card-body p-0">
+        <table class="table mb-0 align-middle">
+          <tbody>
+          {% for a in cash_accounts %}
+            <tr>
+              <td><a href="{{ url_for('accounting.ledger', account_id=a.id) }}">{{ a.code }} {{ a.name }}</a></td>
+              <td class="text-end fw-semibold">{{ "%.2f"|format(balances[a.id]) }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-bold">Recent Journal Entries</span>
+        <a class="small" href="{{ url_for('accounting.journal') }}">View all</a>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0 align-middle">
+          <thead><tr><th>Entry</th><th>Date</th><th>Memo</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>
+          {% for e in recent %}
+            <tr onclick="window.location='{{ url_for('accounting.journal_detail', entry_id=e.id) }}'" style="cursor:pointer;">
+              <td>{{ e.entry_no }}</td>
+              <td>{{ e.entry_date }}</td>
+              <td class="text-truncate" style="max-width: 220px;">{{ e.memo or '—' }}</td>
+              <td>{{ "%.2f"|format(e.total_debit) }}</td>
+              <td>
+                {% if e.status == 'Posted' %}<span class="badge bg-success">Posted</span>
+                {% elif e.status == 'Reversed' %}<span class="badge bg-secondary">Reversed</span>
+                {% else %}<span class="badge bg-warning text-dark">Draft</span>{% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="text-muted p-4">No journal entries yet. They'll appear automatically when payments are recorded.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -289,7 +289,7 @@ def create_form(form_key):
         fields=get_render_fields(form_key),
         projects=get_projects(),
         values={},
-        selected_project="",
+        selected_project=request.args.get("project_id", ""),
         approval_status="Draft",
         form_ref=form_reference(form_key),
         field_choices=FIELD_CHOICES,

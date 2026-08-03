@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="mt-4 mb-3"><h2 class="fw-bold">{{ "Edit Customer" if customer else "Add Customer" }}</h2></div>
-<form method="post" class="card shadow-sm"><div class="card-body">
+<form method="post" class="card shadow-sm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="card-body">
 <div class="row g-3">
     <div class="col-md-6"><label class="form-label">Customer Name *</label><input class="form-control" name="customer_name" value="{{ customer.customer_name if customer else '' }}" required></div>
     <div class="col-md-6"><label class="form-label">Contact Person</label><input class="form-control" name="contact_person" value="{{ customer.contact_person if customer else '' }}"></div>

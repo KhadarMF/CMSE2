@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+  <div>
+    <h2 class="fw-bold">All Payment Requests</h2>
+  </div>
+  <a class="btn btn-primary" href="{{ url_for('payments.create_request') }}">New Payment Request</a>
+</div>
+
+<form method="get" class="card shadow-sm mb-4">
+  <div class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small text-muted">Status</label>
+        <select class="form-select" name="status">
+          <option value="">All</option>
+          {% for s in statuses %}<option value="{{ s }}" {% if filters.get('status') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-muted">Category</label>
+        <select class="form-select" name="category">
+          <option value="">All</option>
+          {% for c in categories %}<option value="{{ c }}" {% if filters.get('category') == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-muted">Project</label>
+        <select class="form-select" name="project_id">
+          <option value="">All</option>
+          {% for p in projects %}<option value="{{ p.id }}" {% if filters.get('project_id')|string == p.id|string %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-outline-dark w-100" type="submit">Filter</button>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Request</th><th>Payee</th><th>Amount</th><th>Balance</th><th>Category</th><th>Requested By</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for r in requests %}
+        <tr onclick="window.location='{{ url_for('payments.request_detail', request_id=r.id) }}'" style="cursor:pointer;">
+          <td><div class="fw-semibold">{{ r.request_no }}</div><div class="small text-muted">{{ r.created_at.strftime('%Y-%m-%d') if r.created_at else '' }}</div></td>
+          <td>{{ r.payee_name }}</td>
+          <td>{{ r.currency }} {{ "%.2f"|format(r.amount) }}</td>
+          <td>{{ r.currency }} {{ "%.2f"|format(r.balance) }}</td>
+          <td>{{ r.category }}</td>
+          <td>{{ r.requested_by.full_name if r.requested_by else '' }}</td>
+          <td>
+            {% if r.status == 'Paid' %}<span class="badge bg-success">{{ r.status }}</span>
+            {% elif r.status == 'Rejected' %}<span class="badge bg-danger">{{ r.status }}</span>
+            {% elif r.status == 'Cancelled' %}<span class="badge bg-secondary">{{ r.status }}</span>
+            {% elif r.status == 'Approved' %}<span class="badge bg-primary">{{ r.status }}</span>
+            {% elif r.status == 'Partially Paid' %}<span class="badge bg-info text-dark">{{ r.status }}</span>
+            {% else %}<span class="badge bg-warning text-dark">{{ r.status }}</span>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="text-muted p-4">No payment requests match these filters.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

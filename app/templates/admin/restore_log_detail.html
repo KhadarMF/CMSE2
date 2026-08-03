@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-4 mb-3">
+  <h2 class="fw-bold">Restore Detail</h2>
+  <p class="text-muted mb-0">{{ entry.id }}</p>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Status</div><div class="fw-bold {% if entry.status == 'completed' %}text-success{% elif entry.status == 'failed' %}text-danger{% else %}text-warning{% endif %}">{{ entry.status }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Source Backup</div><div class="fw-bold text-truncate" title="{{ entry.source_backup }}">{{ entry.source_backup }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Mode</div><div class="fw-bold">{{ entry.mode }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Duration</div><div class="fw-bold">{{ entry.duration_seconds }}s</div></div></div></div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-white fw-bold">Details</div>
+  <div class="card-body">
+    <dl class="row mb-0">
+      <dt class="col-sm-3">Started</dt><dd class="col-sm-9">{{ entry.started_at }} by {{ entry.started_by }}</dd>
+      <dt class="col-sm-3">Finished</dt><dd class="col-sm-9">{{ entry.finished_at }}</dd>
+      <dt class="col-sm-3">Safety backup taken first</dt><dd class="col-sm-9"><code>{{ entry.pre_restore_backup }}</code></dd>
+      <dt class="col-sm-3">Files restored</dt><dd class="col-sm-9">{{ entry.files_restored }}</dd>
+      {% if entry.error %}<dt class="col-sm-3 text-danger">Error</dt><dd class="col-sm-9 text-danger">{{ entry.error }}</dd>{% endif %}
+    </dl>
+  </div>
+</div>
+
+{% if entry.table_counts %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-white fw-bold">Rows Restored Per Table</div>
+  <div class="card-body p-0" style="max-height: 320px; overflow-y:auto;">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Table</th><th>Rows</th></tr></thead>
+      <tbody>
+      {% for name, count in entry.table_counts.items() %}
+        <tr><td>{{ name }}</td><td>{{ count }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if entry.skipped_tables %}
+<div class="alert alert-warning">
+  Tables not present in the backup, left untouched by this restore: {{ entry.skipped_tables | join(', ') }}
+</div>
+{% endif %}
+
+<a class="btn btn-outline-secondary" href="{{ url_for('admin.restore_log_list') }}">Back to Restore Log</a>
+{% endblock %}

@@ -35,6 +35,7 @@
 {% endif %}
 
 <form method="post" action="{{ url_for('ai.assistant') }}" class="card p-3 shadow-sm mb-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="row g-3">
     <div class="col-md-4">
       <label class="form-label">Context Type</label>

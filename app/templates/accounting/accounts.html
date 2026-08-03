@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+  <div>
+    <h2 class="fw-bold">Chart of Accounts</h2>
+    <p class="text-muted mb-0">Balances are from posted journal entries, in USD, shown on each account's normal side.</p>
+  </div>
+  {% if can_post %}<a class="btn btn-primary" href="{{ url_for('accounting.create_account') }}">New Account</a>{% endif %}
+</div>
+
+{% for type, accounts_list in grouped.items() %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-white fw-bold">{{ type }}</div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th style="width:110px;">Code</th><th>Name</th><th class="text-end">Balance</th><th style="width:200px;">Actions</th></tr></thead>
+      <tbody>
+      {% for a in accounts_list %}
+        <tr class="{% if not a.is_active %}text-muted{% endif %}">
+          <td>{{ a.code }}</td>
+          <td>
+            {{ a.name }}
+            {% if a.is_system %}<span class="badge bg-light text-dark border">system</span>{% endif %}
+            {% if not a.is_active %}<span class="badge bg-secondary">inactive</span>{% endif %}
+          </td>
+          <td class="text-end fw-semibold">{{ "%.2f"|format(balances[a.id]) }}</td>
+          <td>
+            <a class="btn btn-sm btn-outline-dark" href="{{ url_for('accounting.ledger', account_id=a.id) }}">Ledger</a>
+            {% if can_post %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('accounting.edit_account', account_id=a.id) }}">Edit</a>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="text-muted p-3">No {{ type|lower }} accounts.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

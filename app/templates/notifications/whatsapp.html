@@ -2,7 +2,8 @@
 {% block content %}
 <h2 class="fw-bold">WhatsApp Integration - Future Setup</h2>
 <div class="alert alert-warning"><strong>Important:</strong> WhatsApp is not active yet. This page prepares the ERP for Meta Cloud API or Twilio WhatsApp integration. Approved templates and business verification may be required.</div>
-<form method="post" class="card"><div class="card-body"><div class="row g-3">
+<form method="post" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="card-body"><div class="row g-3">
 <div class="col-md-3"><div class="form-check mt-4"><input class="form-check-input" type="checkbox" name="enabled" {% if setting.enabled %}checked{% endif %}><label class="form-check-label">Enable when API is ready</label></div></div>
 <div class="col-md-4"><label class="form-label">Provider</label><select class="form-select" name="provider"><option {% if 'Meta' in setting.provider %}selected{% endif %}>Meta WhatsApp Cloud API</option><option {% if 'Twilio' in setting.provider %}selected{% endif %}>Twilio WhatsApp API</option><option>Other Provider</option></select></div>
 <div class="col-md-3"><label class="form-label">Business WhatsApp Phone</label><input class="form-control" name="business_phone" value="{{ setting.business_phone or '' }}"></div>

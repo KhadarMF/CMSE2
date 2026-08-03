@@ -19,6 +19,7 @@
         </select>
       </form>
       <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="form_key" value="{{ selected_form_key }}">
         <label class="form-label fw-bold">Select Record</label>
         <select name="form_id" class="form-select mb-3" required>

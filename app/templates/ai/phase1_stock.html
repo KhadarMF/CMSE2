@@ -7,6 +7,7 @@
 <div class="row g-3">
   <div class="col-lg-5"><div class="card shadow-sm"><div class="card-body">
     <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="form-label fw-bold">Stock Question</label>
       <textarea name="question" rows="5" class="form-control mb-3" placeholder="Example: Do we have materials for a 20kW hybrid solar system?">{{ question or '' }}</textarea>
       <button class="btn btn-cmse w-100">Ask Stock AI</button>

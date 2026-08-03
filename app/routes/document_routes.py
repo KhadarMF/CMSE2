@@ -38,7 +38,7 @@ def upload_document():
         log_activity('Upload','Document',doc.id,f'Uploaded document: {doc.document_title}')
         if doc.approval_status=='Submitted': notify_roles(['Admin','Management','Operation Manager'], 'Document submitted for approval', f"{current_user.full_name} submitted document '{doc.document_title}' for approval.", 'Document', doc.id)
         db.session.commit(); flash('Document uploaded successfully.','success'); return redirect(url_for('documents.list_documents'))
-    return render_template('documents/upload.html', projects=projects, document_types=DOCUMENT_TYPES, statuses=APPROVAL_STATUSES)
+    return render_template('documents/upload.html', projects=projects, document_types=DOCUMENT_TYPES, statuses=APPROVAL_STATUSES, selected_project=request.args.get('project_id', ''))
 @document_bp.route('/<int:document_id>')
 @login_required
 def detail(document_id):

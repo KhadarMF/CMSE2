@@ -9,6 +9,7 @@
     <div class='card-header bg-success text-white fw-bold'>Send Quotation by WhatsApp</div>
     <div class='card-body'>
       <form method='post' action='{{ url_for("sales.send_quotation_whatsapp", quotation_id=quotation.id) }}'>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class='row g-2'>
           <div class='col-md-4'>
             <label class='form-label'>Customer WhatsApp Number</label>

@@ -10,6 +10,7 @@
 <p class="text-muted">Use this form whenever a customer reports a fault, complaint, warranty claim or service request.</p>
 
 <form method="post" class="card shadow-sm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="card-body">
     <div class="alert alert-info">
       <strong>Updated:</strong> Customer, Warranty and Assigned To fields now read from master tables. Use “New Customer Name” only when the customer is not yet registered.

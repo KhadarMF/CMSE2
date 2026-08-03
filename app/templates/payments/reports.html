@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-4 mb-3">
+  <h2 class="fw-bold">Payment Reports</h2>
+  <p class="text-muted mb-0">{{ total_requests }} payment requests total.</p>
+</div>
+
+<div class="row">
+  <div class="col-lg-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-bold">By Category</div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Category</th><th>Requests</th><th>Requested</th><th>Paid</th></tr></thead>
+          <tbody>
+          {% for cat, row in by_category.items() %}
+            <tr><td>{{ cat }}</td><td>{{ row.count }}</td><td>{{ "%.2f"|format(row.amount) }}</td><td>{{ "%.2f"|format(row.paid) }}</td></tr>
+          {% else %}
+            <tr><td colspan="4" class="text-muted p-3">No data yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-bold">By Payment Method</div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Method</th><th>Payments</th><th>Total Paid</th></tr></thead>
+          <tbody>
+          {% for method, row in by_method.items() %}
+            <tr><td>{{ method }}</td><td>{{ row.count }}</td><td>{{ "%.2f"|format(row.amount) }}</td></tr>
+          {% else %}
+            <tr><td colspan="3" class="text-muted p-3">No payments recorded yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<a class="btn btn-outline-secondary" href="{{ url_for('payments.dashboard') }}">Back to Payment Requests</a>
+{% endblock %}

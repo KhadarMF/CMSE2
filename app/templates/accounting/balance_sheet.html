@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+  <div>
+    <h2 class="fw-bold">Balance Sheet</h2>
+    <p class="text-muted mb-0">{% if report.as_of %}As of {{ report.as_of }}{% else %}All posted entries{% endif %} · USD</p>
+  </div>
+  <button class="btn btn-outline-dark d-print-none" onclick="window.print()">Print</button>
+</div>
+
+<form method="get" class="card shadow-sm mb-4 d-print-none">
+  <div class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small text-muted">As of date</label>
+        <input class="form-control" type="date" name="as_of" value="{{ as_of }}">
+      </div>
+      <div class="col-md-2"><button class="btn btn-outline-dark w-100" type="submit">Run</button></div>
+    </div>
+  </div>
+</form>
+
+{% if not report.balanced %}
+<div class="alert alert-danger">
+  <strong>Balance sheet does not balance</strong> — Assets {{ "%.2f"|format(report.total_assets) }} vs Liabilities + Equity {{ "%.2f"|format(report.total_liab_equity) }}. This should be impossible with posted entries; contact your developer before trusting any report.
+</div>
+{% endif %}
+
+<div class="row">
+  <div class="col-lg-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-bold">Assets</div>
+      <div class="card-body p-0">
+        <table class="table mb-0 align-middle">
+          <tbody>
+          {% for r in report.sections['Asset'] %}
+            <tr>
+              <td>{{ r.account.code }} <a href="{{ url_for('accounting.ledger', account_id=r.account.id) }}">{{ r.account.name }}</a></td>
+              <td class="text-end" style="width:160px;">{{ "%.2f"|format(r.amount) }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="2" class="text-muted p-3">No asset balances.</td></tr>
+          {% endfor %}
+            <tr class="fw-bold table-light"><td>Total Assets</td><td class="text-end">{{ "%.2f"|format(report.total_assets) }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-bold">Liabilities</div>
+      <div class="card-body p-0">
+        <table class="table mb-0 align-middle">
+          <tbody>
+          {% for r in report.sections['Liability'] %}
+            <tr>
+              <td>{{ r.account.code }} <a href="{{ url_for('accounting.ledger', account_id=r.account.id) }}">{{ r.account.name }}</a></td>
+              <td class="text-end" style="width:160px;">{{ "%.2f"|format(r.amount) }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="2" class="text-muted p-3">No liability balances.</td></tr>
+          {% endfor %}
+            <tr class="fw-bold table-light"><td>Total Liabilities</td><td class="text-end">{{ "%.2f"|format(report.totals['Liability']) }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-bold">Equity</div>
+      <div class="card-body p-0">
+        <table class="table mb-0 align-middle">
+          <tbody>
+          {% for r in report.sections['Equity'] %}
+            <tr>
+              <td>{{ r.account.code }} <a href="{{ url_for('accounting.ledger', account_id=r.account.id) }}">{{ r.account.name }}</a></td>
+              <td class="text-end" style="width:160px;">{{ "%.2f"|format(r.amount) }}</td>
+            </tr>
+          {% endfor %}
+            <tr>
+              <td>Current Earnings <span class="text-muted small">(income minus expenses to date — computed, not an account)</span></td>
+              <td class="text-end">{{ "%.2f"|format(report.current_earnings) }}</td>
+            </tr>
+            <tr class="fw-bold table-light"><td>Total Equity</td><td class="text-end">{{ "%.2f"|format(report.total_equity_with_earnings) }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-4 {% if report.balanced %}border-success{% else %}border-danger{% endif %}">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <span class="fw-bold">Total Liabilities + Equity</span>
+        <span class="fw-bold fs-5">{{ "%.2f"|format(report.total_liab_equity) }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<a class="btn btn-outline-secondary d-print-none" href="{{ url_for('accounting.dashboard') }}">Back to Accounting</a>
+{% endblock %}

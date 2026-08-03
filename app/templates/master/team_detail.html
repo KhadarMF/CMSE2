@@ -9,6 +9,7 @@
 <div class="col-lg-5">
 <div class="card shadow-sm"><div class="card-header fw-bold">Add Member</div><div class="card-body">
 <form method="post" action="{{ url_for('master.add_team_member', team_id=team.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="mb-2"><label class="form-label">Employee</label><select class="form-select" name="employee_id" required><option value="">Select</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }} - {{ e.job_title or "" }}</option>{% endfor %}</select></div>
 <div class="mb-2"><label class="form-label">Role in Team</label><input class="form-control" name="member_role" placeholder="Electrician / Installer / Supervisor"></div>
 <button class="btn btn-dark">Add Member</button>

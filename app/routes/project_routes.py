@@ -4,6 +4,7 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import Project, PROJECT_STATUSES, Customer, ProjectType, Team
 from app.permissions import can_create_project, can_create_form
+from app.project_command_center import build_project_command_center
 
 project_bp = Blueprint("projects", __name__, url_prefix="/projects")
 
@@ -79,7 +80,13 @@ def detail(project_id):
         "commissioning": can_create_form(current_user, "commissioning"),
         "handover": can_create_form(current_user, "handover"),
     }
-    return render_template("projects/detail.html", project=project, allowed_forms=allowed_forms)
+    command_center = build_project_command_center(project)
+    return render_template(
+        "projects/detail.html",
+        project=project,
+        allowed_forms=allowed_forms,
+        command_center=command_center,
+    )
 
 @project_bp.route("/<int:project_id>/edit", methods=["GET", "POST"])
 @login_required

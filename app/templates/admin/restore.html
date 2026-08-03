@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+  <div>
+    <h2 class="fw-bold">Restore Center</h2>
+    <p class="text-muted mb-0">Phase 18A.4 — restore data from a verified backup. A safety backup is always created automatically first.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin.restore_log_list') }}">Restore Log</a>
+</div>
+
+{% if in_progress %}
+<div class="alert alert-warning">
+  <strong>Restore in progress.</strong>
+  Started {{ lock_info.started_at }} by {{ lock_info.started_by }} from <code>{{ lock_info.filename }}</code>.
+  The app is in maintenance mode for everyone else until this finishes. Reload this page to check status.
+</div>
+{% endif %}
+
+<div class="alert alert-info">
+  Restoring replaces live data with the contents of the backup you choose. Anything created or changed after that backup was taken will be lost from the tables that get restored — review the confirmation screen carefully before proceeding.
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-white fw-bold">Available Backups</div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr><th>Backup</th><th>Created</th><th>Size</th><th>Database</th><th>Status</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+      {% for b in backups %}
+        <tr>
+          <td>
+            <div class="fw-semibold">{{ b.name }}</div>
+            <div class="small text-muted">{{ b.label }} · v{{ b.backup_version }}</div>
+          </td>
+          <td>{{ b.created_at }}<div class="small text-muted">By {{ b.created_by }}</div></td>
+          <td>{{ b.size }}</td>
+          <td>{{ b.database_kind }}</td>
+          <td>
+            {% if b.status == 'Healthy' %}<span class="badge bg-success">Healthy</span>{% else %}<span class="badge bg-warning text-dark">Warning</span>{% endif %}
+          </td>
+          <td>
+            {% if in_progress %}
+              <button class="btn btn-sm btn-outline-danger" disabled>Restore</button>
+            {% else %}
+              <a class="btn btn-sm btn-outline-danger" href="{{ url_for('admin.restore_confirm', filename=b.name) }}">Restore</a>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-muted p-4">No backups available. Create a backup first from the Backup page.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <span class="fw-bold">Recent Restore Activity</span>
+    <a class="small" href="{{ url_for('admin.restore_log_list') }}">View full log</a>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Started</th><th>Backup</th><th>Mode</th><th>By</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for log in recent_logs %}
+        <tr>
+          <td><a href="{{ url_for('admin.restore_log_detail', log_id=log.id) }}">{{ log.started_at }}</a></td>
+          <td>{{ log.source_backup }}</td>
+          <td>{{ log.mode }}</td>
+          <td>{{ log.started_by }}</td>
+          <td>
+            {% if log.status == 'completed' %}<span class="badge bg-success">Completed</span>
+            {% elif log.status == 'failed' %}<span class="badge bg-danger">Failed</span>
+            {% else %}<span class="badge bg-warning text-dark">Running</span>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-muted p-4">No restores have been run yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

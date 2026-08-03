@@ -18,8 +18,10 @@ def make_ref(prefix):
 
 @materials_bp.before_app_request
 def ensure_material_tables():
-    try: db.create_all()
-    except Exception: pass
+    # Phase 20D: db.create_all() removed - the schema is owned by Alembic
+    # (`flask db upgrade`). create_all() only ever created MISSING TABLES;
+    # it silently ignored new COLUMNS, which is how the schema drifted.
+    return None
 
 @materials_bp.route("/")
 @login_required
@@ -68,7 +70,7 @@ def create_request():
             created+=1
         if created==0: db.session.rollback(); flash("No material lines entered.","danger"); return redirect(url_for("materials.create_request"))
         db.session.commit(); flash(f"Material request {req.ref_no} created.","success"); return redirect(url_for("materials.request_detail", request_id=req.id))
-    return render_template("materials/request_form.html", projects=projects, items=items, statuses=MATERIAL_DOC_STATUSES)
+    return render_template("materials/request_form.html", projects=projects, items=items, statuses=MATERIAL_DOC_STATUSES, selected_project=request.args.get("project_id", ""))
 
 @materials_bp.route("/requests/<int:request_id>")
 @login_required

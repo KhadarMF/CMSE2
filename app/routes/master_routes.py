@@ -7,9 +7,10 @@ from app.models import (
     Customer, Employee, Team, TeamMember, Project, ProjectTeamAssignment,
     ProjectEmployeeAssignment, Branch, Department, User, SalesInquiry,
     SalesQuotation, SupportTicket, WarrantyRegistration, WhatsAppMessage, Document,
+    ProjectTask, EmployeeProjectPayroll, ProjectPayrollEntry, ServiceVisit,
     EMPLOYEE_STATUSES, EMPLOYEE_TYPES, TEAM_STATUSES, PROJECT_WORK_STATUSES
 )
-from app.permissions import can_manage_users, can_create_project
+from app.permissions import can_manage_users, can_create_project, can_access_module
 
 master_bp = Blueprint("master", __name__, url_prefix="/master")
 
@@ -22,6 +23,94 @@ def generate_employee_code():
     last = Employee.query.order_by(Employee.id.desc()).first()
     next_no = (last.id + 1) if last else 1
     return f"EMP-{next_no:04d}"
+
+
+def _employee_delete_summary(employee):
+    """Return every historical reference that makes a hard delete unsafe."""
+    dependencies = [
+        ("Team leadership", Team.query.filter_by(leader_employee_id=employee.id).count()),
+        ("Team memberships", TeamMember.query.filter_by(employee_id=employee.id).count()),
+        ("Project assignments", ProjectEmployeeAssignment.query.filter_by(employee_id=employee.id).count()),
+        ("Project tasks", ProjectTask.query.filter_by(assigned_employee_id=employee.id).count()),
+        ("Legacy payroll records", EmployeeProjectPayroll.query.filter_by(employee_id=employee.id).count()),
+        ("Payroll batch records", ProjectPayrollEntry.query.filter_by(employee_id=employee.id).count()),
+        ("Service tickets", SupportTicket.query.filter_by(assigned_employee_id=employee.id).count()),
+        ("Service visits", ServiceVisit.query.filter_by(technician_employee_id=employee.id).count()),
+    ]
+    blockers = [{"label": label, "count": count} for label, count in dependencies if count]
+    return {"blockers": blockers, "total": sum(item["count"] for item in blockers), "can_delete": not blockers}
+
+
+def _employee_360_context(employee):
+    team_memberships = TeamMember.query.filter_by(employee_id=employee.id).order_by(TeamMember.joined_at.desc()).all()
+    led_teams = Team.query.filter_by(leader_employee_id=employee.id).order_by(Team.team_name.asc()).all()
+    project_assignments = ProjectEmployeeAssignment.query.filter_by(employee_id=employee.id).order_by(ProjectEmployeeAssignment.assigned_at.desc()).all()
+    tasks = ProjectTask.query.filter_by(assigned_employee_id=employee.id).order_by(ProjectTask.created_at.desc()).limit(100).all()
+    legacy_payroll = EmployeeProjectPayroll.query.filter_by(employee_id=employee.id).order_by(EmployeeProjectPayroll.created_at.desc()).limit(100).all()
+    batch_payroll = ProjectPayrollEntry.query.filter_by(employee_id=employee.id).order_by(ProjectPayrollEntry.created_at.desc()).limit(100).all()
+    tickets = SupportTicket.query.filter_by(assigned_employee_id=employee.id).order_by(SupportTicket.created_at.desc()).limit(50).all()
+    visits = ServiceVisit.query.filter_by(technician_employee_id=employee.id).order_by(ServiceVisit.created_at.desc()).limit(50).all()
+
+    active_projects = [a for a in project_assignments if a.status not in ("Completed", "Removed")]
+    open_tasks = [t for t in tasks if t.status not in ("Completed", "Cancelled")]
+    overdue_tasks = [t for t in open_tasks if t.is_overdue]
+    completed_tasks = [t for t in tasks if t.status == "Completed"]
+    open_tickets = [t for t in tickets if t.status not in ("Resolved", "Closed", "Cancelled")]
+
+    payroll_records = legacy_payroll + batch_payroll
+    payroll_due = sum(float(item.total_due or 0) for item in payroll_records)
+    payroll_paid = sum(float(item.total_paid or 0) for item in payroll_records)
+    payroll_balance = payroll_due - payroll_paid
+
+    active_team_ids = {m.team_id for m in team_memberships if m.is_active}
+    active_team_ids.update(team.id for team in led_teams if team.status == "Active")
+
+    timeline = []
+    def add_timeline(label, title, when, url=None, status=None):
+        if when:
+            timeline.append({"label": label, "title": title, "when": when, "url": url, "status": status})
+
+    for assignment in project_assignments[:12]:
+        add_timeline("Project", assignment.project.project_name, assignment.assigned_at, url_for("projects.detail", project_id=assignment.project_id), assignment.status)
+    for task in tasks[:12]:
+        add_timeline("Task", task.title, task.updated_at or task.created_at, url_for("project_tasks.edit_task", task_id=task.id), task.status)
+    for membership in team_memberships[:10]:
+        add_timeline("Team", membership.team.team_name, membership.joined_at, url_for("master.team_detail", team_id=membership.team_id), "Active" if membership.is_active else "Inactive")
+    for entry in batch_payroll[:10]:
+        add_timeline("Payroll", entry.batch.batch_title, entry.created_at, url_for("payroll.entry_detail", entry_id=entry.id), entry.status)
+    for ticket in tickets[:10]:
+        add_timeline("Service", f"{ticket.ref_no} - {ticket.issue_category or 'Ticket'}", ticket.created_at, url_for("support.ticket_detail", ticket_id=ticket.id), ticket.status)
+    for visit in visits[:10]:
+        add_timeline("Visit", f"{visit.ref_no} - {visit.result or 'Service visit'}", visit.created_at, url_for("support.ticket_detail", ticket_id=visit.ticket_id), visit.status)
+    timeline = sorted(timeline, key=lambda item: item["when"], reverse=True)[:30]
+
+    return {
+        "team_memberships": team_memberships,
+        "led_teams": led_teams,
+        "project_assignments": project_assignments,
+        "tasks": tasks,
+        "legacy_payroll": legacy_payroll,
+        "batch_payroll": batch_payroll,
+        "tickets": tickets,
+        "visits": visits,
+        "timeline": timeline,
+        "summary": {
+            "active_projects": len(active_projects),
+            "total_projects": len(project_assignments),
+            "active_teams": len(active_team_ids),
+            "open_tasks": len(open_tasks),
+            "overdue_tasks": len(overdue_tasks),
+            "completed_tasks": len(completed_tasks),
+            "payroll_due": payroll_due,
+            "payroll_paid": payroll_paid,
+            "payroll_balance": payroll_balance,
+            "payroll_records": len(payroll_records),
+            "open_tickets": len(open_tickets),
+            "service_visits": len(visits),
+        },
+        "last_activity": timeline[0]["when"] if timeline else employee.created_at,
+        "delete_summary": _employee_delete_summary(employee),
+    }
 
 def require_manager():
     if can_manage_users(current_user) or can_create_project(current_user):
@@ -215,8 +304,15 @@ def create_employee():
         db.session.add(employee)
         db.session.commit()
         flash("Employee created successfully.", "success")
-        return redirect(url_for("master.employees"))
+        return redirect(url_for("master.employee_360", employee_id=employee.id))
     return render_template("master/employee_form.html", employee=None, branches=Branch.query.all(), departments=Department.query.all(), users=User.query.all(), statuses=EMPLOYEE_STATUSES, types=EMPLOYEE_TYPES)
+
+
+@master_bp.route("/employees/<int:employee_id>")
+@login_required
+def employee_360(employee_id):
+    employee = Employee.query.get_or_404(employee_id)
+    return render_template("master/employee_360.html", employee=employee, **_employee_360_context(employee))
 
 @master_bp.route("/employees/<int:employee_id>/edit", methods=["GET", "POST"])
 @login_required
@@ -237,8 +333,29 @@ def edit_employee(employee_id):
         employee.remarks = request.form.get("remarks")
         db.session.commit()
         flash("Employee updated successfully.", "success")
-        return redirect(url_for("master.employees"))
-    return render_template("master/employee_form.html", employee=employee, branches=Branch.query.all(), departments=Department.query.all(), users=User.query.all(), statuses=EMPLOYEE_STATUSES, types=EMPLOYEE_TYPES)
+        return redirect(url_for("master.employee_360", employee_id=employee.id))
+    return render_template("master/employee_form.html", employee=employee, branches=Branch.query.all(), departments=Department.query.all(), users=User.query.all(), statuses=EMPLOYEE_STATUSES, types=EMPLOYEE_TYPES, delete_summary=_employee_delete_summary(employee))
+
+
+@master_bp.route("/employees/<int:employee_id>/delete", methods=["POST"])
+@login_required
+def delete_employee(employee_id):
+    employee = Employee.query.get_or_404(employee_id)
+    if not can_access_module(current_user, "employees", "delete"):
+        flash("You do not have permission to delete employees.", "danger")
+        return redirect(url_for("master.employee_360", employee_id=employee.id))
+
+    summary = _employee_delete_summary(employee)
+    if not summary["can_delete"]:
+        details = ", ".join(f"{item['label']}: {item['count']}" for item in summary["blockers"])
+        flash(f"Employee cannot be permanently deleted because history is linked ({details}). Set the employee status to Inactive instead.", "danger")
+        return redirect(url_for("master.employee_360", employee_id=employee.id))
+
+    name = employee.full_name
+    db.session.delete(employee)
+    db.session.commit()
+    flash(f"Employee {name} deleted successfully.", "success")
+    return redirect(url_for("master.employees"))
 
 @master_bp.route("/teams")
 @login_required

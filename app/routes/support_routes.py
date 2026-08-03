@@ -151,7 +151,7 @@ def _first_non_empty(*values):
 @support_bp.before_app_request
 def ensure_support_tables():
     try:
-        db.create_all()
+        # Phase 20D: db.create_all() removed - Alembic owns the schema.
         inspector = db.inspect(db.engine)
         cols = [c["name"] for c in inspector.get_columns("support_ticket")]
         support_ai_columns = {

@@ -1,6 +1,7 @@
 from datetime import datetime
 from flask_login import UserMixin
 from app import db
+from app.types import Money, Quantity, Rate
 
 ROLES = [
     "Admin", "Management", "Operation Manager", "Technical Engineer",
@@ -532,11 +533,11 @@ class EmployeeProjectPayroll(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
     role_on_project = db.Column(db.String(150), nullable=True)
     work_description = db.Column(db.String(250), nullable=True)
-    work_days = db.Column(db.Float, default=0)
-    salary_amount = db.Column(db.Float, default=0)
-    allowance_amount = db.Column(db.Float, default=0)
-    deduction_amount = db.Column(db.Float, default=0)
-    previous_balance = db.Column(db.Float, default=0)
+    work_days = db.Column(Quantity, default=0)
+    salary_amount = db.Column(Money, default=0)
+    allowance_amount = db.Column(Money, default=0)
+    deduction_amount = db.Column(Money, default=0)
+    previous_balance = db.Column(Money, default=0)
     status = db.Column(db.String(50), default="Draft")
     manager_notes = db.Column(db.Text, nullable=True)
     finance_notes = db.Column(db.Text, nullable=True)
@@ -562,7 +563,7 @@ class PayrollPayment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     payroll_entry_id = db.Column(db.Integer, db.ForeignKey("employee_project_payroll.id"), nullable=False)
     payment_date = db.Column(db.Date, nullable=False)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(Money, nullable=False)
     payment_method = db.Column(db.String(80), default="Cash")
     reference_no = db.Column(db.String(120), nullable=True)
     paid_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
@@ -612,11 +613,11 @@ class ProjectPayrollEntry(db.Model):
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
     role_on_project = db.Column(db.String(150), nullable=True)
     work_description = db.Column(db.String(250), nullable=True)
-    work_days = db.Column(db.Float, default=1)
-    project_amount = db.Column(db.Float, default=0)
-    allowance_amount = db.Column(db.Float, default=0)
-    deduction_amount = db.Column(db.Float, default=0)
-    previous_balance = db.Column(db.Float, default=0)
+    work_days = db.Column(Quantity, default=1)
+    project_amount = db.Column(Money, default=0)
+    allowance_amount = db.Column(Money, default=0)
+    deduction_amount = db.Column(Money, default=0)
+    previous_balance = db.Column(Money, default=0)
     status = db.Column(db.String(80), default="Pending")
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -644,7 +645,7 @@ class ProjectPayrollPayment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     payroll_entry_id = db.Column(db.Integer, db.ForeignKey("project_payroll_entry.id"), nullable=False)
     payment_date = db.Column(db.Date, nullable=False)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(Money, nullable=False)
     payment_method = db.Column(db.String(80), default="Cash")
     reference_no = db.Column(db.String(120), nullable=True)
     paid_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
@@ -674,7 +675,7 @@ class MaterialItem(db.Model):
     description = db.Column(db.Text, nullable=True)
     unit = db.Column(db.String(50), nullable=True)
     category = db.Column(db.String(120), nullable=True)
-    unit_cost = db.Column(db.Float, default=0)
+    unit_cost = db.Column(Money, default=0)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -703,9 +704,9 @@ class MaterialRequestLine(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey("material_item.id"), nullable=True)
     item_name = db.Column(db.String(180), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    quantity_requested = db.Column(db.Float, default=0)
+    quantity_requested = db.Column(Quantity, default=0)
     unit = db.Column(db.String(50), nullable=True)
-    estimated_unit_cost = db.Column(db.Float, default=0)
+    estimated_unit_cost = db.Column(Money, default=0)
     remarks = db.Column(db.Text, nullable=True)
     request = db.relationship("MaterialRequest", backref=db.backref("lines", lazy=True, cascade="all, delete-orphan"))
     item = db.relationship("MaterialItem")
@@ -737,9 +738,9 @@ class MaterialIssueLine(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey("material_item.id"), nullable=True)
     item_name = db.Column(db.String(180), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    quantity_issued = db.Column(db.Float, default=0)
+    quantity_issued = db.Column(Quantity, default=0)
     unit = db.Column(db.String(50), nullable=True)
-    unit_cost = db.Column(db.Float, default=0)
+    unit_cost = db.Column(Money, default=0)
     remarks = db.Column(db.Text, nullable=True)
     issue = db.relationship("MaterialIssue", backref=db.backref("lines", lazy=True, cascade="all, delete-orphan"))
     item = db.relationship("MaterialItem")
@@ -770,9 +771,9 @@ class MaterialReturnLine(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey("material_item.id"), nullable=True)
     item_name = db.Column(db.String(180), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    quantity_returned = db.Column(db.Float, default=0)
+    quantity_returned = db.Column(Quantity, default=0)
     unit = db.Column(db.String(50), nullable=True)
-    unit_cost = db.Column(db.Float, default=0)
+    unit_cost = db.Column(Money, default=0)
     remarks = db.Column(db.Text, nullable=True)
     material_return = db.relationship("MaterialReturn", backref=db.backref("lines", lazy=True, cascade="all, delete-orphan"))
     item = db.relationship("MaterialItem")
@@ -817,7 +818,7 @@ class QuotationItem(db.Model):
     item_name = db.Column(db.String(180), unique=True, nullable=False)
     description = db.Column(db.Text, nullable=True)
     unit = db.Column(db.String(50), nullable=True)
-    unit_price = db.Column(db.Float, default=0)
+    unit_price = db.Column(Money, default=0)
     category = db.Column(db.String(120), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -882,9 +883,9 @@ class SalesQuotationLine(db.Model):
     quotation_id = db.Column(db.Integer, db.ForeignKey("sales_quotation.id"), nullable=False)
     item = db.Column(db.String(180), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    quantity = db.Column(db.Float, default=1)
+    quantity = db.Column(Quantity, default=1)
     unit = db.Column(db.String(50), nullable=True)
-    unit_price = db.Column(db.Float, default=0)
+    unit_price = db.Column(Money, default=0)
 
     @property
     def total_price(self):
@@ -1070,6 +1071,10 @@ FORM_PERMISSION_KEYS = [
     ("ai-logs", "AI Logs", "AI"),
     ("ai-settings", "AI Settings", "AI"),
 
+    # Finance
+    ("payment-requests", "Payment Requests", "Finance"),
+    ("accounting", "Accounting", "Finance"),
+
     # Payroll / Admin
     ("payroll", "Project Payroll", "Payroll"),
     ("users", "Users & Roles", "Admin"),
@@ -1235,3 +1240,252 @@ class AIInteractionLog(db.Model):
     reviewed_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship("User")
+
+
+# ---------------------------------------------------------------------------
+# Payment Request System: Request -> Manager Approval -> Finance Approval -> Payment
+# Mirrors the existing ProjectPayrollBatch/Entry/Payment pattern (same
+# MANAGER_ROLES/FINANCE_ROLES two-tier approval convention used in
+# app/routes/payroll_routes.py) but is general-purpose: a request can stand
+# alone, or optionally link to a Project and/or a Material Request.
+# ---------------------------------------------------------------------------
+
+PAYMENT_REQUEST_STATUSES = [
+    "Pending Manager Approval", "Pending Finance Approval", "Approved",
+    "Rejected", "Partially Paid", "Paid", "Cancelled",
+]
+PAYMENT_REQUEST_CATEGORIES = [
+    "Materials & Supplies", "Project Expense", "Utilities", "Rent",
+    "Transport & Fuel", "Salaries & Wages", "Professional Services",
+    "Equipment", "Other",
+]
+# Same values/spelling as PROJECT_PAYMENT_METHODS (payroll module) so
+# reporting and filtering stay consistent across both modules.
+PAYMENT_REQUEST_METHODS = PROJECT_PAYMENT_METHODS
+PAYMENT_REQUEST_CURRENCIES = ["USD", "SLSH"]
+
+
+class PaymentRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    request_no = db.Column(db.String(120), unique=True, nullable=True)
+    requested_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    branch_id = db.Column(db.Integer, db.ForeignKey("branch.id"), nullable=True)
+    department_id = db.Column(db.Integer, db.ForeignKey("department.id"), nullable=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=True)
+    material_request_id = db.Column(db.Integer, db.ForeignKey("material_request.id"), nullable=True)
+
+    payee_name = db.Column(db.String(180), nullable=False)
+    payee_phone = db.Column(db.String(80), nullable=True)
+    category = db.Column(db.String(100), default="Other")
+    purpose = db.Column(db.Text, nullable=False)
+    amount = db.Column(Money, nullable=False, default=0)
+    currency = db.Column(db.String(10), default="USD")
+    needed_by_date = db.Column(db.Date, nullable=True)
+
+    status = db.Column(db.String(80), default="Pending Manager Approval")
+
+    manager_approved_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    manager_approved_at = db.Column(db.DateTime, nullable=True)
+    manager_comment = db.Column(db.Text, nullable=True)
+
+    finance_approved_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    finance_approved_at = db.Column(db.DateTime, nullable=True)
+    finance_comment = db.Column(db.Text, nullable=True)
+
+    rejected_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    rejected_at = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.Text, nullable=True)
+    rejected_at_stage = db.Column(db.String(80), nullable=True)
+
+    cancelled_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+
+    attachment_original_name = db.Column(db.String(255), nullable=True)
+    attachment_stored_name = db.Column(db.String(255), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    requested_by = db.relationship("User", foreign_keys=[requested_by_id])
+    branch = db.relationship("Branch")
+    department = db.relationship("Department")
+    project = db.relationship("Project", backref=db.backref("payment_requests", lazy=True))
+    material_request = db.relationship("MaterialRequest", backref=db.backref("payment_requests", lazy=True))
+    manager_approved_by = db.relationship("User", foreign_keys=[manager_approved_by_id])
+    finance_approved_by = db.relationship("User", foreign_keys=[finance_approved_by_id])
+    rejected_by = db.relationship("User", foreign_keys=[rejected_by_id])
+    cancelled_by = db.relationship("User", foreign_keys=[cancelled_by_id])
+
+    @property
+    def total_paid(self):
+        return sum(float(p.amount or 0) for p in self.payments)
+
+    @property
+    def balance(self):
+        return float(self.amount or 0) - self.total_paid
+
+    @property
+    def is_open(self):
+        return self.status not in ("Rejected", "Cancelled", "Paid")
+
+
+class PaymentRequestPayment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    payment_request_id = db.Column(db.Integer, db.ForeignKey("payment_request.id"), nullable=False)
+    payment_date = db.Column(db.Date, nullable=False)
+    amount = db.Column(Money, nullable=False)
+    currency = db.Column(db.String(10), default="USD")
+    payment_method = db.Column(db.String(80), default="Cash")
+    reference_no = db.Column(db.String(150), nullable=True)
+    payee_phone = db.Column(db.String(80), nullable=True)
+    proof_original_name = db.Column(db.String(255), nullable=True)
+    proof_stored_name = db.Column(db.String(255), nullable=True)
+    paid_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    payment_request = db.relationship("PaymentRequest", backref=db.backref("payments", lazy=True, cascade="all, delete-orphan"))
+    paid_by = db.relationship("User", foreign_keys=[paid_by_id])
+
+
+# ---------------------------------------------------------------------------
+# Phase 20A/20B - Accounting: Chart of Accounts + Double-Entry Journal Engine
+#
+# Design rules (do not weaken these):
+# 1. Every posted journal entry must balance: sum(debits) == sum(credits).
+#    Enforced in app/accounting_service.py at posting time.
+# 2. A Posted entry is IMMUTABLE. It is never edited or deleted - mistakes
+#    are corrected with a reversal entry (create_reversal in the service),
+#    which links both entries so the audit trail stays complete. Only Draft
+#    entries can be edited or deleted.
+# 3. The ledger runs in ONE base currency (USD). SLSH transactions are
+#    converted at entry time using the rate stored on the entry; both the
+#    original amount and the USD amounts are kept.
+# ---------------------------------------------------------------------------
+
+ACCOUNT_TYPES = ["Asset", "Liability", "Equity", "Income", "Expense"]
+JOURNAL_ENTRY_STATUSES = ["Draft", "Posted", "Reversed"]
+ACCOUNTING_BASE_CURRENCY = "USD"
+
+
+class Account(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(20), unique=True, nullable=False)
+    name = db.Column(db.String(180), nullable=False)
+    account_type = db.Column(db.String(30), nullable=False)  # one of ACCOUNT_TYPES
+    parent_id = db.Column(db.Integer, db.ForeignKey("account.id"), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    # System accounts are seeded defaults referenced by automation mappings;
+    # they can be renamed but not deleted or deactivated from the UI.
+    is_system = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    parent = db.relationship("Account", remote_side=[id], backref="children")
+
+    @property
+    def normal_side(self):
+        # Which side increases this account.
+        return "debit" if self.account_type in ("Asset", "Expense") else "credit"
+
+
+class JournalEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    entry_no = db.Column(db.String(60), unique=True, nullable=True)
+    entry_date = db.Column(db.Date, nullable=False)
+    memo = db.Column(db.Text, nullable=True)
+    reference = db.Column(db.String(180), nullable=True)
+    status = db.Column(db.String(20), default="Draft")  # Draft / Posted / Reversed
+
+    # Where this entry came from. Manual entries leave these null.
+    source_module = db.Column(db.String(60), nullable=True)   # e.g. "payment-requests", "payroll"
+    source_record_id = db.Column(db.Integer, nullable=True)
+
+    # Currency of the underlying transaction. Line amounts are ALWAYS USD;
+    # if currency != USD, original_amount holds the transaction total in
+    # that currency and exchange_rate holds units-per-USD used to convert.
+    currency = db.Column(db.String(10), default="USD")
+    exchange_rate = db.Column(Rate, default=1.0)
+    original_amount = db.Column(Money, nullable=True)
+
+    created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    posted_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    posted_at = db.Column(db.DateTime, nullable=True)
+
+    # Reversal linkage: if this entry was reversed, reversed_by_entry_id
+    # points at the reversing entry; if this entry IS a reversal,
+    # reverses_entry_id points back at the original.
+    reversed_by_entry_id = db.Column(db.Integer, db.ForeignKey("journal_entry.id"), nullable=True)
+    reverses_entry_id = db.Column(db.Integer, db.ForeignKey("journal_entry.id"), nullable=True)
+
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    posted_by = db.relationship("User", foreign_keys=[posted_by_id])
+    reversed_by_entry = db.relationship("JournalEntry", remote_side=[id], foreign_keys=[reversed_by_entry_id], uselist=False)
+    reverses_entry = db.relationship("JournalEntry", remote_side=[id], foreign_keys=[reverses_entry_id], uselist=False)
+
+    @property
+    def total_debit(self):
+        return sum(float(l.debit or 0) for l in self.lines)
+
+    @property
+    def total_credit(self):
+        return sum(float(l.credit or 0) for l in self.lines)
+
+    @property
+    def is_balanced(self):
+        return abs(self.total_debit - self.total_credit) < 0.01
+
+
+class JournalLine(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    journal_entry_id = db.Column(db.Integer, db.ForeignKey("journal_entry.id"), nullable=False)
+    account_id = db.Column(db.Integer, db.ForeignKey("account.id"), nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+    debit = db.Column(Money, default=0)   # USD
+    credit = db.Column(Money, default=0)  # USD
+    line_order = db.Column(db.Integer, default=0)
+
+    journal_entry = db.relationship("JournalEntry", backref=db.backref("lines", lazy=True, cascade="all, delete-orphan", order_by="JournalLine.line_order"))
+    account = db.relationship("Account", backref=db.backref("journal_lines", lazy=True))
+
+
+class AccountMapping(db.Model):
+    """Connects business events to ledger accounts so automation never
+    hardcodes account choices. mapping_type + key -> account, e.g.
+    ("payment_category", "Materials & Supplies") -> 5100 Materials Expense,
+    ("payment_method", "Zaad") -> 1020 Zaad Account,
+    ("special", "payroll_salaries") -> 5300 Salaries & Wages."""
+    id = db.Column(db.Integer, primary_key=True)
+    mapping_type = db.Column(db.String(40), nullable=False)
+    key = db.Column(db.String(120), nullable=False)
+    account_id = db.Column(db.Integer, db.ForeignKey("account.id"), nullable=False)
+
+    account = db.relationship("Account")
+
+    __table_args__ = (db.UniqueConstraint("mapping_type", "key", name="uq_account_mapping_type_key"),)
+
+
+# ---------------------------------------------------------------------------
+# Phase 20D - Security hardening
+# ---------------------------------------------------------------------------
+
+class LoginAttempt(db.Model):
+    """One row per failed login, used for throttling.
+
+    Deliberately keyed on both the email that was tried and the source IP:
+    locking only by email lets an attacker lock a real user out on purpose
+    (denial of service), and locking only by IP lets a botnet spread the
+    guessing across addresses. Successful logins clear the email's rows.
+    """
+    __tablename__ = "login_attempt"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), nullable=True, index=True)
+    ip_address = db.Column(db.String(64), nullable=True, index=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    attempted_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        db.Index("ix_login_attempt_email_time", "email", "attempted_at"),
+        db.Index("ix_login_attempt_ip_time", "ip_address", "attempted_at"),
+    )

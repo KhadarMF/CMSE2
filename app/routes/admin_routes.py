@@ -22,13 +22,21 @@ def require_admin():
 @login_required
 def backup_home():
     if not require_admin(): return redirect(url_for("dashboard.dashboard"))
-    from app.backup_service import list_backups, health_check
-    backups = list_backups()
-    health = health_check()
+    from app.backup_service import list_backups_rich, enterprise_health_summary, backup_statistics
+    filters = {
+        "q": request.args.get("q", ""),
+        "status": request.args.get("status", ""),
+        "label": request.args.get("label", ""),
+    }
+    backups = list_backups_rich(filters)
+    health = enterprise_health_summary(backups)
+    stats = backup_statistics(backups)
     notifications = Notification.query.order_by(Notification.created_at.desc()).limit(100).all()
-    return render_template("admin/backup.html", backups=backups, notifications=notifications, health=health)
+    return render_template("admin/backup.html", backups=backups, notifications=notifications, health=health, stats=stats, filters=filters)
 
-@admin_bp.route("/backup/create", methods=["POST", "GET"])
+# Phase 20D: GET removed. A state-changing GET can be triggered by a bare
+# <img src> or link on any page, and CSRF protection does not cover GET.
+@admin_bp.route("/backup/create", methods=["POST"])
 @login_required
 def create_backup():
     if not require_admin(): return redirect(url_for("dashboard.dashboard"))
@@ -72,13 +80,84 @@ def delete_backup(filename):
     from app.backup_service import get_backup_root
     if "/" in filename or "\\" in filename or not filename.endswith(".zip"):
         flash("Invalid backup filename.", "danger"); return redirect(url_for("admin.backup_home"))
-    file_path = get_backup_root() / filename
-    if file_path.exists():
+    root = get_backup_root()
+    file_path = root / filename
+    existing = list(root.glob("*.zip"))
+    if len(existing) <= 1 and file_path.exists():
+        flash("Cannot delete the only available backup. Create another backup first.", "warning")
+    elif file_path.exists():
         file_path.unlink()
         flash("Backup deleted.", "success")
     else:
         flash("Backup file not found.", "warning")
     return redirect(url_for("admin.backup_home"))
+
+@admin_bp.route("/restore")
+@login_required
+def restore_home():
+    if not require_admin(): return redirect(url_for("dashboard.dashboard"))
+    from app.backup_service import list_backups_rich, is_restore_in_progress, get_restore_lock_info, list_restore_logs
+    backups = list_backups_rich()
+    return render_template(
+        "admin/restore.html",
+        backups=backups,
+        in_progress=is_restore_in_progress(),
+        lock_info=get_restore_lock_info(),
+        recent_logs=list_restore_logs(limit=5),
+    )
+
+@admin_bp.route("/restore/confirm/<filename>")
+@login_required
+def restore_confirm(filename):
+    if not require_admin(): return redirect(url_for("dashboard.dashboard"))
+    from app.backup_service import restore_preview
+    preview = restore_preview(filename)
+    if preview.get("error"):
+        flash(preview["error"], "danger")
+        return redirect(url_for("admin.restore_home"))
+    return render_template("admin/restore_confirm.html", preview=preview)
+
+@admin_bp.route("/restore/execute/<filename>", methods=["POST"])
+@login_required
+def restore_execute(filename):
+    if not require_admin(): return redirect(url_for("dashboard.dashboard"))
+    from app.backup_service import perform_restore
+
+    confirm_text = (request.form.get("confirm_text") or "").strip()
+    if confirm_text != filename:
+        flash("Confirmation text did not match the backup filename exactly. Restore was not started.", "danger")
+        return redirect(url_for("admin.restore_confirm", filename=filename))
+
+    mode = request.form.get("mode", "json_data")
+    restore_files = request.form.get("restore_files") == "on"
+    full_schema_confirmed = request.form.get("full_schema_confirmed") == "on"
+
+    try:
+        result = perform_restore(filename, mode=mode, restore_files=restore_files, full_schema_confirmed=full_schema_confirmed)
+        flash(f"Restore completed from {filename}. A safety backup was created first: {result.get('pre_restore_backup')}.", "success")
+        return redirect(url_for("admin.restore_log_detail", log_id=result["id"]))
+    except Exception as exc:
+        current_app.logger.exception("Restore failed")
+        flash(f"Restore failed: {exc}", "danger")
+        return redirect(url_for("admin.restore_confirm", filename=filename))
+
+@admin_bp.route("/restore/log")
+@login_required
+def restore_log_list():
+    if not require_admin(): return redirect(url_for("dashboard.dashboard"))
+    from app.backup_service import list_restore_logs
+    return render_template("admin/restore_log.html", logs=list_restore_logs(limit=200))
+
+@admin_bp.route("/restore/log/<log_id>")
+@login_required
+def restore_log_detail(log_id):
+    if not require_admin(): return redirect(url_for("dashboard.dashboard"))
+    from app.backup_service import get_restore_log
+    entry = get_restore_log(log_id)
+    if not entry:
+        flash("Restore log entry not found.", "danger")
+        return redirect(url_for("admin.restore_log_list"))
+    return render_template("admin/restore_log_detail.html", entry=entry)
 
 @admin_bp.route("/settings", methods=["GET", "POST"])
 @login_required

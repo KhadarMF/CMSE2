@@ -9,6 +9,7 @@
 <div class="col-lg-6">
 <div class="card shadow-sm mb-3"><div class="card-header fw-bold">Assign Team</div><div class="card-body">
 <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <input type="hidden" name="action" value="add_team">
 <div class="row g-2">
 <div class="col-md-12"><label class="form-label">Team</label><select class="form-select" name="team_id" required><option value="">Select Team</option>{% for t in teams %}<option value="{{ t.id }}">{{ t.team_name }} — Leader: {{ t.leader.full_name if t.leader else "No leader" }}</option>{% endfor %}</select></div>
@@ -37,6 +38,7 @@
 <div class="col-lg-6">
 <div class="card shadow-sm mb-3"><div class="card-header fw-bold">Assign Direct Employee</div><div class="card-body">
 <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <input type="hidden" name="action" value="add_employee">
 <div class="row g-2">
 <div class="col-md-12"><label class="form-label">Employee</label><select class="form-select" name="employee_id" required><option value="">Select Employee</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }} — {{ e.job_title or "" }}</option>{% endfor %}</select></div>

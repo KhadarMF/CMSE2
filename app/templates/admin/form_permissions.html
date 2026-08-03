@@ -44,6 +44,7 @@
 
 {% if selected_user %}
 <form method="post" class="card" id="permissionForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="card-header fw-bold d-flex justify-content-between align-items-center">
     <span>Permissions for {{ selected_user.full_name }} <span class="text-muted">({{ selected_user.role }})</span></span>
     {% if selected_user.role == "Admin" %}<span class="badge bg-success">ADMIN FULL ACCESS</span>{% else %}<span class="badge bg-danger">STRICT ACCESS</span>{% endif %}

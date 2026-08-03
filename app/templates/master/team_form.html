@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="mt-4 mb-3"><h2 class="fw-bold">{{ "Edit Team" if team else "Add Team" }}</h2></div>
-<form method="post" class="card shadow-sm"><div class="card-body">
+<form method="post" class="card shadow-sm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="card-body">
 <div class="row g-3">
     <div class="col-md-5"><label class="form-label">Team Name *</label><input class="form-control" name="team_name" value="{{ team.team_name if team else '' }}" required></div>
     <div class="col-md-3"><label class="form-label">Team Type</label><input class="form-control" name="team_type" value="{{ team.team_type if team else '' }}" placeholder="Installation / Survey / Commissioning"></div>

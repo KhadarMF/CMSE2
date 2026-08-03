@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-4 mb-3">
+  <h2 class="fw-bold">Opening Balances</h2>
+  <p class="text-muted mb-0">Enter what the business owns and owes as of your accounting start date. Amounts in USD, on each account's natural side — positive Cash means you have it, positive Loan means you owe it. Use a negative number only to flip sides.</p>
+</div>
+
+{% if already_entered %}
+<div class="alert alert-warning">
+  Opening balances have already been posted (see the Journal, source "opening-balances"). Posting again will <strong>add on top</strong> of the previous entry, not replace it — only do that for corrections you understand, or reverse the earlier entry first from its journal page.
+</div>
+{% endif %}
+
+<div class="alert alert-info">
+  Whatever doesn't balance goes automatically to <strong>3100 Opening Balance Equity</strong> — you don't enter that account yourself. Income and expense accounts have no opening balances; they start from zero each period.
+</div>
+
+<form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card shadow-sm mb-4" style="max-width: 760px;">
+    <div class="card-body">
+      <label class="form-label">As of date <span class="text-danger">*</span></label>
+      <input class="form-control" type="date" name="as_of_date" value="{{ today }}" required style="max-width: 240px;">
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4" style="max-width: 760px;">
+    <div class="card-header bg-white fw-bold">Balances</div>
+    <div class="card-body p-0">
+      <table class="table mb-0 align-middle">
+        <thead><tr><th>Account</th><th style="width:200px;" class="text-end">Amount (USD)</th></tr></thead>
+        <tbody>
+        {% for a in accounts %}
+          <tr>
+            <td>
+              {{ a.code }} {{ a.name }} <span class="text-muted small">({{ a.account_type }} — {{ a.normal_side }} normal)</span>
+              <input type="hidden" name="ob_account_id" value="{{ a.id }}">
+            </td>
+            <td><input class="form-control form-control-sm text-end" type="number" step="0.01" name="ob_amount" placeholder="0.00"></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if can_post %}
+  <div class="d-flex gap-2 mb-4">
+    <button class="btn btn-primary" type="submit" onclick="return confirm('Post opening balances? This creates a posted journal entry - corrections afterwards require a reversal.');">Post Opening Balances</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('accounting.dashboard') }}">Cancel</a>
+  </div>
+  {% else %}
+  <div class="alert alert-secondary" style="max-width: 760px;">Only Admin, Management or Finance Officer can post opening balances.</div>
+  {% endif %}
+</form>
+{% endblock %}

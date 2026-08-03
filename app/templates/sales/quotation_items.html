@@ -7,6 +7,7 @@
 <div class='row g-3'>
   <div class='col-lg-5'><div class='card shadow-sm'><div class='card-header bg-white fw-bold'>Add Single Item</div><div class='card-body'>
     <form method='post'>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class='mb-2'><label class='form-label'>Item Name</label><input name='item_name' class='form-control' required></div>
       <div class='mb-2'><label class='form-label'>Description</label><textarea name='description' class='form-control' rows='2'></textarea></div>
       <div class='row g-2'><div class='col-md-4'><label class='form-label'>Unit</label><input name='unit' class='form-control'></div><div class='col-md-4'><label class='form-label'>Unit Price</label><input name='unit_price' type='number' step='0.01' class='form-control'></div><div class='col-md-4'><label class='form-label'>Category</label><input name='category' class='form-control'></div></div>
@@ -15,6 +16,7 @@
   </div></div>
   <div class='card shadow-sm mt-3'><div class='card-header bg-white fw-bold'>Import Excel / CSV</div><div class='card-body'>
     <form method='post' enctype='multipart/form-data'>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type='file' name='file' class='form-control' accept='.xlsx,.csv' required>
       <div class='form-text'>Required columns: item_name, description, unit, unit_price, category</div>
       <button class='btn btn-success mt-3'>Import Items</button>

@@ -2,7 +2,8 @@
 {% block content %}
 <h2 class='fw-bold'>Create Notification</h2>
 <div class="alert alert-info"><strong>Note:</strong> In-app notification is always created. Email can be sent now if SMTP is configured. SMS is queued only because no SMS API is connected yet.</div>
-<form method='post' class='card'><div class='card-body'><div class='row g-3'>
+<form method='post' class='card'>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class='card-body'><div class='row g-3'>
 <div class='col-md-6'><label class='form-label'>Title</label><input class='form-control' name='title' required></div>
 <div class='col-md-3'><label class='form-label'>Priority</label><select class='form-select' name='priority'>{% for p in priorities %}<option value='{{ p }}'>{{ p }}</option>{% endfor %}</select></div>
 <div class='col-md-3'><label class='form-label'>Target User</label><select class='form-select' name='target_user_id'><option value=''>All Users</option>{% for u in users %}<option value='{{ u.id }}'>{{ u.full_name }} - {{ u.role }}</option>{% endfor %}</select></div>

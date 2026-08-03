@@ -1,11 +1,13 @@
 import os
 from pathlib import Path
-from flask import Flask, request, redirect, url_for, flash
+from flask import Flask, request, redirect, url_for, flash, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
+from flask_migrate import Migrate
 from dotenv import load_dotenv
 
 db = SQLAlchemy()
+migrate = Migrate()
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.login_message_category = "warning"
@@ -27,14 +29,29 @@ def create_app():
     load_dotenv(override=False)
     app = Flask(__name__)
 
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-secret-key")
+    # Phase 20D: no more silent fallback secret. validate_secret_key() raises
+    # in production if SECRET_KEY is missing, still the placeholder, or too
+    # short - a forgeable session cookie means anyone can become Admin, and a
+    # crash on boot is far cheaper than discovering that later.
+    from app.security import validate_secret_key, init_csrf, is_production
+    secret_key = os.environ.get("SECRET_KEY", "")
+    validate_secret_key(secret_key)
+    app.config["SECRET_KEY"] = secret_key or "dev-only-insecure-key"
     # Phase 17B.1E Security Hardening: use a new session cookie name to invalidate
     # any browser cookies created by the unsafe 17B.1C/17B.1D builds.
     app.config["SESSION_COOKIE_NAME"] = os.environ.get("SESSION_COOKIE_NAME", "cmse_erp_session_v17b1e")
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-    if os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"):
+    # Phase 20D: default to Secure cookies in production instead of opt-in.
+    # Render always serves HTTPS, so the old opt-in only ever meant "someone
+    # forgot to set the variable and the cookie went out in the clear".
+    cookie_secure_env = os.environ.get("SESSION_COOKIE_SECURE", "").strip().lower()
+    if cookie_secure_env in ("1", "true", "yes"):
         app.config["SESSION_COOKIE_SECURE"] = True
+    elif cookie_secure_env in ("0", "false", "no"):
+        app.config["SESSION_COOKIE_SECURE"] = False
+    else:
+        app.config["SESSION_COOKIE_SECURE"] = is_production()
     app.config["SQLALCHEMY_DATABASE_URI"] = normalize_database_url(os.environ.get("DATABASE_URL", "sqlite:///solar_documents.db"))
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -60,6 +77,7 @@ def create_app():
     os.makedirs(app.instance_path, exist_ok=True)
 
     db.init_app(app)
+    migrate.init_app(app, db, compare_type=True)
     login_manager.init_app(app)
 
     from app.models import User
@@ -100,6 +118,8 @@ def create_app():
     from app.routes.production_routes import production_bp
     from app.routes.ai_routes import ai_bp
     from app.routes.whatsapp_routes import whatsapp_bp
+    from app.routes.payment_routes import payments_bp
+    from app.routes.accounting_routes import accounting_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -123,6 +143,12 @@ def create_app():
     app.register_blueprint(production_bp)
     app.register_blueprint(ai_bp)
     app.register_blueprint(whatsapp_bp)
+    app.register_blueprint(payments_bp)
+    app.register_blueprint(accounting_bp)
+
+    # Phase 20D: global CSRF protection. Must run after the blueprints are
+    # registered because it exempts the WhatsApp webhook by function object.
+    init_csrf(app)
 
     # Phase 17B.1E Security Hardening: strict login gate.
     # This is a second safety net in addition to @login_required and the
@@ -152,6 +178,29 @@ def create_app():
             return redirect(url_for("auth.login"))
         return None
 
+    # Phase 18A.4: while a restore is running, the whole app is put into
+    # maintenance mode for everyone except the Restore Center itself (so the
+    # admin who started it can watch progress and check the log). The lock
+    # file this checks is created and removed by app.backup_service.
+    # NOTE: this only works within a single filesystem/process. It does not
+    # coordinate a restore across multiple horizontally-scaled instances.
+    @app.before_request
+    def enforce_maintenance_mode():
+        endpoint = request.endpoint or ""
+        if endpoint == "static" or endpoint.startswith("static"):
+            return None
+        if endpoint in ("auth.login", "auth.logout", "health.health"):
+            return None
+        if endpoint.startswith("admin.restore"):
+            return None
+        try:
+            from app.backup_service import is_restore_in_progress, get_restore_lock_info
+            if is_restore_in_progress():
+                return render_template("system/maintenance.html", info=get_restore_lock_info() or {}), 503
+        except Exception:
+            return None
+        return None
+
     from app.permission_enforcer import register_permission_enforcer
     register_permission_enforcer(app)
 
@@ -161,6 +210,18 @@ def create_app():
         with app.app_context():
             from app.db_utils import sync_postgres_sequences
             sync_postgres_sequences()
+    except Exception:
+        pass
+
+    # Phase 20D: the schema is now owned by Alembic (`flask db upgrade`).
+    # The old ensure_*_tables() helpers called db.create_all() on the fly,
+    # which silently did nothing whenever a model gained a COLUMN rather
+    # than a whole table - that is how schema drift got in. This warns
+    # loudly instead of guessing.
+    try:
+        with app.app_context():
+            from app.db_utils import warn_if_migrations_pending
+            warn_if_migrations_pending(app)
     except Exception:
         pass
 

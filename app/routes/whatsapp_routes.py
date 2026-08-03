@@ -166,10 +166,10 @@ def _send_quotation_template_for_log(item):
 
 @whatsapp_bp.before_app_request
 def ensure_whatsapp_tables():
-    try:
-        db.create_all()
-    except Exception:
-        pass
+    # Phase 20D: db.create_all() removed - the schema is owned by Alembic
+    # (`flask db upgrade`). create_all() only ever created MISSING TABLES;
+    # it silently ignored new COLUMNS, which is how the schema drifted.
+    return None
 
 @whatsapp_bp.route('/webhook', methods=['GET'])
 def webhook_verify():

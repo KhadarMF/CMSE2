@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mt-4 mb-3">
+  <div>
+    <h2 class="fw-bold">{{ pr.request_no }}</h2>
+    <p class="text-muted mb-0">Submitted {{ pr.created_at.strftime('%Y-%m-%d %H:%M') if pr.created_at else '' }} by {{ pr.requested_by.full_name if pr.requested_by else '' }}</p>
+  </div>
+  <div>
+    {% if pr.status == 'Paid' %}<span class="badge bg-success fs-6">{{ pr.status }}</span>
+    {% elif pr.status == 'Rejected' %}<span class="badge bg-danger fs-6">{{ pr.status }}</span>
+    {% elif pr.status == 'Cancelled' %}<span class="badge bg-secondary fs-6">{{ pr.status }}</span>
+    {% elif pr.status == 'Approved' %}<span class="badge bg-primary fs-6">{{ pr.status }}</span>
+    {% elif pr.status == 'Partially Paid' %}<span class="badge bg-info text-dark fs-6">{{ pr.status }}</span>
+    {% else %}<span class="badge bg-warning text-dark fs-6">{{ pr.status }}</span>{% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Amount</div><h4>{{ pr.currency }} {{ "%.2f"|format(pr.amount) }}</h4></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Paid</div><h4>{{ pr.currency }} {{ "%.2f"|format(pr.total_paid) }}</h4></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Balance</div><h4>{{ pr.currency }} {{ "%.2f"|format(pr.balance) }}</h4></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Category</div><h4>{{ pr.category }}</h4></div></div></div>
+</div>
+
+<div class="row">
+  <div class="col-lg-7">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-bold">Details</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Payee</dt><dd class="col-sm-8">{{ pr.payee_name }}{% if pr.payee_phone %} — {{ pr.payee_phone }}{% endif %}</dd>
+          <dt class="col-sm-4">Purpose</dt><dd class="col-sm-8">{{ pr.purpose }}</dd>
+          <dt class="col-sm-4">Project</dt><dd class="col-sm-8">{{ pr.project.project_name if pr.project else '—' }}</dd>
+          <dt class="col-sm-4">Material Request</dt><dd class="col-sm-8">{{ pr.material_request.ref_no if pr.material_request else '—' }}</dd>
+          <dt class="col-sm-4">Branch / Department</dt><dd class="col-sm-8">{{ pr.branch.branch_name if pr.branch else '—' }} / {{ pr.department.department_name if pr.department else '—' }}</dd>
+          <dt class="col-sm-4">Needed By</dt><dd class="col-sm-8">{{ pr.needed_by_date or '—' }}</dd>
+          <dt class="col-sm-4">Attachment</dt>
+          <dd class="col-sm-8">
+            {% if pr.attachment_stored_name %}<a href="{{ url_for('payments.download_attachment', request_id=pr.id) }}">{{ pr.attachment_original_name }}</a>{% else %}—{% endif %}
+          </dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-bold">Approval Trail</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Manager Approval</dt>
+          <dd class="col-sm-8">{% if pr.manager_approved_by %}{{ pr.manager_approved_by.full_name }} — {{ pr.manager_approved_at.strftime('%Y-%m-%d %H:%M') if pr.manager_approved_at else '' }}{% else %}Pending{% endif %}</dd>
+          <dt class="col-sm-4">Finance Approval</dt>
+          <dd class="col-sm-8">{% if pr.finance_approved_by %}{{ pr.finance_approved_by.full_name }} — {{ pr.finance_approved_at.strftime('%Y-%m-%d %H:%M') if pr.finance_approved_at else '' }}{% else %}Pending{% endif %}</dd>
+          {% if pr.status == 'Rejected' %}
+          <dt class="col-sm-4 text-danger">Rejected</dt>
+          <dd class="col-sm-8 text-danger">By {{ pr.rejected_by.full_name if pr.rejected_by else '' }} at {{ pr.rejected_at_stage }} stage — {{ pr.rejection_reason }}</dd>
+          {% endif %}
+          {% if pr.status == 'Cancelled' %}
+          <dt class="col-sm-4 text-secondary">Cancelled</dt>
+          <dd class="col-sm-8">By {{ pr.cancelled_by.full_name if pr.cancelled_by else '' }} at {{ pr.cancelled_at.strftime('%Y-%m-%d %H:%M') if pr.cancelled_at else '' }}</dd>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    {% if pr.payments %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-bold">Payment History</div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>Paid By</th><th>Proof</th></tr></thead>
+          <tbody>
+          {% for p in pr.payments %}
+            <tr>
+              <td>{{ p.payment_date }}</td>
+              <td>{{ p.currency }} {{ "%.2f"|format(p.amount) }}</td>
+              <td>{{ p.payment_method }}</td>
+              <td>{{ p.reference_no or '—' }}</td>
+              <td>{{ p.paid_by.full_name if p.paid_by else '' }}</td>
+              <td>{% if p.proof_stored_name %}<a href="{{ url_for('payments.download_payment_proof', request_id=pr.id, payment_id=p.id) }}">View</a>{% else %}—{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-5">
+    {% if pr.status == 'Pending Manager Approval' %}
+      {% if can_manage %}
+      <div class="card shadow-sm mb-4 border-primary">
+        <div class="card-header bg-white fw-bold">Manager Approval</div>
+        <div class="card-body">
+          <a class="btn btn-primary w-100 mb-2" href="{{ url_for('payments.approve_manager', request_id=pr.id) }}">Approve (Manager)</a>
+          <button class="btn btn-outline-danger w-100" type="button" data-bs-toggle="collapse" data-bs-target="#rejectFormMgr">Reject</button>
+          <form class="collapse mt-2" id="rejectFormMgr" method="post" action="{{ url_for('payments.reject_request', request_id=pr.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <textarea class="form-control mb-2" name="reason" rows="2" placeholder="Reason for rejection" required></textarea>
+            <button class="btn btn-danger btn-sm w-100" type="submit">Confirm Reject</button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+      {% if pr.requested_by_id == current_user.id or current_user.role == 'Admin' %}
+      <div class="card shadow-sm mb-4">
+        <div class="card-body">
+          <form method="post" action="{{ url_for('payments.cancel_request', request_id=pr.id) }}" onsubmit="return confirm('Cancel this request?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-secondary w-100" type="submit">Cancel Request</button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+    {% endif %}
+
+    {% if pr.status == 'Pending Finance Approval' and can_finance %}
+      <div class="card shadow-sm mb-4 border-primary">
+        <div class="card-header bg-white fw-bold">Finance Approval</div>
+        <div class="card-body">
+          <a class="btn btn-primary w-100 mb-2" href="{{ url_for('payments.approve_finance', request_id=pr.id) }}">Approve (Finance)</a>
+          <button class="btn btn-outline-danger w-100" type="button" data-bs-toggle="collapse" data-bs-target="#rejectFormFin">Reject</button>
+          <form class="collapse mt-2" id="rejectFormFin" method="post" action="{{ url_for('payments.reject_request', request_id=pr.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <textarea class="form-control mb-2" name="reason" rows="2" placeholder="Reason for rejection" required></textarea>
+            <button class="btn btn-danger btn-sm w-100" type="submit">Confirm Reject</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if pr.status in ('Approved', 'Partially Paid') and can_finance %}
+      <div class="card shadow-sm mb-4 border-success">
+        <div class="card-header bg-white fw-bold">Record Payment</div>
+        <div class="card-body">
+          <p class="small text-muted">Remaining balance: {{ pr.currency }} {{ "%.2f"|format(pr.balance) }}</p>
+          <form method="post" action="{{ url_for('payments.add_payment', request_id=pr.id) }}" enctype="multipart/form-data">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-2">
+              <label class="form-label small">Amount</label>
+              <input class="form-control" type="number" step="0.01" min="0.01" max="{{ pr.balance }}" name="amount" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">Payment Date</label>
+              <input class="form-control" type="date" name="payment_date">
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">Method</label>
+              <select class="form-select" name="payment_method">
+                {% for m in payment_methods %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">Reference No. (Zaad/E-Dahab transaction ID, bank ref, receipt no.)</label>
+              <input class="form-control" type="text" name="reference_no">
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">Paid-to Phone (if mobile money)</label>
+              <input class="form-control" type="text" name="payee_phone" value="{{ pr.payee_phone or '' }}">
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">Proof (screenshot / receipt)</label>
+              <input class="form-control" type="file" name="proof" accept=".pdf,.jpg,.jpeg,.png">
+            </div>
+            <div class="mb-2">
+              <label class="form-label small">Notes</label>
+              <textarea class="form-control" name="notes" rows="2"></textarea>
+            </div>
+            <button class="btn btn-success w-100" type="submit">Record Payment</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if pr.status not in ('Pending Manager Approval', 'Pending Finance Approval', 'Approved', 'Partially Paid') %}
+      <div class="card shadow-sm mb-4">
+        <div class="card-body text-muted">
+          This request is {{ pr.status|lower }}. No further action is available.
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

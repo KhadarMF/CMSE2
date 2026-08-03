@@ -6,8 +6,9 @@
   <div><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('materials.requests_list') }}">Close / Back</a><a class="btn btn-outline-dark btn-sm" href="{{ url_for('materials.dashboard') }}">Materials Home</a><a class="btn btn-outline-primary btn-sm" href="{{ url_for('dashboard.dashboard') }}">Main Home</a></div>
 </div>
 <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="card shadow-sm mb-2"><div class="card-body"><div class="row g-2">
-<div class="col-md-4"><label class="form-label">Project *</label><select class="form-select" name="project_id" required><option value="">Select project</option>{% for p in projects %}<option value="{{ p.id }}">{{ p.project_name }} — {{ p.customer_name }}</option>{% endfor %}</select></div>
+<div class="col-md-4"><label class="form-label">Project *</label><select class="form-select" name="project_id" required><option value="">Select project</option>{% for p in projects %}<option value="{{ p.id }}" {% if selected_project|string == p.id|string %}selected{% endif %}>{{ p.project_name }} — {{ p.customer_name }}</option>{% endfor %}</select></div>
 <div class="col-md-2"><label class="form-label">Request Date</label><input class="form-control" type="date" name="request_date"></div>
 <div class="col-md-3"><label class="form-label">Purpose</label><input class="form-control" name="purpose" placeholder="Installation / Replacement"></div>
 <div class="col-md-2"><label class="form-label">Status</label><select class="form-select" name="status">{% for s in statuses %}<option value="{{ s }}" {% if s=="Submitted" %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>

@@ -1,157 +1,335 @@
 {% extends "base.html" %}
+{% set cc = command_center %}
+{% set finance_allowed = can_access_module(current_user, 'payment-requests') or can_access_module(current_user, 'payroll') or can_access_module(current_user, 'accounting') %}
+{% set procurement_allowed = can_access_module(current_user, 'materials') or can_access_module(current_user, 'material-request') or can_access_module(current_user, 'material-reports') %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
-    <div>
-        <h2 class="fw-bold">{{ project.project_name }}</h2>
-        <p class="text-muted mb-0">{{ project.customer_name }} — {{ project.location }}</p>
+<section class="pcc-hero mt-3">
+    <div class="pcc-hero-copy">
+        <div class="pcc-eyebrow">Project Command Center <span>Live operational view</span></div>
+        <h1>{{ project.project_name }}</h1>
+        <p>{{ project.customer_name }} <span aria-hidden="true">/</span> {{ project.location }} <span aria-hidden="true">/</span> {{ project.project_type }}</p>
+        <div class="pcc-hero-meta">
+            <span>{{ project.status }}</span>
+            <span>{{ project.capacity or 'Capacity not set' }}</span>
+            <span>{{ project.assigned_team or 'Team not assigned' }}</span>
+        </div>
     </div>
-    <div>
+    <div class="pcc-overall" style="--pcc-progress: {{ cc.overall }}" aria-label="Overall progress {{ cc.overall }} percent">
+        <div><strong>{{ cc.overall }}%</strong><span>Overall progress</span></div>
+    </div>
+    <div class="pcc-actions no-print">
+        {% if can_access_module(current_user, 'project-tasks') %}
+        <a class="btn btn-light" href="{{ url_for('project_tasks.create_task', project_id=project.id) }}">Add task</a>
+        {% endif %}
+        {% if can_access_module(current_user, 'documents', 'create') %}
+        <a class="btn btn-light" href="{{ url_for('documents.upload_document', project_id=project.id) }}">Upload document</a>
+        {% endif %}
         {% if can_access_module(current_user, 'ai-project-manager') %}
-        <a class="btn btn-cmse" href="{{ url_for('ai.project_manager_from_project', project_id=project.id) }}">AI Project Manager</a>
+        <a class="btn btn-warning" href="{{ url_for('ai.project_manager_from_project', project_id=project.id) }}">Run AI analysis</a>
         {% endif %}
-        {% if current_user.role in ["Admin", "Operation Manager"] %}
-        <a class="btn btn-outline-primary" href="{{ url_for('projects.edit_project', project_id=project.id) }}">Edit</a>
+        {% if current_user.role in ['Admin', 'Operation Manager'] %}
+        <a class="btn btn-outline-light" href="{{ url_for('projects.edit_project', project_id=project.id) }}">Edit project</a>
         {% endif %}
-        <a class="btn btn-primary" href="{{ url_for('documents.upload_document') }}">Upload Document</a>
+        <button class="btn btn-outline-light" type="button" onclick="window.print()">Print snapshot</button>
     </div>
-</div>
+</section>
 
-<div class="row g-3">
-    <div class="col-md-4"><div class="card p-3"><strong>Status</strong><span>{{ project.status }}</span></div></div>
-    <div class="col-md-4"><div class="card p-3"><strong>Type</strong><span>{{ project.project_type }}</span></div></div>
-    <div class="col-md-4"><div class="card p-3"><strong>Capacity</strong><span>{{ project.capacity }}</span></div></div>
-</div>
+<nav class="pcc-section-nav no-print" aria-label="Command center sections">
+    <a href="#overview">Overview</a>
+    <a href="#milestones">Milestones</a>
+    <a href="#timeline">Timeline</a>
+    <a href="#delivery">Delivery</a>
+    <a href="#finance">Finance</a>
+    <a href="#documents">Documents</a>
+    <a href="#risks">Risks</a>
+    <a href="#ai-summary">AI summary</a>
+</nav>
 
-<div class="card mt-3 shadow-sm"><div class="card-header bg-white fw-bold">AI Project Manager Summary</div><div class="card-body row g-2">
-    <div class="col-md-4"><strong>Health Score</strong><br>{{ project.ai_health_score or 'Not provided' }}</div>
-    <div class="col-md-4"><strong>Risk Level</strong><br>{{ project.ai_risk_level or 'Not provided' }}</div>
-    <div class="col-md-4"><strong>Delay Prediction</strong><br>{{ project.ai_delay_prediction or 'Not provided' }}</div>
-    <div class="col-12"><strong>Recommended Actions</strong><br><pre style="white-space:pre-wrap">{{ project.ai_recommended_actions or 'Not provided' }}</pre></div>
-</div></div>
-
-<div class="card mt-3 shadow-sm"><div class="card-body">
-<h5 class="fw-bold">Project Details</h5>
-<p><strong>Start Date:</strong> {{ project.start_date or "" }}</p>
-<p><strong>Expected Completion:</strong> {{ project.expected_completion_date or "" }}</p>
-<p><strong>Assigned Team:</strong><br>{{ project.assigned_team or "" }}</p>
-<p><strong>Description:</strong><br>{{ project.description or "" }}</p>
-</div></div>
-
-<div class="row g-3 mt-1">
-    <div class="col-md-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <strong>Project Tasks</strong>
-                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('project_tasks.create_task', project_id=project.id) }}">+ Task</a>
-            </div>
-            <div class="card-body table-responsive">
-                <table class="table table-sm align-middle">
-                    <thead><tr><th>Task</th><th>Assigned</th><th>Status</th><th>Due</th></tr></thead>
-                    <tbody>
-                    {% for task in project.tasks[:5] %}
-                    <tr class="{% if task.is_overdue %}table-danger{% endif %}">
-                        <td><a href="{{ url_for('project_tasks.edit_task', task_id=task.id) }}">{{ task.title }}</a></td>
-                        <td>{{ task.assigned_to.full_name if task.assigned_to else '-' }}</td>
-                        <td>{{ task.status }}</td>
-                        <td>{{ task.due_date or '-' }}</td>
-                    </tr>
-                    {% else %}<tr><td colspan="4" class="text-muted">No tasks yet.</td></tr>{% endfor %}
-                    </tbody>
-                </table>
-                <a href="{{ url_for('project_tasks.list_tasks', project_id=project.id) }}" class="btn btn-light btn-sm">View all tasks</a>
-            </div>
+<section id="overview" class="pcc-section pcc-score-grid" aria-label="Project overview">
+    <article class="pcc-score-card pcc-score-primary">
+        <div class="pcc-card-kicker">Overall progress</div>
+        <div class="pcc-score-row"><strong>{{ cc.overall }}%</strong><span class="pcc-trend pcc-trend-neutral">Weighted</span></div>
+        <div class="pcc-progress" aria-hidden="true"><span style="width:{{ cc.overall }}%"></span></div>
+        <p>25% milestones + 35% physical + 20% procurement + 20% documents.</p>
+    </article>
+    <article class="pcc-score-card">
+        <div class="pcc-card-kicker">Physical progress</div>
+        <div class="pcc-score-row"><strong>{{ cc.physical.progress }}%</strong><span>{{ cc.physical.completed_tasks }}/{{ cc.physical.task_count }} tasks</span></div>
+        <div class="pcc-progress pcc-progress-green" aria-hidden="true"><span style="width:{{ cc.physical.progress }}%"></span></div>
+        <p>{{ cc.physical.source }}</p>
+    </article>
+    <article class="pcc-score-card">
+        <div class="pcc-card-kicker">Schedule</div>
+        {% if cc.schedule.days_remaining is not none %}
+        <div class="pcc-score-row">
+            <strong>{{ cc.schedule.days_remaining|abs }}</strong>
+            <span>{{ 'days overdue' if cc.schedule.days_remaining < 0 else 'days remaining' }}</span>
         </div>
-    </div>
-    <div class="col-md-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <strong>Issues & Risks</strong>
-                <a class="btn btn-sm btn-outline-danger" href="{{ url_for('issues.create_issue', project_id=project.id) }}">+ Issue</a>
-            </div>
-            <div class="card-body table-responsive">
-                <table class="table table-sm align-middle">
-                    <thead><tr><th>Issue</th><th>Severity</th><th>Status</th><th>Responsible</th></tr></thead>
-                    <tbody>
-                    {% for issue in project.issues[:5] %}
-                    <tr class="{% if issue.is_overdue %}table-danger{% endif %}">
-                        <td><a href="{{ url_for('issues.edit_issue', issue_id=issue.id) }}">{{ issue.title }}</a></td>
-                        <td>{{ issue.severity }}</td>
-                        <td>{{ issue.status }}</td>
-                        <td>{{ issue.responsible_user.full_name if issue.responsible_user else '-' }}</td>
-                    </tr>
-                    {% else %}<tr><td colspan="4" class="text-muted">No issues yet.</td></tr>{% endfor %}
-                    </tbody>
-                </table>
-                <a href="{{ url_for('issues.list_issues', project_id=project.id) }}" class="btn btn-light btn-sm">View all issues</a>
-            </div>
+        <div class="pcc-progress pcc-progress-blue" aria-hidden="true"><span style="width:{{ cc.schedule.elapsed_percent }}%"></span></div>
+        <p>{{ cc.schedule.elapsed_percent }}% of scheduled time has elapsed.</p>
+        {% else %}
+        <div class="pcc-score-row"><strong>--</strong><span>Dates needed</span></div>
+        <p>Add valid start and expected completion dates.</p>
+        {% endif %}
+    </article>
+    <article class="pcc-score-card">
+        <div class="pcc-card-kicker">Procurement progress</div>
+        <div class="pcc-score-row"><strong>{{ cc.procurement.progress }}%</strong><span>{{ cc.procurement.issued_count }} issues</span></div>
+        <div class="pcc-progress pcc-progress-orange" aria-hidden="true"><span style="width:{{ cc.procurement.progress }}%"></span></div>
+        <p>{{ cc.procurement.approved_count }} of {{ cc.procurement.request_count }} requests approved or fulfilled.</p>
+    </article>
+    <article class="pcc-score-card">
+        <div class="pcc-card-kicker">Document readiness</div>
+        <div class="pcc-score-row"><strong>{{ cc.documents.progress }}%</strong><span>{{ cc.documents.approved }} approved</span></div>
+        <div class="pcc-progress pcc-progress-purple" aria-hidden="true"><span style="width:{{ cc.documents.progress }}%"></span></div>
+        <p>{{ cc.documents.total }} records; {{ cc.documents.attention }} need correction.</p>
+    </article>
+    <article class="pcc-score-card">
+        <div class="pcc-card-kicker">Risk posture</div>
+        <div class="pcc-score-row"><strong class="pcc-risk-{{ cc.risks.level|lower }}">{{ cc.risks.level }}</strong><span>{{ cc.risks.open_count }} open</span></div>
+        <div class="pcc-risk-line">
+            <span><b>{{ cc.risks.critical_count }}</b> critical</span>
+            <span><b>{{ cc.risks.high_count }}</b> high</span>
+            <span><b>{{ cc.risks.overdue_count }}</b> overdue</span>
         </div>
-    </div>
-</div>
+        <p>Based on active issues, overdue tasks, schedule, and readiness gaps.</p>
+    </article>
+</section>
 
-<div class="card mt-3 shadow-sm">
-    <div class="card-header bg-white fw-bold">Create Online Forms for This Project</div>
-    <div class="card-body">
-        <div class="row g-2">
-            {% if allowed_forms["site-survey"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='site-survey') }}">Site Survey</a></div>{% endif %}
-            {% if allowed_forms["load-assessment"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='load-assessment') }}">Load Assessment</a></div>{% endif %}
-            {% if allowed_forms["daily-site-report"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='daily-site-report') }}">Daily Site Report</a></div>{% endif %}
-            {% if allowed_forms["delivery-note"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='delivery-note') }}">Delivery Note</a></div>{% endif %}
-            {% if allowed_forms["testing"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='testing') }}">Testing</a></div>{% endif %}
-            {% if allowed_forms["commissioning"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='commissioning') }}">Commissioning</a></div>{% endif %}
-            {% if allowed_forms["handover"] %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.create_form', form_key='handover') }}">Handover</a></div>{% endif %}
+<section id="milestones" class="pcc-section pcc-panel">
+    <div class="pcc-panel-head">
+        <div><span class="pcc-section-index">01</span><h2>Milestones</h2><p>The project lifecycle, with the current gate clearly identified.</p></div>
+        <span class="pcc-head-metric">{{ cc.milestone_progress }}% phase progress</span>
+    </div>
+    <div class="pcc-milestones">
+        {% for milestone in cc.milestones %}
+        <div class="pcc-milestone {{ milestone.state }}">
+            <span class="pcc-milestone-dot">{{ '✓' if milestone.state == 'complete' else loop.index }}</span>
+            <strong>{{ milestone.name }}</strong>
+            <small>{{ 'Done' if milestone.state == 'complete' else ('Current' if milestone.state == 'current' else 'Upcoming') }}</small>
         </div>
+        {% endfor %}
     </div>
-</div>
+</section>
 
-<div class="card mt-3 shadow-sm">
-    <div class="card-header bg-white fw-bold">Project Online Forms</div>
-    <div class="card-body">
-        <div class="row g-2">
-            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='site-survey', project_id=project.id) }}">Site Surveys: {{ project.site_surveys|length }}</a></div>
-            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='load-assessment', project_id=project.id) }}">Load Assessments: {{ project.load_assessments|length }}</a></div>
-            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='daily-site-report', project_id=project.id) }}">Daily Reports: {{ project.daily_reports|length }}</a></div>
-            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='delivery-note', project_id=project.id) }}">Delivery Notes: {{ project.delivery_notes|length }}</a></div>
-            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='testing', project_id=project.id) }}">Testing: {{ project.testing_forms|length }}</a></div>
-            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='commissioning', project_id=project.id) }}">Commissioning: {{ project.commissioning_forms|length }}</a></div>
-            <div class="col-md-3"><a class="btn btn-light w-100" href="{{ url_for('forms.list_forms', form_key='handover', project_id=project.id) }}">Handover: {{ project.handover_forms|length }}</a></div>
-        </div>
+<section id="timeline" class="pcc-section pcc-panel">
+    <div class="pcc-panel-head">
+        <div><span class="pcc-section-index">02</span><h2>Timeline / Gantt view</h2><p>Task dates, completion, and delays in one operational table.</p></div>
+        <span class="pcc-head-metric">{{ cc.gantt.start.strftime('%d %b %Y') }} – {{ cc.gantt.end.strftime('%d %b %Y') }}</span>
     </div>
-</div>
-
-<div class="card mt-3 shadow-sm">
-    <div class="card-header bg-white fw-bold">Project Documents</div>
-    <div class="card-body">
-        <table class="table table-hover">
-        <thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Uploaded By</th><th>Date</th></tr></thead>
-        <tbody>
-        {% for doc in project.documents %}
-        <tr><td><a href="{{ url_for('documents.detail', document_id=doc.id) }}">{{ doc.document_title }}</a></td><td>{{ doc.document_type }}</td><td><span class="badge bg-secondary">{{ doc.approval_status }}</span></td><td>{{ doc.uploader.full_name }}</td><td>{{ doc.upload_date.strftime("%Y-%m-%d") }}</td></tr>
-        {% else %}<tr><td colspan="5" class="text-muted">No documents uploaded under this project.</td></tr>{% endfor %}
-        </tbody></table>
-    </div>
-</div>
-
-<div class="card shadow-sm mb-3">
-    <div class="card-header fw-bold">Project Workforce</div>
-    <div class="card-body">
-        <h6>Assigned Teams</h6>
-        <ul>
-            {% for a in project.team_assignments if a.status != "Removed" %}
-                <li><strong>{{ a.team.team_name }}</strong> — Leader: {{ a.team.leader.full_name if a.team and a.team.leader else "Not assigned" }} — Scope: {{ a.work_scope or "" }}</li>
-            {% else %}
-                <li class="text-muted">No teams assigned.</li>
+    {% if cc.gantt.rows %}
+    <div class="table-responsive">
+        <table class="table pcc-gantt-table mb-0">
+            <thead><tr><th>Task</th><th>Owner</th><th>Dates</th><th>Progress</th><th class="pcc-timeline-col"><span>Project timeline</span></th></tr></thead>
+            <tbody>
+            {% for row in cc.gantt.rows %}
+            <tr class="{{ 'pcc-row-alert' if row.task.is_overdue else '' }}">
+                <td><a href="{{ url_for('project_tasks.edit_task', task_id=row.task.id) }}"><strong>{{ row.task.title }}</strong></a><small>{{ row.task.status }} / {{ row.task.priority }}</small></td>
+                <td>{{ row.task.assigned_employee.full_name if row.task.assigned_employee else (row.task.assigned_to.full_name if row.task.assigned_to else 'Unassigned') }}</td>
+                <td>{{ row.start.strftime('%d %b') }} – {{ row.end.strftime('%d %b') }}</td>
+                <td><strong>{{ row.progress }}%</strong>{% if row.task.is_overdue %}<span class="pcc-alert-label">Overdue</span>{% endif %}</td>
+                <td class="pcc-timeline-cell">
+                    <div class="pcc-timeline-track">
+                        {% if cc.gantt.today_marker is not none %}<i class="pcc-today" style="left:{{ cc.gantt.today_marker }}%" title="Today"></i>{% endif %}
+                        <span class="pcc-gantt-bar {{ 'late' if row.task.is_overdue else '' }}" style="left:{{ row.left }}%;width:{{ row.width }}%">
+                            <b style="width:{{ row.progress }}%"></b>
+                        </span>
+                    </div>
+                </td>
+            </tr>
             {% endfor %}
-        </ul>
-        <h6>Direct Employees</h6>
-        <ul>
-            {% for a in project.employee_assignments if a.status != "Removed" %}
-                <li><strong>{{ a.employee.full_name }}</strong> — {{ a.role_on_project or a.employee.job_title or "" }} — Scope: {{ a.work_scope or "" }}</li>
-            {% else %}
-                <li class="text-muted">No direct employees assigned.</li>
-            {% endfor %}
-        </ul>
+            </tbody>
+        </table>
     </div>
-</div>
+    {% else %}
+    <div class="pcc-empty">
+        <strong>No timeline tasks yet</strong>
+        <p>Add tasks with start dates, due dates, owners, and progress to activate the Gantt view.</p>
+        {% if can_access_module(current_user, 'project-tasks') %}<a class="btn btn-primary btn-sm" href="{{ url_for('project_tasks.create_task', project_id=project.id) }}">Add first task</a>{% endif %}
+    </div>
+    {% endif %}
+</section>
 
-<div class="mb-3"><a class="btn btn-outline-warning" href="{{ url_for('materials.project_material_report', project_id=project.id) }}">Material Report</a></div>
+<section id="delivery" class="pcc-section pcc-two-col">
+    <article class="pcc-panel">
+        <div class="pcc-panel-head compact">
+            <div><span class="pcc-section-index">03</span><h2>Physical progress</h2><p>Evidence from tasks and daily site reporting.</p></div>
+            <span class="pcc-big-percent">{{ cc.physical.progress }}%</span>
+        </div>
+        <div class="pcc-stat-strip">
+            <div><strong>{{ cc.physical.completed_tasks }}</strong><span>Completed</span></div>
+            <div><strong>{{ cc.physical.active_tasks }}</strong><span>Active</span></div>
+            <div class="{{ 'danger' if cc.physical.overdue_tasks else '' }}"><strong>{{ cc.physical.overdue_tasks }}</strong><span>Overdue</span></div>
+        </div>
+        {% if cc.physical.latest_report %}
+        <div class="pcc-evidence">
+            <span>Latest field evidence</span>
+            <strong>{{ cc.physical.latest_report.report_date.strftime('%d %b %Y') if cc.physical.latest_report.report_date else 'Date not set' }}</strong>
+            <p>{{ cc.physical.latest_report.work_done_today or 'No work summary entered.' }}</p>
+            {% if cc.physical.latest_report.issues_challenges %}<small>Field issue: {{ cc.physical.latest_report.issues_challenges }}</small>{% endif %}
+        </div>
+        {% else %}
+        <div class="pcc-empty compact"><strong>No daily site report</strong><p>A daily report makes physical progress evidence-based.</p></div>
+        {% endif %}
+        <a class="pcc-text-link" href="{{ url_for('project_tasks.list_tasks', project_id=project.id) }}">Open all project tasks →</a>
+    </article>
+
+    <article class="pcc-panel">
+        <div class="pcc-panel-head compact">
+            <div><span class="pcc-section-index">04</span><h2>Procurement progress</h2><p>Requests, approvals, issues, and material value.</p></div>
+            <span class="pcc-big-percent">{{ cc.procurement.progress }}%</span>
+        </div>
+        <div class="pcc-stat-strip">
+            <div><strong>{{ cc.procurement.request_count }}</strong><span>Requests</span></div>
+            <div><strong>{{ cc.procurement.approved_count }}</strong><span>Approved</span></div>
+            <div><strong>{{ cc.procurement.issued_count }}</strong><span>Issued</span></div>
+        </div>
+        {% if procurement_allowed %}
+        <div class="pcc-money-row">
+            <div><span>Requested</span><strong>${{ '{:,.2f}'.format(cc.procurement.requested_value) }}</strong></div>
+            <div><span>Net issued</span><strong>${{ '{:,.2f}'.format(cc.procurement.net_material_cost) }}</strong></div>
+        </div>
+        {% endif %}
+        <div class="pcc-list">
+            {% for item in cc.procurement.requests[:4] %}
+            <a href="{{ url_for('materials.request_detail', request_id=item.id) }}">
+                <span><strong>{{ item.ref_no }}</strong><small>{{ item.purpose or 'No purpose entered' }}</small></span>
+                <em class="pcc-status pcc-status-{{ item.status|lower|replace(' ', '-') }}">{{ item.status }}</em>
+            </a>
+            {% else %}
+            <div class="pcc-empty compact"><strong>No material requests</strong><p>Procurement is not yet recorded for this project.</p></div>
+            {% endfor %}
+        </div>
+        {% if can_access_module(current_user, 'material-request', 'create') %}<a class="pcc-text-link" href="{{ url_for('materials.create_request', project_id=project.id) }}">Create material request →</a>{% endif %}
+    </article>
+</section>
+
+<section id="finance" class="pcc-section pcc-panel">
+    <div class="pcc-panel-head">
+        <div><span class="pcc-section-index">05</span><h2>Financial progress</h2><p>Revenue, committed cost, cash paid, and forecast profit—kept separate from physical completion.</p></div>
+        {% if finance_allowed and cc.financials.margin is not none %}<span class="pcc-head-metric">{{ cc.financials.margin }}% forecast margin</span>{% endif %}
+    </div>
+    {% if finance_allowed %}
+    <div class="pcc-finance-grid">
+        <div><span>Approved revenue</span><strong>${{ '{:,.2f}'.format(cc.financials.revenue) }}</strong><small>Approved/converted quotations</small></div>
+        <div><span>Committed cost</span><strong>${{ '{:,.2f}'.format(cc.financials.committed_cost) }}</strong><small>Materials + payroll + other requests</small></div>
+        <div><span>Cash paid</span><strong>${{ '{:,.2f}'.format(cc.financials.paid_cost) }}</strong><small>${{ '{:,.2f}'.format(cc.financials.outstanding) }} outstanding</small></div>
+        <div class="{{ 'negative' if cc.financials.profit < 0 else 'positive' }}"><span>Forecast profit</span><strong>${{ '{:,.2f}'.format(cc.financials.profit) }}</strong><small>{{ cc.financials.margin|string + '% margin' if cc.financials.margin is not none else 'Revenue not linked' }}</small></div>
+    </div>
+    <div class="pcc-budget-bar">
+        <div><span>Committed cost versus approved revenue</span><strong>{{ cc.financials.cost_percent }}%</strong></div>
+        <div class="pcc-progress"><span style="width:{{ cc.financials.cost_percent }}%"></span></div>
+    </div>
+    {% if cc.financials.slsh_committed %}
+    <p class="pcc-note">SLSH commitments are shown separately to avoid mixing currencies: SLSH {{ '{:,.0f}'.format(cc.financials.slsh_committed) }} committed / {{ '{:,.0f}'.format(cc.financials.slsh_paid) }} paid.</p>
+    {% endif %}
+    <p class="pcc-note">Material-linked payment requests are excluded from committed cost when issued inventory already represents the cost, preventing double counting.</p>
+    {% else %}
+    <div class="pcc-restricted"><strong>Financial data is access controlled</strong><p>Your role can view delivery status, but project costs, revenue, and profit require Finance, Payroll, or Payment Request permission.</p></div>
+    {% endif %}
+</section>
+
+<section id="documents" class="pcc-section pcc-panel">
+    <div class="pcc-panel-head">
+        <div><span class="pcc-section-index">06</span><h2>Document progress</h2><p>Required online forms and uploaded project documents.</p></div>
+        <span class="pcc-head-metric">{{ cc.documents.approved }}/{{ cc.documents.total }} records approved</span>
+    </div>
+    <div class="pcc-document-layout">
+        <div class="pcc-form-checklist">
+            {% for row in cc.documents.form_rows %}
+            <a href="{{ url_for('forms.list_forms', form_key=row.form_key, project_id=project.id) }}" class="{{ 'complete' if row.state == 'Approved' else ('missing' if row.state == 'Missing' else 'pending') }}">
+                <span class="pcc-check">{{ '✓' if row.state == 'Approved' else ('!' if row.state == 'Missing' else '•') }}</span>
+                <span><strong>{{ row.label }}</strong><small>{{ row.count }} record(s) / {{ row.approved }} approved</small></span>
+                <em>{{ row.state }}</em>
+            </a>
+            {% endfor %}
+        </div>
+        <div class="pcc-recent-docs">
+            <div class="pcc-subhead"><strong>Recent uploads</strong>{% if can_access_module(current_user, 'documents', 'create') %}<a href="{{ url_for('documents.upload_document', project_id=project.id) }}">Upload new</a>{% endif %}</div>
+            {% for doc in cc.documents.recent_documents %}
+            <a href="{{ url_for('documents.detail', document_id=doc.id) }}">
+                <span><strong>{{ doc.document_title }}</strong><small>{{ doc.document_type }} / {{ doc.upload_date.strftime('%d %b %Y') }}</small></span>
+                <em class="pcc-status pcc-status-{{ doc.approval_status|lower|replace(' ', '-') }}">{{ doc.approval_status }}</em>
+            </a>
+            {% else %}
+            <div class="pcc-empty compact"><strong>No uploaded documents</strong><p>Attach contracts, BOQs, designs, reports, or handover records here.</p></div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="pcc-form-actions no-print">
+        <span>Create a project form:</span>
+        {% for row in cc.documents.form_rows %}
+            {% if allowed_forms[row.form_key] %}<a href="{{ url_for('forms.create_form', form_key=row.form_key, project_id=project.id) }}">{{ row.label }}</a>{% endif %}
+        {% endfor %}
+    </div>
+</section>
+
+<section id="risks" class="pcc-section pcc-panel">
+    <div class="pcc-panel-head">
+        <div><span class="pcc-section-index">07</span><h2>Issues & risks</h2><p>Priority, ownership, due dates, and escalation—not just a risk count.</p></div>
+        {% if can_access_module(current_user, 'issues-risks', 'create') %}<a class="btn btn-outline-danger btn-sm no-print" href="{{ url_for('issues.create_issue', project_id=project.id) }}">Add issue</a>{% endif %}
+    </div>
+    {% if cc.risks.open %}
+    <div class="table-responsive">
+        <table class="table pcc-risk-table mb-0">
+            <thead><tr><th>Issue / risk</th><th>Severity</th><th>Owner</th><th>Target date</th><th>Status</th></tr></thead>
+            <tbody>
+            {% for issue in cc.risks.open[:8] %}
+            <tr class="{{ 'pcc-row-alert' if issue.is_overdue else '' }}">
+                <td><a href="{{ url_for('issues.edit_issue', issue_id=issue.id) }}"><strong>{{ issue.title }}</strong></a><small>{{ issue.issue_type }}{% if issue.description %} / {{ issue.description|truncate(90) }}{% endif %}</small></td>
+                <td><span class="pcc-severity pcc-severity-{{ issue.severity|lower }}">{{ issue.severity }}</span></td>
+                <td>{{ issue.responsible_user.full_name if issue.responsible_user else 'Unassigned' }}</td>
+                <td>{{ issue.target_resolution_date.strftime('%d %b %Y') if issue.target_resolution_date else 'Not set' }}{% if issue.is_overdue %}<span class="pcc-alert-label">Overdue</span>{% endif %}</td>
+                <td>{{ issue.status }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="pcc-empty"><strong>No open issues</strong><p>Keep logging risks early so owners and target dates remain visible.</p></div>
+    {% endif %}
+</section>
+
+<section id="ai-summary" class="pcc-section pcc-ai-panel">
+    <div class="pcc-ai-mark">AI</div>
+    <div class="pcc-ai-body">
+        <div class="pcc-panel-head compact">
+            <div><span class="pcc-section-index">08</span><h2>AI project summary</h2><p>Management narrative, delivery forecast, and next actions.</p></div>
+            {% if cc.forecast.last_analysis %}<span class="pcc-head-metric">Updated {{ cc.forecast.last_analysis.strftime('%d %b %Y, %H:%M') }}</span>{% else %}<span class="pcc-head-metric">Rule-based live forecast</span>{% endif %}
+        </div>
+        <blockquote>{{ cc.forecast.summary }}</blockquote>
+        <div class="pcc-ai-grid">
+            <div><span>Delivery forecast</span><strong>{{ cc.forecast.schedule_message }}</strong></div>
+            <div><span>Health score</span><strong>{{ cc.forecast.health_score }}%</strong></div>
+        </div>
+        <div class="pcc-next-actions">
+            <strong>Recommended next actions</strong>
+            {% if cc.forecast.saved_actions %}<div class="pcc-saved-actions">{{ cc.forecast.saved_actions }}</div>{% endif %}
+            <ol>{% for action in cc.forecast.actions %}<li>{{ action }}</li>{% endfor %}</ol>
+        </div>
+        {% if can_access_module(current_user, 'ai-project-manager') %}<a class="btn btn-warning btn-sm no-print" href="{{ url_for('ai.project_manager_from_project', project_id=project.id) }}">Refresh with AI Project Manager</a>{% endif %}
+    </div>
+</section>
+
+<section class="pcc-section pcc-panel pcc-details-panel">
+    <details>
+        <summary>Project details, workforce, and source records</summary>
+        <div class="pcc-details-grid">
+            <div><span>Start date</span><strong>{{ project.start_date.strftime('%d %b %Y') if project.start_date else 'Not set' }}</strong></div>
+            <div><span>Expected completion</span><strong>{{ project.expected_completion_date.strftime('%d %b %Y') if project.expected_completion_date else 'Not set' }}</strong></div>
+            <div><span>Created by</span><strong>{{ project.creator.full_name }}</strong></div>
+            <div><span>Created</span><strong>{{ project.created_at.strftime('%d %b %Y') }}</strong></div>
+        </div>
+        {% if project.description %}<p class="pcc-description">{{ project.description }}</p>{% endif %}
+        <div class="pcc-source-links">
+            <a href="{{ url_for('project_tasks.list_tasks', project_id=project.id) }}">All tasks ({{ project.tasks|length }})</a>
+            <a href="{{ url_for('issues.list_issues', project_id=project.id) }}">All issues ({{ project.issues|length }})</a>
+            <a href="{{ url_for('documents.list_documents', project_id=project.id) }}">All documents ({{ project.documents|length }})</a>
+            {% if procurement_allowed %}<a href="{{ url_for('materials.project_material_report', project_id=project.id) }}">Material report</a>{% endif %}
+            {% if can_access_module(current_user, 'project-workforce') %}<a href="{{ url_for('master.project_workforce', project_id=project.id) }}">Project workforce</a>{% endif %}
+        </div>
+    </details>
+</section>
 {% endblock %}

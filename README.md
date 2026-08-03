@@ -1,5 +1,25 @@
 # Solar Project Document & Approval Management System — Phase 8
 
+## Phase 20E — Project Command Center
+
+Open any project to see a unified Command Center with overall progress,
+milestones, a task Gantt timeline, physical and financial progress, procurement,
+document readiness, issues and risks, and an AI/rule-based project forecast.
+See `PHASE20E_PROJECT_COMMAND_CENTER_RELEASE_NOTES.md` for calculation and access
+control details. This phase uses existing records and requires no schema change.
+
+## Phase 20F — Employee Workspace 360
+
+Employees now have a unified Workspace 360 with profile details, project and
+team assignments, task progress, payroll balances, service history, and an
+activity timeline. A safe Delete action removes only unused employee records;
+employees with linked operational history must be set to Inactive so financial
+and project records remain intact. See
+`PHASE20F_EMPLOYEE_WORKSPACE_360_RELEASE_NOTES.md`. No schema migration is
+required.
+
+## Earlier Phase 8 notes
+
 Phase 8 focuses on preparing the system for real deployment and multi-user use.
 
 ## Added in Phase 8

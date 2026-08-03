@@ -13,6 +13,7 @@
 </div>
 
 <form method='post'>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <input type='hidden' name='inquiry_id' value='{{ inquiry.id if inquiry else (quotation.inquiry_id if is_edit else "") }}'>
 
 <div class='card shadow-sm mb-3'>

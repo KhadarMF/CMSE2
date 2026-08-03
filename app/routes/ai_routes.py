@@ -118,7 +118,7 @@ def _default_stock_prompt(question):
 @ai_bp.before_app_request
 def ensure_ai_tables():
     try:
-        db.create_all()
+        # Phase 20D: db.create_all() removed - Alembic owns the schema.
         inspector = db.inspect(db.engine)
         # Phase 16B lightweight database upgrade for PostgreSQL/SQLite existing deployments.
         if inspector.has_table("sales_inquiry"):

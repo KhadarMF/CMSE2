@@ -3,6 +3,7 @@
 <h3>AI Service Ticket Helper</h3>
 <div class="card shadow-sm mb-3"><div class="card-header fw-bold">Ticket {{ ticket.ref_no }}</div><div class="card-body"><p><b>Customer:</b> {{ ticket.customer_name }} | <b>Priority:</b> {{ ticket.priority }} | <b>Status:</b> {{ ticket.status }}</p><p>{{ ticket.issue_description }}</p></div></div>
 <form method="post" class="card p-3 shadow-sm mb-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label class="form-label">AI Request</label><textarea name="prompt" rows="3" class="form-control">{{ default_prompt }}</textarea>
   <button class="btn btn-cmse mt-3">Analyze Ticket</button>
 </form>

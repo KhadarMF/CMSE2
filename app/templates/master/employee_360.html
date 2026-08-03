@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% set payroll_allowed = can_access_module(current_user, 'payroll') %}
+{% set tasks_allowed = can_access_module(current_user, 'project-tasks') %}
+{% set service_allowed = can_access_module(current_user, 'service-ticket') or can_access_module(current_user, 'after-sales') %}
+{% block content %}
+<div class="cmse-e360 mt-4">
+    <section class="cmse-e360-hero">
+        <div class="cmse-e360-profile">
+            <div class="cmse-e360-avatar" aria-hidden="true">{{ employee.full_name[0]|upper }}</div>
+            <div>
+                <div class="cmse-e360-eyebrow">Employee Workspace 360°</div>
+                <h1>{{ employee.full_name }}</h1>
+                <p>{{ employee.job_title or 'Job title not set' }} · {{ employee.employee_code or 'No employee code' }}</p>
+                <div class="cmse-e360-meta">
+                    <span class="{{ 'active' if employee.status == 'Active' else '' }}">{{ employee.status }}</span>
+                    <span>{{ employee.employee_type or 'Employee type not set' }}</span>
+                    <span>{{ employee.department.department_name if employee.department else 'No department' }}</span>
+                    <span>{{ employee.branch.branch_name if employee.branch else 'No branch' }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="cmse-e360-actions no-print">
+            {% if can_access_module(current_user, 'employees', 'edit') %}<a class="btn btn-light" href="{{ url_for('master.edit_employee', employee_id=employee.id) }}">Edit Employee</a>{% endif %}
+            {% if tasks_allowed %}<a class="btn btn-outline-light" href="{{ url_for('project_tasks.employee_task_report', employee_id=employee.id) }}">Task Report</a>{% endif %}
+            {% if payroll_allowed %}<a class="btn btn-outline-light" href="{{ url_for('payroll.employee_statement', employee_id=employee.id) }}">Payroll Statement</a>{% endif %}
+            {% if can_access_module(current_user, 'employees', 'delete') %}<button class="btn btn-outline-danger bg-white" type="button" data-bs-toggle="modal" data-bs-target="#deleteEmployeeModal">Delete</button>{% endif %}
+        </div>
+    </section>
+
+    <section class="cmse-e360-kpis" aria-label="Employee summary">
+        <div><span>Active projects</span><strong>{{ summary.active_projects }}</strong><small>{{ summary.total_projects }} total assignments</small></div>
+        <div><span>Active teams</span><strong>{{ summary.active_teams }}</strong><small>Memberships and leadership</small></div>
+        <div><span>Open tasks</span><strong>{{ summary.open_tasks }}</strong><small class="{{ 'text-danger' if summary.overdue_tasks else '' }}">{{ summary.overdue_tasks }} overdue</small></div>
+        <div><span>Completed tasks</span><strong>{{ summary.completed_tasks }}</strong><small>Recorded task delivery</small></div>
+        {% if payroll_allowed %}<div><span>Payroll balance</span><strong>${{ '{:,.2f}'.format(summary.payroll_balance) }}</strong><small>{{ summary.payroll_records }} payroll records</small></div>{% endif %}
+        {% if service_allowed %}<div><span>Open service tickets</span><strong>{{ summary.open_tickets }}</strong><small>{{ summary.service_visits }} field visits</small></div>{% endif %}
+    </section>
+
+    <ul class="nav nav-pills cmse-c360-tabs mt-3 no-print" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#e360-overview" type="button">Overview</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#e360-projects" type="button">Projects <span class="badge text-bg-light">{{ project_assignments|length }}</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#e360-teams" type="button">Teams <span class="badge text-bg-light">{{ team_memberships|length }}</span></button></li>
+        {% if tasks_allowed %}<li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#e360-tasks" type="button">Tasks <span class="badge text-bg-light">{{ tasks|length }}</span></button></li>{% endif %}
+        {% if payroll_allowed %}<li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#e360-payroll" type="button">Payroll <span class="badge text-bg-light">{{ summary.payroll_records }}</span></button></li>{% endif %}
+        {% if service_allowed %}<li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#e360-service" type="button">Service <span class="badge text-bg-light">{{ tickets|length }}</span></button></li>{% endif %}
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#e360-timeline" type="button">Timeline</button></li>
+    </ul>
+
+    <div class="tab-content mt-3">
+        <div class="tab-pane fade show active" id="e360-overview">
+            <div class="row g-3">
+                <div class="col-lg-8"><div class="card shadow-sm h-100"><div class="card-header fw-semibold">Employee Information</div><div class="card-body">
+                    <div class="cmse-e360-info-grid">
+                        <div><span>Full name</span><strong>{{ employee.full_name }}</strong></div>
+                        <div><span>Employee ID</span><strong>{{ employee.employee_code or '-' }}</strong></div>
+                        <div><span>Job title</span><strong>{{ employee.job_title or '-' }}</strong></div>
+                        <div><span>Employee type</span><strong>{{ employee.employee_type or '-' }}</strong></div>
+                        <div><span>Phone</span><strong>{{ employee.phone or '-' }}</strong></div>
+                        <div><span>Email</span><strong>{{ employee.email or '-' }}</strong></div>
+                        <div><span>Branch</span><strong>{{ employee.branch.branch_name if employee.branch else '-' }}</strong></div>
+                        <div><span>Department</span><strong>{{ employee.department.department_name if employee.department else '-' }}</strong></div>
+                        <div><span>Linked user account</span><strong>{{ employee.user_account.full_name if employee.user_account else 'Not linked' }}</strong></div>
+                        <div><span>Created</span><strong>{{ employee.created_at.strftime('%d %b %Y') if employee.created_at else '-' }}</strong></div>
+                        <div><span>Last activity</span><strong>{{ last_activity.strftime('%d %b %Y, %H:%M') if last_activity else '-' }}</strong></div>
+                        <div><span>Status</span><strong>{{ employee.status }}</strong></div>
+                    </div>
+                    <div class="cmse-e360-remarks"><span>Remarks</span><p>{{ employee.remarks or 'No remarks recorded.' }}</p></div>
+                </div></div></div>
+                <div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-header fw-semibold">Quick Actions</div><div class="card-body d-grid gap-2">
+                    {% if can_access_module(current_user, 'employees', 'edit') %}<a class="btn btn-outline-primary" href="{{ url_for('master.edit_employee', employee_id=employee.id) }}">Update Profile</a>{% endif %}
+                    {% if tasks_allowed %}<a class="btn btn-outline-success" href="{{ url_for('project_tasks.employee_task_report', employee_id=employee.id) }}">Full Task Report</a>{% endif %}
+                    {% if payroll_allowed %}<a class="btn btn-outline-dark" href="{{ url_for('payroll.employee_statement', employee_id=employee.id) }}">Full Payroll Statement</a>{% endif %}
+                    {% if employee.phone %}<a class="btn btn-outline-secondary" href="tel:{{ employee.phone }}">Call {{ employee.phone }}</a>{% endif %}
+                    {% if employee.email %}<a class="btn btn-outline-secondary" href="mailto:{{ employee.email }}">Email Employee</a>{% endif %}
+                </div></div></div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="e360-projects"><div class="card shadow-sm"><div class="card-body table-responsive">
+            <table class="table table-hover align-middle"><thead><tr><th>Project</th><th>Role</th><th>Scope</th><th>Start</th><th>End</th><th>Status</th><th></th></tr></thead><tbody>
+            {% for a in project_assignments %}<tr><td><strong>{{ a.project.project_name }}</strong><small class="d-block text-muted">{{ a.project.customer_name }}</small></td><td>{{ a.role_on_project or '-' }}</td><td>{{ a.work_scope or '-' }}</td><td>{{ a.start_date or '-' }}</td><td>{{ a.end_date or '-' }}</td><td><span class="badge {{ 'text-bg-success' if a.status == 'Active' else 'text-bg-secondary' }}">{{ a.status }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('projects.detail', project_id=a.project_id) }}">Open</a></td></tr>
+            {% else %}<tr><td colspan="7" class="text-muted">No project assignments found.</td></tr>{% endfor %}
+            </tbody></table>
+        </div></div></div>
+
+        <div class="tab-pane fade" id="e360-teams"><div class="row g-3">
+            <div class="col-lg-7"><div class="card shadow-sm"><div class="card-header fw-semibold">Team Memberships</div><div class="card-body table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Team</th><th>Role</th><th>Joined</th><th>Status</th><th></th></tr></thead><tbody>
+            {% for m in team_memberships %}<tr><td><strong>{{ m.team.team_name }}</strong><small class="d-block text-muted">{{ m.team.team_type or '' }}</small></td><td>{{ m.member_role or '-' }}</td><td>{{ m.joined_at.strftime('%d %b %Y') if m.joined_at else '-' }}</td><td>{{ 'Active' if m.is_active else 'Inactive' }}</td><td><a href="{{ url_for('master.team_detail', team_id=m.team_id) }}">Open</a></td></tr>{% else %}<tr><td colspan="5" class="text-muted">No team memberships found.</td></tr>{% endfor %}
+            </tbody></table></div></div></div>
+            <div class="col-lg-5"><div class="card shadow-sm"><div class="card-header fw-semibold">Teams Led</div><div class="card-body">
+            {% for team in led_teams %}<a class="cmse-e360-team-link" href="{{ url_for('master.team_detail', team_id=team.id) }}"><span><strong>{{ team.team_name }}</strong><small>{{ team.team_type or 'Team' }}</small></span><em>{{ team.status }}</em></a>{% else %}<div class="text-muted">This employee does not lead a team.</div>{% endfor %}
+            </div></div></div>
+        </div></div>
+
+        {% if tasks_allowed %}<div class="tab-pane fade" id="e360-tasks"><div class="card shadow-sm"><div class="card-body table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Task</th><th>Project</th><th>Priority</th><th>Progress</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>
+        {% for task in tasks %}<tr class="{{ 'table-danger' if task.is_overdue else '' }}"><td><strong>{{ task.title }}</strong></td><td>{{ task.project.project_name }}</td><td>{{ task.priority }}</td><td><div class="d-flex align-items-center gap-2"><div class="progress flex-grow-1" style="min-width:90px;height:7px"><div class="progress-bar" style="width:{{ task.progress_percent or 0 }}%"></div></div><small>{{ task.progress_percent or 0 }}%</small></div></td><td>{{ task.due_date or '-' }}{% if task.is_overdue %}<span class="badge text-bg-danger ms-1">Overdue</span>{% endif %}</td><td>{{ task.status }}</td><td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('project_tasks.edit_task', task_id=task.id) }}">Open</a></td></tr>{% else %}<tr><td colspan="7" class="text-muted">No tasks assigned to this employee.</td></tr>{% endfor %}
+        </tbody></table></div></div></div>{% endif %}
+
+        {% if payroll_allowed %}<div class="tab-pane fade" id="e360-payroll">
+            <div class="cmse-e360-payroll-summary"><div><span>Total due</span><strong>${{ '{:,.2f}'.format(summary.payroll_due) }}</strong></div><div><span>Total paid</span><strong>${{ '{:,.2f}'.format(summary.payroll_paid) }}</strong></div><div><span>Balance</span><strong>${{ '{:,.2f}'.format(summary.payroll_balance) }}</strong></div></div>
+            <div class="card shadow-sm"><div class="card-body table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Project</th><th>Batch / Period</th><th>Role</th><th class="text-end">Due</th><th class="text-end">Paid</th><th class="text-end">Balance</th><th>Status</th><th></th></tr></thead><tbody>
+            {% for entry in batch_payroll %}<tr><td>{{ entry.batch.project.project_name }}</td><td>{{ entry.batch.batch_title }}</td><td>{{ entry.role_on_project or '-' }}</td><td class="text-end">${{ '{:,.2f}'.format(entry.total_due) }}</td><td class="text-end">${{ '{:,.2f}'.format(entry.total_paid) }}</td><td class="text-end">${{ '{:,.2f}'.format(entry.balance) }}</td><td>{{ entry.status }}</td><td><a href="{{ url_for('payroll.entry_detail', entry_id=entry.id) }}">Open</a></td></tr>{% endfor %}
+            {% for entry in legacy_payroll %}<tr><td>{{ entry.project.project_name }}</td><td>{{ entry.period.period_name }}</td><td>{{ entry.role_on_project or '-' }}</td><td class="text-end">${{ '{:,.2f}'.format(entry.total_due) }}</td><td class="text-end">${{ '{:,.2f}'.format(entry.total_paid) }}</td><td class="text-end">${{ '{:,.2f}'.format(entry.balance) }}</td><td>{{ entry.status }}</td><td><span class="text-muted">Legacy</span></td></tr>{% endfor %}
+            {% if not batch_payroll and not legacy_payroll %}<tr><td colspan="8" class="text-muted">No payroll records found.</td></tr>{% endif %}
+            </tbody></table></div></div>
+        </div>{% endif %}
+
+        {% if service_allowed %}<div class="tab-pane fade" id="e360-service"><div class="row g-3">
+            <div class="col-lg-7"><div class="card shadow-sm"><div class="card-header fw-semibold">Assigned Service Tickets</div><div class="card-body table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Ref</th><th>Issue</th><th>Priority</th><th>Status</th><th></th></tr></thead><tbody>
+            {% for ticket in tickets %}<tr><td><strong>{{ ticket.ref_no }}</strong></td><td>{{ ticket.issue_category or ticket.issue_description|truncate(70) }}</td><td>{{ ticket.priority }}</td><td>{{ ticket.status }}</td><td><a href="{{ url_for('support.ticket_detail', ticket_id=ticket.id) }}">Open</a></td></tr>{% else %}<tr><td colspan="5" class="text-muted">No service tickets assigned.</td></tr>{% endfor %}
+            </tbody></table></div></div></div>
+            <div class="col-lg-5"><div class="card shadow-sm"><div class="card-header fw-semibold">Technician Visits</div><div class="card-body">
+            {% for visit in visits %}<a class="cmse-e360-team-link" href="{{ url_for('support.ticket_detail', ticket_id=visit.ticket_id) }}"><span><strong>{{ visit.ref_no }}</strong><small>{{ visit.visit_date or '-' }} · {{ visit.result or 'No result yet' }}</small></span><em>{{ visit.status }}</em></a>{% else %}<div class="text-muted">No technician visits recorded.</div>{% endfor %}
+            </div></div></div>
+        </div></div>{% endif %}
+
+        <div class="tab-pane fade" id="e360-timeline"><div class="card shadow-sm"><div class="card-body"><div class="cmse-c360-timeline">
+            {% for item in timeline %}<div class="cmse-c360-timeitem"><div class="cmse-c360-dot"></div><div><div class="small text-muted">{{ item.when.strftime('%d %b %Y, %H:%M') }} · {{ item.label }}{% if item.status %} · {{ item.status }}{% endif %}</div><div class="fw-semibold">{% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}</div></div></div>{% else %}<div class="text-muted">No employee activity found.</div>{% endfor %}
+        </div></div></div></div>
+    </div>
+</div>
+
+{% if can_access_module(current_user, 'employees', 'delete') %}
+<div class="modal fade" id="deleteEmployeeModal" tabindex="-1" aria-labelledby="deleteEmployeeModalLabel" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="deleteEmployeeModalLabel">Delete {{ employee.full_name }}?</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+    <div class="modal-body">
+        {% if delete_summary.blockers %}<div class="alert alert-warning"><strong>Permanent deletion is blocked.</strong><br>Operational history must be preserved. Edit the employee and set Status to <b>Inactive</b>.</div><ul class="mb-0">{% for item in delete_summary.blockers %}<li>{{ item.label }}: <strong>{{ item.count }}</strong></li>{% endfor %}</ul>
+        {% else %}<p>No project, payroll, team, task, or service history is linked to this employee.</p><p class="text-danger mb-0"><strong>Permanent deletion cannot be undone.</strong></p>{% endif %}
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>{% if delete_summary.can_delete %}<form method="post" action="{{ url_for('master.delete_employee', employee_id=employee.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-danger" type="submit">Permanently Delete</button></form>{% endif %}</div>
+</div></div></div>
+{% endif %}
+{% endblock %}

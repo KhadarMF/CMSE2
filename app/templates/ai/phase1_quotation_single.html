@@ -6,7 +6,8 @@
 </div>
 <div class="row g-3">
   <div class="col-lg-5"><div class="card shadow-sm"><div class="card-body">
-    <form method="post"><label class="form-label fw-bold">Prompt</label><textarea name="prompt" rows="9" class="form-control mb-3">{{ default_prompt }}</textarea><button class="btn btn-cmse w-100">Generate Draft</button></form>
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-label fw-bold">Prompt</label><textarea name="prompt" rows="9" class="form-control mb-3">{{ default_prompt }}</textarea><button class="btn btn-cmse w-100">Generate Draft</button></form>
     <hr><h6 class="fw-bold">ERP Context Sent to AI</h6><pre class="small" style="white-space:pre-wrap">{{ context_data }}</pre>
   </div></div></div>
   <div class="col-lg-7"><div class="card shadow-sm"><div class="card-header fw-bold">AI Output</div><div class="card-body">{% if result %}<pre style="white-space:pre-wrap">{{ result }}</pre>{% else %}<p class="text-muted mb-0">Click Generate to create a draft quotation note and proposal text.</p>{% endif %}</div></div></div>

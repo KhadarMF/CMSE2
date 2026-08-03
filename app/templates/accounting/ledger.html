@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+  <div>
+    <h2 class="fw-bold">{{ account.code }} {{ account.name }}</h2>
+    <p class="text-muted mb-0">{{ account.account_type }} · normal side: {{ account.normal_side }} · amounts in USD</p>
+  </div>
+  <div class="text-end">
+    <div class="text-muted small">Balance</div>
+    <h4 class="mb-0">{{ "%.2f"|format(balance) }}</h4>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Date</th><th>Entry</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>{{ r.entry.entry_date }}</td>
+          <td><a href="{{ url_for('accounting.journal_detail', entry_id=r.entry.id) }}">{{ r.entry.entry_no }}</a></td>
+          <td>{{ r.line.description or r.entry.memo or '—' }}</td>
+          <td class="text-end">{% if r.line.debit %}{{ "%.2f"|format(r.line.debit) }}{% endif %}</td>
+          <td class="text-end">{% if r.line.credit %}{{ "%.2f"|format(r.line.credit) }}{% endif %}</td>
+          <td class="text-end fw-semibold">{{ "%.2f"|format(r.running) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-muted p-4">No posted journal lines on this account yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<a class="btn btn-outline-secondary" href="{{ url_for('accounting.accounts') }}">Back to Chart of Accounts</a>
+{% endblock %}

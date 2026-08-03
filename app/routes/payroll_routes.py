@@ -42,8 +42,10 @@ def update_batch_status(batch):
 
 @payroll_bp.before_app_request
 def ensure_phase13_tables():
-    try: db.create_all()
-    except Exception: pass
+    # Phase 20D: db.create_all() removed - the schema is owned by Alembic
+    # (`flask db upgrade`). create_all() only ever created MISSING TABLES;
+    # it silently ignored new COLUMNS, which is how the schema drifted.
+    return None
 
 @payroll_bp.route("/")
 @login_required
@@ -136,8 +138,15 @@ def add_payment(entry_id):
     entry = ProjectPayrollEntry.query.get_or_404(entry_id); amount = parse_float(request.form.get("amount"))
     if amount <= 0:
         flash("Payment amount must be greater than zero.", "danger"); return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
-    db.session.add(ProjectPayrollPayment(payroll_entry_id=entry.id, payment_date=parse_date(request.form.get("payment_date")) or date.today(), amount=amount, payment_method=request.form.get("payment_method") or "Cash", reference_no=request.form.get("reference_no"), paid_by_id=current_user.id, notes=request.form.get("notes")))
+    payment = ProjectPayrollPayment(payroll_entry_id=entry.id, payment_date=parse_date(request.form.get("payment_date")) or date.today(), amount=amount, payment_method=request.form.get("payment_method") or "Cash", reference_no=request.form.get("reference_no"), paid_by_id=current_user.id, notes=request.form.get("notes"))
+    db.session.add(payment)
     update_entry_status(entry); update_batch_status(entry.batch); db.session.commit(); flash("Payment recorded successfully.", "success")
+    # Phase 20B: auto-journal AFTER the payment is committed - a journal
+    # failure must never undo the payment itself.
+    from app.accounting_service import journal_for_payroll_payment, try_auto_journal
+    _je, journal_error = try_auto_journal(journal_for_payroll_payment, entry, payment, created_by_id=current_user.id)
+    if journal_error:
+        flash(f"Payment recorded, but the accounting journal entry could not be created automatically: {journal_error} You can add it manually in Accounting > Journal.", "warning")
     return redirect(url_for("payroll.entry_detail", entry_id=entry.id))
 
 @payroll_bp.route("/employees/<int:employee_id>/statement")

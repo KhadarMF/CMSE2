@@ -13,8 +13,10 @@ def make_ref(prefix):
 
 @notifications_bp.before_app_request
 def ensure_notification_tables():
-    try: db.create_all()
-    except Exception: pass
+    # Phase 20D: db.create_all() removed - the schema is owned by Alembic
+    # (`flask db upgrade`). create_all() only ever created MISSING TABLES;
+    # it silently ignored new COLUMNS, which is how the schema drifted.
+    return None
 
 @notifications_bp.route('/')
 @login_required

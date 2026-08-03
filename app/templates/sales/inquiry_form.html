@@ -2,7 +2,8 @@
 {% block content %}
 <div class='d-flex gap-2 mt-3 mb-3'><a class='btn btn-outline-dark' href='javascript:history.back()'>Close / Back</a><a class='btn btn-outline-secondary' href='/'>Home</a></div>
 <h2 class='fw-bold'>New Customer Inquiry</h2>
-<form method='post' class='card shadow-sm'><div class='card-body'><div class='row g-3'>
+<form method='post' class='card shadow-sm'>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class='card-body'><div class='row g-3'>
 <div class='col-md-4'><label class='form-label'>Inquiry Date</label><input class='form-control' type='date' name='inquiry_date'></div>
 <div class='col-md-4'><label class='form-label'>Customer</label><input class='form-control' list='customerOptions' name='customer_name' placeholder='Select existing customer or type new customer name' required><datalist id='customerOptions'>{% for c in customers %}<option value='{{ c.customer_name }}'>{% endfor %}</datalist><small class='text-muted'>Hal field oo keliya: dooro customer jira ama qor mid cusub.</small></div>
 <div class='col-md-4'><label class='form-label'>Phone</label><input class='form-control' name='phone'></div>

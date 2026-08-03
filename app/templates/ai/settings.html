@@ -18,6 +18,7 @@
 </div>
 {% endif %}
 <form method="post" class="card p-3 shadow-sm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="form-check mb-3">
     <input class="form-check-input" type="checkbox" name="enabled" {% if setting.enabled %}checked{% endif %}>
     <label class="form-check-label">Enable Live AI</label>

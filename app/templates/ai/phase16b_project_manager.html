@@ -8,6 +8,7 @@
   <div class="col-lg-5">
     <div class="card shadow-sm"><div class="card-body">
       <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label class="form-label fw-bold">Select Project</label>
         <select name="project_id" class="form-select mb-3" onchange="this.form.submit()">
           <option value="">-- Select project --</option>

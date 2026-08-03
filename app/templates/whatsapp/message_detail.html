@@ -5,6 +5,7 @@
   <div class="d-flex gap-2">
     {% if item.direction == 'Outbound' %}
     <form method="post" action="{{ url_for('whatsapp.resend_message', message_id=item.id) }}" onsubmit="return confirm('Resend this WhatsApp message?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-success">Resend</button>
     </form>
     {% endif %}

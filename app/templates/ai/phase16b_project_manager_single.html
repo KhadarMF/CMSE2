@@ -7,6 +7,7 @@
 <div class="row g-3">
   <div class="col-lg-5">
     <form method="post" class="card p-3 shadow-sm mb-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="form-label fw-bold">AI Instruction</label>
       <textarea name="prompt" rows="8" class="form-control">{{ default_prompt }}</textarea>
       <button class="btn btn-cmse mt-3">Analyze Project</button>

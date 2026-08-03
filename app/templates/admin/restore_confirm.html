@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-4 mb-3">
+  <h2 class="fw-bold">Confirm Restore</h2>
+  <p class="text-muted mb-0">Backup: <code>{{ preview.name }}</code></p>
+</div>
+
+{% if preview.warnings %}
+<div class="alert alert-warning">
+  <strong>Review before continuing:</strong>
+  <ul class="mb-0">
+    {% for w in preview.warnings %}<li>{{ w }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Backup Database</div><div class="fw-bold">{{ preview.backup_database_kind }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Live Database</div><div class="fw-bold">{{ preview.live_database_kind }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Backup Rows (total)</div><div class="fw-bold">{{ preview.backup_total_rows }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="text-muted small">Live Rows (total)</div><div class="fw-bold">{{ preview.live_total_rows }}</div></div></div></div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-white fw-bold">Table-by-Table Comparison</div>
+  <div class="card-body p-0" style="max-height: 320px; overflow-y: auto;">
+    <table class="table table-sm table-hover mb-0">
+      <thead><tr><th>Table</th><th>Backup Rows</th><th>Live Rows</th><th>Change</th></tr></thead>
+      <tbody>
+      {% for t in preview.table_diff %}
+        <tr>
+          <td>{{ t.table }}</td>
+          <td>{{ t.backup_rows }}</td>
+          <td>{{ t.live_rows }}</td>
+          <td class="{% if t.delta > 0 %}text-success{% elif t.delta < 0 %}text-danger{% else %}text-muted{% endif %}">
+            {% if t.delta > 0 %}+{{ t.delta }}{% else %}{{ t.delta }}{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('admin.restore_execute', filename=preview.name) }}" id="restoreForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white fw-bold">Restore Mode</div>
+    <div class="card-body">
+      {% for m in preview.modes %}
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="radio" name="mode" id="mode_{{ m.id }}" value="{{ m.id }}" {% if not m.available %}disabled{% endif %} {% if m.id == 'json_data' %}checked{% endif %}>
+        <label class="form-check-label {% if not m.available %}text-muted{% endif %}" for="mode_{{ m.id }}">
+          <strong>{{ m.label }}</strong>{% if not m.available %} — not available for this backup/database{% endif %}
+          <div class="small text-muted">{{ m.description }}</div>
+        </label>
+      </div>
+      {% endfor %}
+      <div class="form-check mt-2 p-2 border rounded" id="fullSchemaConfirmWrap" style="display:none;">
+        <input class="form-check-input" type="checkbox" name="full_schema_confirmed" id="full_schema_confirmed">
+        <label class="form-check-label text-danger" for="full_schema_confirmed">I understand this will drop and recreate the entire PostgreSQL schema, and that the app may need create_tables.py re-run if models have changed since this backup.</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white fw-bold">Files</div>
+    <div class="card-body">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="restore_files" id="restore_files" checked>
+        <label class="form-check-label" for="restore_files">Also restore uploaded files from this backup (merged into the current uploads folder; existing files with different names are not deleted)</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4 border-danger">
+    <div class="card-header bg-white fw-bold text-danger">Final Confirmation</div>
+    <div class="card-body">
+      <p class="mb-2">This creates an automatic safety backup first, then replaces live data as selected above. JSON Data restore rolls back cleanly on any error; SQLite/PostgreSQL modes do not.</p>
+      <label class="form-label small text-muted">Type the backup filename to confirm: <code>{{ preview.name }}</code></label>
+      <input class="form-control mb-3" type="text" name="confirm_text" placeholder="{{ preview.name }}" autocomplete="off" required>
+      <div class="d-flex gap-2">
+        <button class="btn btn-danger" type="submit" {% if not preview.can_restore %}disabled{% endif %}>Restore Now</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin.restore_home') }}">Cancel</a>
+      </div>
+      {% if not preview.can_restore %}<div class="text-danger small mt-2">Restore is disabled: this backup did not pass verification, or a restore is already running.</div>{% endif %}
+    </div>
+  </div>
+</form>
+
+<script>
+document.querySelectorAll('input[name="mode"]').forEach(function (el) {
+  el.addEventListener('change', function () {
+    document.getElementById('fullSchemaConfirmWrap').style.display = (this.value === 'postgres_sql') ? 'block' : 'none';
+  });
+});
+document.getElementById('restoreForm').addEventListener('submit', function (e) {
+  if (!confirm('This will overwrite live data with the contents of {{ preview.name }}. Continue?')) {
+    e.preventDefault();
+  }
+});
+</script>
+{% endblock %}

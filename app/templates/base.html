@@ -87,6 +87,29 @@
             </div>
             {% endif %}
 
+            {% if can_access_module(current_user, 'payment-requests') or can_access_module(current_user, 'accounting') %}
+            <div class="cmse-nav-section" data-section="Finance">
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navFinance" aria-expanded="false"><span>💵</span><strong>Finance</strong></button>
+                <div id="navFinance" class="collapse cmse-nav-sub">
+                    {% if can_access_module(current_user, 'payment-requests') %}
+                    <a href="{{ url_for('payments.dashboard') }}" data-nav-title="Payment Requests" data-nav-group="Finance">Payment Requests</a>
+                    <a href="{{ url_for('payments.create_request') }}" data-nav-title="New Payment Request" data-nav-group="Finance">New Payment Request</a>
+                    <a href="{{ url_for('payments.my_requests') }}" data-nav-title="My Payment Requests" data-nav-group="Finance">My Payment Requests</a>
+                    <a href="{{ url_for('payments.payment_reports') }}" data-nav-title="Payment Reports" data-nav-group="Finance">Payment Reports</a>
+                    {% endif %}
+                    {% if can_access_module(current_user, 'accounting') %}
+                    <a href="{{ url_for('accounting.dashboard') }}" data-nav-title="Accounting" data-nav-group="Finance">Accounting</a>
+                    <a href="{{ url_for('accounting.accounts') }}" data-nav-title="Chart of Accounts" data-nav-group="Finance">Chart of Accounts</a>
+                    <a href="{{ url_for('accounting.journal') }}" data-nav-title="Journal" data-nav-group="Finance">Journal</a>
+                    <a href="{{ url_for('accounting.trial_balance_report') }}" data-nav-title="Trial Balance" data-nav-group="Finance">Trial Balance</a>
+                    <a href="{{ url_for('accounting.income_statement_report') }}" data-nav-title="Profit &amp; Loss" data-nav-group="Finance">Profit &amp; Loss</a>
+                    <a href="{{ url_for('accounting.balance_sheet_report') }}" data-nav-title="Balance Sheet" data-nav-group="Finance">Balance Sheet</a>
+                    <a href="{{ url_for('accounting.mappings') }}" data-nav-title="Accounting Mappings" data-nav-group="Finance">Mappings &amp; Settings</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
             {% if can_access_module(current_user, 'reports') or can_access_module(current_user, 'customer-reports') or can_access_module(current_user, 'material-reports') %}
             <div class="cmse-nav-section" data-section="Reports">
                 <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navReports" aria-expanded="false"><span>📊</span><strong>Reports</strong></button>
@@ -122,7 +145,7 @@
                     {% if can_access_module(current_user, 'whatsapp-integration') %}<a href="{{ url_for('notifications.whatsapp_settings') }}" data-nav-title="WhatsApp API Setup" data-nav-group="System">WhatsApp API Setup</a>{% endif %}
                     {% if can_access_module(current_user, 'whatsapp-integration') or current_user.role == "Admin" %}<a href="{{ url_for('whatsapp.messages') }}" data-nav-title="WhatsApp Message Log" data-nav-group="System">WhatsApp Message Log</a><a href="{{ url_for('whatsapp.test_send') }}" data-nav-title="WhatsApp Test" data-nav-group="System">WhatsApp Test</a>{% endif %}
                     {% if can_access_module(current_user, 'production-readiness') %}<a href="{{ url_for('production.readiness') }}" data-nav-title="Production Readiness" data-nav-group="System">Production Readiness</a>{% endif %}
-                    {% if current_user.role == "Admin" %}<a href="{{ url_for('users.list_users') }}" data-nav-title="Users" data-nav-group="System">Users</a><a href="{{ url_for('admin.settings_home') }}" data-nav-title="Settings" data-nav-group="System">Settings</a><a href="{{ url_for('admin.company_profile') }}" data-nav-title="Company Profile" data-nav-group="System">Company Profile</a><a href="{{ url_for('admin.permissions_overview') }}" data-nav-title="Role Permissions" data-nav-group="System">Role Permissions</a><a href="{{ url_for('admin.form_permissions') }}" data-nav-title="Form Permissions" data-nav-group="System">Form Permissions</a><a href="{{ url_for('activity.activity_log') }}" data-nav-title="Audit Logs" data-nav-group="System">Audit Logs</a><a href="{{ url_for('admin.backup_home') }}" data-nav-title="Backup" data-nav-group="System">Backup</a>{% endif %}
+                    {% if current_user.role == "Admin" %}<a href="{{ url_for('users.list_users') }}" data-nav-title="Users" data-nav-group="System">Users</a><a href="{{ url_for('admin.settings_home') }}" data-nav-title="Settings" data-nav-group="System">Settings</a><a href="{{ url_for('admin.company_profile') }}" data-nav-title="Company Profile" data-nav-group="System">Company Profile</a><a href="{{ url_for('admin.permissions_overview') }}" data-nav-title="Role Permissions" data-nav-group="System">Role Permissions</a><a href="{{ url_for('admin.form_permissions') }}" data-nav-title="Form Permissions" data-nav-group="System">Form Permissions</a><a href="{{ url_for('activity.activity_log') }}" data-nav-title="Audit Logs" data-nav-group="System">Audit Logs</a><a href="{{ url_for('admin.backup_home') }}" data-nav-title="Backup" data-nav-group="System">Backup</a><a href="{{ url_for('admin.restore_home') }}" data-nav-title="Restore" data-nav-group="System">Restore</a>{% endif %}
                 </div>
             </div>
             {% endif %}

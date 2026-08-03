@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-4 mb-3">
+  <h2 class="fw-bold">{{ 'Edit Account' if account else 'New Account' }}</h2>
+  {% if account and has_lines %}
+  <p class="text-muted mb-0">This account has journal history — code and type are locked so past reports can't silently change. Name and description can still be edited.</p>
+  {% endif %}
+</div>
+
+<form method="post" class="card shadow-sm mb-4" style="max-width: 640px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label">Code <span class="text-danger">*</span></label>
+      <input class="form-control" type="text" name="code" value="{{ account.code if account else '' }}" {% if account and has_lines %}disabled{% endif %} required placeholder="e.g. 5500">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Name <span class="text-danger">*</span></label>
+      <input class="form-control" type="text" name="name" value="{{ account.name if account else '' }}" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Type <span class="text-danger">*</span></label>
+      <select class="form-select" name="account_type" {% if account and has_lines %}disabled{% endif %}>
+        {% for t in account_types %}<option value="{{ t }}" {% if account and account.account_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Parent Account (optional, for grouping)</label>
+      <select class="form-select" name="parent_id">
+        <option value="">— None —</option>
+        {% for p in parents %}<option value="{{ p.id }}" {% if account and account.parent_id == p.id %}selected{% endif %}>{{ p.code }} {{ p.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Description</label>
+      <textarea class="form-control" name="description" rows="2">{{ account.description if account else '' }}</textarea>
+    </div>
+    {% if account and not account.is_system %}
+    <div class="form-check mb-3">
+      <input class="form-check-input" type="checkbox" name="is_active" id="is_active" {% if account.is_active %}checked{% endif %}>
+      <label class="form-check-label" for="is_active">Active</label>
+    </div>
+    {% endif %}
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary" type="submit">Save</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('accounting.accounts') }}">Cancel</a>
+    </div>
+  </div>
+</form>
+{% endblock %}

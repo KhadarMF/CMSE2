@@ -2,6 +2,7 @@
 {% block content %}
 <h3>AI Report Generator</h3>
 <form method="post" class="card p-3 shadow-sm mb-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="row g-3">
     <div class="col-md-4"><label class="form-label">Report Type</label><select name="report_type" class="form-select"><option>Weekly Operations Report</option><option>Service Support Report</option><option>Sales CRM Report</option><option>Project Management Report</option><option>Executive Summary</option></select></div>
     <div class="col-md-8"><label class="form-label">Instruction</label><input name="prompt" class="form-control" placeholder="Generate a concise management report with risks and next actions"></div>

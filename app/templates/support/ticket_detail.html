@@ -15,6 +15,7 @@
     <button onclick="window.print()" class="btn btn-outline-secondary">Print</button>
     <a class="btn btn-outline-dark" href="{{ url_for('support.ticket_report', ticket_id=ticket.id) }}" target="_blank">Report</a>
     <form method="post" action="{{ url_for('support.analyze_ticket_ai', ticket_id=ticket.id) }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-warning" type="submit">Analyze with AI</button>
     </form>
     <a class="btn btn-danger" href="{{ url_for('support.ticket_pdf', ticket_id=ticket.id) }}" target="_blank">PDF</a>
@@ -58,6 +59,7 @@
       <div class="card-header fw-bold">Update Ticket</div>
       <div class="card-body">
         <form method="post" action="{{ url_for('support.update_ticket', ticket_id=ticket.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label class="form-label">Status</label>
           <select class="form-select mb-2" name="status">{% for s in statuses %}<option value="{{ s }}" {% if ticket.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
 
@@ -99,6 +101,7 @@
   <div class="card-header fw-bold bg-warning-subtle d-flex justify-content-between align-items-center">
     <span>Phase 16A — AI Service Ticket Agent</span>
     <form method="post" action="{{ url_for('support.analyze_ticket_ai', ticket_id=ticket.id) }}" class="m-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-sm btn-warning" type="submit">Analyze / Reanalyze with AI</button>
     </form>
   </div>
@@ -143,6 +146,7 @@
   <div class="card-header fw-bold">Root Cause & CAPA</div>
   <div class="card-body">
     <form method="post" action="{{ url_for('support.update_ticket', ticket_id=ticket.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="row g-3">
         <div class="col-md-4"><label class="form-label">Root Cause</label><textarea class="form-control" name="root_cause">{{ ticket.root_cause or '' }}</textarea></div>
         <div class="col-md-4"><label class="form-label">Corrective Action</label><textarea class="form-control" name="corrective_action">{{ ticket.corrective_action or '' }}</textarea></div>
@@ -158,6 +162,7 @@
   <div class="card-header fw-bold">Add Service Visit Report</div>
   <div class="card-body">
     <form method="post" action="{{ url_for('support.add_visit', ticket_id=ticket.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="row g-2">
         <div class="col-md-3"><label class="form-label">Visit Date</label><input class="form-control" type="date" name="visit_date"></div>
         <div class="col-md-3"><label class="form-label">Technician</label><select class="form-select" name="technician_employee_id"><option value="">Use assigned technician</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }}{% if e.job_title %} - {{ e.job_title }}{% endif %}</option>{% endfor %}</select></div>

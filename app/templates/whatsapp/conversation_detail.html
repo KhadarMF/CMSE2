@@ -7,9 +7,11 @@
   </div>
   <div class="d-flex gap-2">
     <form method="post" action="{{ url_for('whatsapp.mark_conversation_read', phone=phone) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-outline-primary">Mark Read</button>
     </form>
     <form method="post" action="{{ url_for('whatsapp.retry_failed_conversation', phone=phone) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-outline-warning">Retry Failed</button>
     </form>
     <a class="btn btn-outline-secondary" href="{{ url_for('whatsapp.conversations') }}">Back</a>
@@ -41,6 +43,7 @@
     </div>
 
     <form method="post" class="card card-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="recipient_name" value="{{ display_name }}">
       <label class="form-label"><strong>Send WhatsApp text</strong></label>
       <textarea name="message" class="form-control" rows="4" placeholder="Write customer message..." required></textarea>
