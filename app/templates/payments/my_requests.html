@@ -10,11 +10,12 @@
 <div class="card shadow-sm mb-4">
   <div class="card-body p-0">
     <table class="table table-hover mb-0 align-middle">
-      <thead><tr><th>Request</th><th>Payee</th><th>Amount</th><th>Balance</th><th>Status</th></tr></thead>
+      <thead><tr><th>Request</th><th>Team / Project</th><th>Payee</th><th>Amount</th><th>Balance</th><th>Status</th></tr></thead>
       <tbody>
       {% for r in requests %}
         <tr onclick="window.location='{{ url_for('payments.request_detail', request_id=r.id) }}'" style="cursor:pointer;">
           <td><div class="fw-semibold">{{ r.request_no }}</div><div class="small text-muted">{{ r.created_at.strftime('%Y-%m-%d') if r.created_at else '' }}</div></td>
+          <td><div>{{ r.team.team_name if r.team else '—' }}</div><div class="small text-muted">{{ r.project.project_name if r.project else r.request_type or '' }}</div></td>
           <td>{{ r.payee_name }}</td>
           <td>{{ r.currency }} {{ "%.2f"|format(r.amount) }}</td>
           <td>{{ r.currency }} {{ "%.2f"|format(r.balance) }}</td>
@@ -28,7 +29,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="5" class="text-muted p-4">You haven't submitted any payment requests yet.</td></tr>
+        <tr><td colspan="6" class="text-muted p-4">You haven't submitted any payment requests yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>

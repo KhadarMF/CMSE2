@@ -57,13 +57,14 @@
             </div>
             {% endif %}
 
-            {% if can_access_module(current_user, 'projects') or can_access_module(current_user, 'project-tasks') or can_access_module(current_user, 'forms-home') or can_access_module(current_user, 'documents') or can_access_module(current_user, 'issues-risks') or can_access_module(current_user, 'payroll') %}
+            {% if can_access_module(current_user, 'projects') or can_access_module(current_user, 'project-tasks') or can_access_module(current_user, 'forms-home') or can_access_module(current_user, 'documents') or can_access_module(current_user, 'issues-risks') or can_access_module(current_user, 'payroll') or is_team_leader(current_user) %}
             <div class="cmse-nav-section" data-section="Projects">
                 <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navProjects" aria-expanded="false"><span>🏗</span><strong>Projects</strong></button>
                 <div id="navProjects" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'projects') %}<a href="{{ url_for('projects.list_projects') }}" data-nav-title="Projects List" data-nav-group="Projects">Projects List</a>{% endif %}
                     {% if can_access_module(current_user, 'project-tasks') %}<a href="{{ url_for('project_tasks.list_tasks') }}" data-nav-title="Project Tasks" data-nav-group="Projects">Project Tasks</a><a href="{{ url_for('tasks.my_tasks') }}" data-nav-title="My Tasks" data-nav-group="Projects">My Tasks</a>{% endif %}
                     {% if can_access_module(current_user, 'forms-home', 'view') %}<a href="{{ url_for('forms.forms_home') }}" data-nav-title="Project Forms" data-nav-group="Projects">Project Forms</a>{% endif %}
+                    {% if is_team_leader(current_user) %}<a href="{{ url_for('forms.list_forms', form_key='daily-site-report') }}" data-nav-title="Team Daily Reports" data-nav-group="Projects">Team Daily Reports</a><a href="{{ url_for('forms.create_form', form_key='daily-site-report') }}" data-nav-title="New Daily Report" data-nav-group="Projects">New Daily Report</a>{% endif %}
                     {% if can_access_module(current_user, 'documents') %}<a href="{{ url_for('documents.list_documents') }}" data-nav-title="Documents" data-nav-group="Projects">Documents</a>{% endif %}
                     {% if can_access_module(current_user, 'issues-risks') %}<a href="{{ url_for('issues.list_issues') }}" data-nav-title="Issues / Risks" data-nav-group="Projects">Issues / Risks</a>{% endif %}
                     {% if can_access_module(current_user, 'payroll') %}<a href="{{ url_for('payroll.dashboard') }}" data-nav-title="Project Payroll" data-nav-group="Projects">Project Payroll</a>{% endif %}
@@ -87,7 +88,7 @@
             </div>
             {% endif %}
 
-            {% if can_access_module(current_user, 'payment-requests') or can_access_module(current_user, 'accounting') %}
+            {% if can_access_module(current_user, 'payment-requests') or can_access_module(current_user, 'accounting') or is_team_leader(current_user) %}
             <div class="cmse-nav-section" data-section="Finance">
                 <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navFinance" aria-expanded="false"><span>💵</span><strong>Finance</strong></button>
                 <div id="navFinance" class="collapse cmse-nav-sub">
@@ -96,6 +97,10 @@
                     <a href="{{ url_for('payments.create_request') }}" data-nav-title="New Payment Request" data-nav-group="Finance">New Payment Request</a>
                     <a href="{{ url_for('payments.my_requests') }}" data-nav-title="My Payment Requests" data-nav-group="Finance">My Payment Requests</a>
                     <a href="{{ url_for('payments.payment_reports') }}" data-nav-title="Payment Reports" data-nav-group="Finance">Payment Reports</a>
+                    {% elif is_team_leader(current_user) %}
+                    <a href="{{ url_for('payments.dashboard') }}" data-nav-title="Payment Requests" data-nav-group="Finance">Payment Requests</a>
+                    <a href="{{ url_for('payments.create_request') }}" data-nav-title="New Payment Request" data-nav-group="Finance">New Payment Request</a>
+                    <a href="{{ url_for('payments.my_requests') }}" data-nav-title="My Payment Requests" data-nav-group="Finance">My Payment Requests</a>
                     {% endif %}
                     {% if can_access_module(current_user, 'accounting') %}
                     <a href="{{ url_for('accounting.dashboard') }}" data-nav-title="Accounting" data-nav-group="Finance">Accounting</a>

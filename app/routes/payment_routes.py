@@ -6,10 +6,15 @@ from werkzeug.utils import secure_filename
 
 from app import db
 from app.models import (
-    PaymentRequest, PaymentRequestPayment, Project, MaterialRequest, Branch, Department,
-    PAYMENT_REQUEST_STATUSES, PAYMENT_REQUEST_CATEGORIES, PAYMENT_REQUEST_METHODS, PAYMENT_REQUEST_CURRENCIES,
+    PaymentRequest, PaymentRequestPayment, Project, MaterialRequest, Branch, Department, Team,
+    PAYMENT_REQUEST_STATUSES, PAYMENT_REQUEST_CATEGORIES, PAYMENT_REQUEST_METHODS,
+    PAYMENT_REQUEST_CURRENCIES, PAYMENT_REQUEST_TYPES,
 )
 from app.notifications import notify_roles, notify_user
+from app.team_leader_access import (
+    assigned_projects_for_user, is_team_leader, led_teams_for_user,
+    team_is_assigned_to_project, team_leader_can_access_payment,
+)
 
 payments_bp = Blueprint("payments", __name__, url_prefix="/payments")
 
@@ -30,6 +35,32 @@ def can_manage_payment_requests():
 
 def can_finance_payment_requests():
     return current_user.role in FINANCE_ROLES
+
+
+def can_view_all_payment_requests():
+    return can_manage_payment_requests() or can_finance_payment_requests()
+
+
+def can_view_payment_request(pr):
+    return can_view_all_payment_requests() or team_leader_can_access_payment(current_user, pr)
+
+
+def require_payment_visibility(pr):
+    if can_view_payment_request(pr):
+        return True
+    flash("You can only view your own payment requests.", "danger")
+    return False
+
+
+def payment_projects_and_teams():
+    leader_mode = is_team_leader(current_user) and not can_view_all_payment_requests()
+    if leader_mode:
+        teams = led_teams_for_user(current_user)
+        projects = assigned_projects_for_user(current_user)
+    else:
+        teams = Team.query.filter_by(status="Active").order_by(Team.team_name.asc()).all()
+        projects = Project.query.order_by(Project.project_name.asc()).all()
+    return leader_mode, teams, projects
 
 
 def parse_date(value):
@@ -89,7 +120,10 @@ def ensure_payment_tables():
 @payments_bp.route("/")
 @login_required
 def dashboard():
-    all_requests = PaymentRequest.query.order_by(PaymentRequest.created_at.desc()).all()
+    query = PaymentRequest.query
+    if not can_view_all_payment_requests():
+        query = query.filter_by(requested_by_id=current_user.id)
+    all_requests = query.order_by(PaymentRequest.created_at.desc()).all()
     live_requests = [r for r in all_requests if r.status not in DEAD_STATUSES]
     summary = {
         "pending_manager": sum(1 for r in all_requests if r.status == "Pending Manager Approval"),
@@ -104,6 +138,7 @@ def dashboard():
     return render_template(
         "payments/dashboard.html", summary=summary, recent=all_requests[:10],
         can_manage=can_manage_payment_requests(), can_finance=can_finance_payment_requests(),
+        can_view_all=can_view_all_payment_requests(),
     )
 
 
@@ -112,6 +147,8 @@ def dashboard():
 def list_requests():
     status, category, project_id = request.args.get("status"), request.args.get("category"), request.args.get("project_id")
     query = PaymentRequest.query
+    if not can_view_all_payment_requests():
+        query = query.filter_by(requested_by_id=current_user.id)
     if status:
         query = query.filter_by(status=status)
     if category:
@@ -136,6 +173,7 @@ def my_requests():
 @payments_bp.route("/requests/create", methods=["GET", "POST"])
 @login_required
 def create_request():
+    leader_mode, available_teams, available_projects = payment_projects_and_teams()
     if request.method == "POST":
         amount = parse_float(request.form.get("amount"))
         payee_name = (request.form.get("payee_name") or "").strip()
@@ -147,12 +185,39 @@ def create_request():
             flash("Payee name and purpose are required.", "danger")
             return redirect(url_for("payments.create_request"))
 
+        team_id = parse_int(request.form.get("team_id"))
+        project_id = parse_int(request.form.get("project_id"))
+        selected_team = db.session.get(Team, team_id) if team_id else None
+        selected_project = db.session.get(Project, project_id) if project_id else None
+        if leader_mode:
+            allowed_team_ids = {team.id for team in available_teams}
+            allowed_project_ids = {project.id for project in available_projects}
+            if not team_id or team_id not in allowed_team_ids:
+                flash("Select one of the teams you lead.", "danger")
+                return redirect(url_for("payments.create_request"))
+            if not project_id or project_id not in allowed_project_ids:
+                flash("Select a project assigned to your team.", "danger")
+                return redirect(url_for("payments.create_request"))
+            if not team_is_assigned_to_project(selected_team, selected_project):
+                flash("That team is not assigned to the selected project.", "danger")
+                return redirect(url_for("payments.create_request"))
+            material_request_id = parse_int(request.form.get("material_request_id"))
+            if material_request_id:
+                material_request = db.session.get(MaterialRequest, material_request_id)
+                if not material_request or material_request.project_id != project_id:
+                    flash("The selected material request does not belong to that project.", "danger")
+                    return redirect(url_for("payments.create_request"))
+        else:
+            material_request_id = parse_int(request.form.get("material_request_id"))
+
         pr = PaymentRequest(
             requested_by_id=current_user.id,
-            branch_id=parse_int(request.form.get("branch_id")) or current_user.branch_id,
-            department_id=parse_int(request.form.get("department_id")) or current_user.department_id,
-            project_id=parse_int(request.form.get("project_id")),
-            material_request_id=parse_int(request.form.get("material_request_id")),
+            branch_id=((selected_team.branch_id if selected_team else None) or current_user.branch_id) if leader_mode else (parse_int(request.form.get("branch_id")) or current_user.branch_id),
+            department_id=((selected_team.department_id if selected_team else None) or current_user.department_id) if leader_mode else (parse_int(request.form.get("department_id")) or current_user.department_id),
+            project_id=project_id,
+            material_request_id=material_request_id,
+            team_id=team_id,
+            request_type=request.form.get("request_type") if request.form.get("request_type") in PAYMENT_REQUEST_TYPES else "Team Expense",
             payee_name=payee_name,
             payee_phone=request.form.get("payee_phone"),
             category=request.form.get("category") or "Other",
@@ -181,11 +246,16 @@ def create_request():
         flash(f"Payment request {pr.request_no} submitted for approval.", "success")
         return redirect(url_for("payments.request_detail", request_id=pr.id))
 
+    allowed_project_ids = {project.id for project in available_projects}
+    material_query = MaterialRequest.query
+    if leader_mode:
+        material_query = material_query.filter(MaterialRequest.project_id.in_(allowed_project_ids))
     return render_template(
         "payments/request_form.html",
         categories=PAYMENT_REQUEST_CATEGORIES, currencies=PAYMENT_REQUEST_CURRENCIES,
-        projects=Project.query.order_by(Project.project_name.asc()).all(),
-        material_requests=MaterialRequest.query.order_by(MaterialRequest.created_at.desc()).limit(100).all(),
+        request_types=PAYMENT_REQUEST_TYPES, teams=available_teams,
+        team_leader_mode=leader_mode, projects=available_projects,
+        material_requests=material_query.order_by(MaterialRequest.created_at.desc()).limit(100).all(),
         branches=Branch.query.filter_by(is_active=True).order_by(Branch.branch_name.asc()).all(),
         departments=Department.query.filter_by(is_active=True).order_by(Department.department_name.asc()).all(),
         selected_project=request.args.get("project_id", ""),
@@ -196,6 +266,8 @@ def create_request():
 @login_required
 def request_detail(request_id):
     pr = PaymentRequest.query.get_or_404(request_id)
+    if not require_payment_visibility(pr):
+        return redirect(url_for("payments.my_requests"))
     return render_template(
         "payments/request_detail.html", pr=pr, payment_methods=PAYMENT_REQUEST_METHODS,
         currencies=PAYMENT_REQUEST_CURRENCIES,
@@ -207,18 +279,23 @@ def request_detail(request_id):
 @login_required
 def download_attachment(request_id):
     pr = PaymentRequest.query.get_or_404(request_id)
+    if not require_payment_visibility(pr):
+        return redirect(url_for("payments.my_requests"))
     if not pr.attachment_stored_name:
         flash("No attachment on this request.", "warning")
         return redirect(url_for("payments.request_detail", request_id=request_id))
     return send_from_directory(current_app.config["UPLOAD_FOLDER"], pr.attachment_stored_name, as_attachment=True, download_name=pr.attachment_original_name or pr.attachment_stored_name)
 
 
-@payments_bp.route("/requests/<int:request_id>/approve-manager")
+@payments_bp.route("/requests/<int:request_id>/approve-manager", methods=["POST"])
 @login_required
 def approve_manager(request_id):
     pr = PaymentRequest.query.get_or_404(request_id)
     if not can_manage_payment_requests():
         flash("Only Admin, Management or Operation Manager can give first-level approval.", "danger")
+        return redirect(url_for("payments.request_detail", request_id=request_id))
+    if pr.requested_by_id == current_user.id:
+        flash("A requester cannot approve their own payment request.", "danger")
         return redirect(url_for("payments.request_detail", request_id=request_id))
     if pr.status != "Pending Manager Approval":
         flash("This request is not awaiting manager approval.", "warning")
@@ -240,12 +317,15 @@ def approve_manager(request_id):
     return redirect(url_for("payments.request_detail", request_id=request_id))
 
 
-@payments_bp.route("/requests/<int:request_id>/approve-finance")
+@payments_bp.route("/requests/<int:request_id>/approve-finance", methods=["POST"])
 @login_required
 def approve_finance(request_id):
     pr = PaymentRequest.query.get_or_404(request_id)
     if not can_finance_payment_requests():
         flash("Only Admin, Management or Finance Officer can give final approval.", "danger")
+        return redirect(url_for("payments.request_detail", request_id=request_id))
+    if pr.requested_by_id == current_user.id:
+        flash("A requester cannot give final approval to their own request.", "danger")
         return redirect(url_for("payments.request_detail", request_id=request_id))
     if pr.status != "Pending Finance Approval":
         flash("This request is not awaiting finance approval.", "warning")
@@ -294,6 +374,8 @@ def reject_request(request_id):
 @login_required
 def cancel_request(request_id):
     pr = PaymentRequest.query.get_or_404(request_id)
+    if not require_payment_visibility(pr):
+        return redirect(url_for("payments.my_requests"))
     if pr.requested_by_id != current_user.id and current_user.role != "Admin":
         flash("Only the requester or Admin can cancel this request.", "danger")
         return redirect(url_for("payments.request_detail", request_id=request_id))
@@ -377,6 +459,8 @@ def download_payment_proof(request_id, payment_id):
     if payment.payment_request_id != request_id:
         flash("Payment does not belong to this request.", "danger")
         return redirect(url_for("payments.request_detail", request_id=request_id))
+    if not require_payment_visibility(payment.payment_request):
+        return redirect(url_for("payments.my_requests"))
     if not payment.proof_stored_name:
         flash("No proof file attached to this payment.", "warning")
         return redirect(url_for("payments.request_detail", request_id=request_id))

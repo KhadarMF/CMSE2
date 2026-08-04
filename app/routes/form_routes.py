@@ -1,14 +1,19 @@
-from datetime import datetime
+from datetime import datetime, date
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
 from app.models import (
     Project, SiteSurveyForm, LoadAssessmentForm, DailySiteReport,
-    DeliveryNoteForm, TestingForm, CommissioningForm, HandoverForm, FORM_APPROVAL_STATUSES, ApprovalHistory
+    DeliveryNoteForm, TestingForm, CommissioningForm, HandoverForm,
+    FORM_APPROVAL_STATUSES, ApprovalHistory, Team,
 )
-from app.permissions import can_create_form, can_edit_form, can_delete_form, can_review_document
+from app.permissions import can_create_form, can_edit_form, can_delete_form, can_access_module
 from app.activity import log_activity, log_approval
 from app.notifications import notify_roles, notify_user
+from app.team_leader_access import (
+    assigned_projects_for_user, is_team_leader, led_teams_for_user,
+    team_is_assigned_to_project, team_leader_can_access_daily_report,
+)
 
 form_bp = Blueprint("forms", __name__, url_prefix="/forms")
 
@@ -76,9 +81,16 @@ FORM_CONFIG = {
         "title": "Daily Site Report", "model": DailySiteReport,
         "template": "forms/daily_site_report.html", "detail_template": "forms/detail.html",
         "fields": [
-            ("report_date", "Report Date", "date"), ("site_supervisor", "Site Supervisor", "text"),
-            ("manpower", "Manpower", "textarea"), ("work_done_today", "Work Done Today", "textarea"),
+            ("report_date", "Report Date", "date"), ("site_location", "Site Location", "text"),
+            ("weather", "Weather", "text"), ("site_supervisor", "Team Leader / Site Supervisor", "text"),
+            ("planned_activities", "Planned Activities", "textarea"),
+            ("manpower", "Manpower Details", "textarea"),
+            ("employees_present", "Employees Present", "number"), ("employees_absent", "Employees Absent", "number"),
+            ("normal_hours", "Normal Hours", "number"), ("overtime_hours", "Overtime Hours", "number"),
+            ("work_done_today", "Work Completed Today", "textarea"),
+            ("completed_quantity", "Completed Quantity", "number"), ("quantity_unit", "Quantity Unit", "text"),
             ("materials_used", "Materials Used", "textarea"), ("tools_equipment_used", "Tools / Equipment Used", "textarea"),
+            ("delayed_activities", "Delayed Activities", "textarea"), ("delay_reason", "Delay Reason", "textarea"),
             ("issues_challenges", "Issues / Challenges", "textarea"), ("safety_notes", "Safety Notes", "textarea"),
             ("next_day_plan", "Next Day Plan", "textarea"), ("progress_percentage", "Progress Percentage", "text"),
             ("remarks", "Remarks", "textarea"),
@@ -158,8 +170,68 @@ def get_render_fields(form_key):
         render_fields.append((field_name, label, get_field_type(field_name, field_type)))
     return render_fields
 
-def get_projects():
+def daily_report_self_service_mode():
+    return is_team_leader(current_user) and current_user.role not in {
+        "Admin", "Management", "Operation Manager"
+    }
+
+
+def get_projects(form_key=None):
+    if form_key == "daily-site-report" and daily_report_self_service_mode():
+        return assigned_projects_for_user(current_user)
     return Project.query.order_by(Project.project_name.asc()).all()
+
+
+def get_daily_report_teams():
+    if daily_report_self_service_mode():
+        return led_teams_for_user(current_user)
+    return Team.query.filter_by(status="Active").order_by(Team.team_name.asc()).all()
+
+
+def can_create_requested_form(form_key):
+    return can_create_form(current_user, form_key) or (
+        form_key == "daily-site-report" and is_team_leader(current_user)
+    )
+
+
+def can_access_daily_entry(entry, action="view"):
+    if can_access_module(current_user, "daily-site-report", action):
+        return True
+    if action not in {"view", "create", "edit", "print_export"}:
+        return False
+    if not team_leader_can_access_daily_report(current_user, entry):
+        return False
+    if action == "edit":
+        return entry.approval_status in {"Draft", "Need Correction", "Rejected"}
+    return True
+
+
+def validate_daily_report_scope(project_id, team_id, report_date, exclude_id=None):
+    try:
+        project_key = int(project_id)
+        team_key = int(team_id)
+    except (TypeError, ValueError):
+        return "Project and Team are required."
+    project = db.session.get(Project, project_key)
+    team = db.session.get(Team, team_key)
+    if not project or not team:
+        return "Project and Team are required."
+    if daily_report_self_service_mode():
+        led_ids = {item.id for item in led_teams_for_user(current_user)}
+        if team.id not in led_ids:
+            return "You can only report for a team you lead."
+    if not team_is_assigned_to_project(team, project):
+        return "The selected team is not assigned to that project."
+    if not report_date:
+        return "Report Date is required."
+    duplicate = DailySiteReport.query.filter_by(
+        project_id=project.id, team_id=team.id, report_date=report_date
+    )
+    if exclude_id:
+        duplicate = duplicate.filter(DailySiteReport.id != exclude_id)
+    if duplicate.first():
+        return "A daily report already exists for this team, project, and date."
+    return None
 
 def get_counts():
     return {
@@ -193,6 +265,8 @@ def entry_to_values(entry, form_key):
 
 def build_display_rows(entry, form_key):
     display_rows = []
+    if form_key == "daily-site-report":
+        display_rows.append(("Team", entry.team.team_name if entry.team else ""))
     for field_name, label, field_type in FORM_CONFIG[form_key]["fields"]:
         value = getattr(entry, field_name, "")
         display_rows.append((label, value or ""))
@@ -206,6 +280,9 @@ def forms_home():
     # Correct view permissions are controlled separately.
     from app.permissions import can_view_form
     allowed_view_forms = {key: can_view_form(current_user, key) for key in FORM_CONFIG.keys()}
+    if is_team_leader(current_user):
+        allowed_create_forms["daily-site-report"] = True
+        allowed_view_forms["daily-site-report"] = True
     return render_template("forms/home.html", counts=get_counts(), allowed_forms=allowed_create_forms, allowed_view_forms=allowed_view_forms)
 
 @form_bp.route("/<form_key>")
@@ -222,6 +299,9 @@ def list_forms(form_key):
     status = request.args.get("status", "").strip()
 
     query = Model.query
+    if form_key == "daily-site-report" and daily_report_self_service_mode():
+        led_ids = {team.id for team in led_teams_for_user(current_user)}
+        query = query.filter(DailySiteReport.team_id.in_(led_ids))
     if project_id:
         query = query.filter_by(project_id=project_id)
     if status:
@@ -238,7 +318,7 @@ def list_forms(form_key):
                 filtered_entries.append(entry)
         entries = filtered_entries
 
-    projects = get_projects()
+    projects = get_projects(form_key)
 
     return render_template(
         "forms/list.html",
@@ -250,7 +330,7 @@ def list_forms(form_key):
         selected_status=status,
         statuses=FORM_APPROVAL_STATUSES,
         search=search,
-        can_create_this_form=can_create_form(current_user, form_key),
+        can_create_this_form=can_create_requested_form(form_key),
         form_reference=form_reference,
     )
 
@@ -261,7 +341,7 @@ def create_form(form_key):
         flash("Invalid form type.", "danger")
         return redirect(url_for("forms.forms_home"))
 
-    if not can_create_form(current_user, form_key):
+    if not can_create_requested_form(form_key):
         flash("You do not have permission to create this form.", "danger")
         return redirect(url_for("forms.forms_home"))
 
@@ -273,13 +353,40 @@ def create_form(form_key):
         form_data["project_id"] = request.form.get("project_id")
         form_data["created_by_id"] = current_user.id
         form_data["approval_status"] = request.form.get("approval_status", "Draft")
+        if form_key == "daily-site-report":
+            form_data["team_id"] = request.form.get("team_id") or None
+            if daily_report_self_service_mode():
+                form_data["site_supervisor"] = current_user.full_name
+            error = validate_daily_report_scope(
+                form_data["project_id"], form_data["team_id"], form_data.get("report_date")
+            )
+            if error:
+                flash(error, "danger")
+                return redirect(url_for("forms.create_form", form_key=form_key))
+            if not (form_data.get("work_done_today") or "").strip():
+                flash("Work Completed Today is required.", "danger")
+                return redirect(url_for("forms.create_form", form_key=form_key))
         entry = Model(**form_data)
         db.session.add(entry)
         db.session.flush()
         log_activity("Create", config["title"], entry.id, f"Created {config['title']} #{entry.id}")
         db.session.commit()
+        if form_key == "daily-site-report" and entry.approval_status == "Submitted":
+            notify_roles(
+                ["Admin", "Management", "Operation Manager"],
+                subject=f"Daily report {form_reference(form_key, entry.id)} submitted",
+                message=f"{current_user.full_name} submitted a daily report for {entry.project.project_name} / {entry.team.team_name}.",
+                module="daily-site-report", record_id=entry.id,
+            )
         flash(f"{config['title']} saved successfully.", "success")
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=entry.id))
+
+    initial_values = {}
+    if form_key == "daily-site-report":
+        initial_values = {
+            "report_date": date.today().isoformat(),
+            "site_supervisor": current_user.full_name if daily_report_self_service_mode() else "",
+        }
 
     return render_template(
         "forms/form_editor.html",
@@ -287,9 +394,13 @@ def create_form(form_key):
         form_key=form_key,
         form_title=config["title"],
         fields=get_render_fields(form_key),
-        projects=get_projects(),
-        values={},
+        projects=get_projects(form_key),
+        daily_teams=get_daily_report_teams() if form_key == "daily-site-report" else [],
+        daily_report_mode=form_key == "daily-site-report",
+        team_leader_mode=daily_report_self_service_mode() if form_key == "daily-site-report" else False,
+        values=initial_values,
         selected_project=request.args.get("project_id", ""),
+        selected_team=request.args.get("team_id", ""),
         approval_status="Draft",
         form_ref=form_reference(form_key),
         field_choices=FIELD_CHOICES,
@@ -304,6 +415,9 @@ def view_form(form_key, form_id):
 
     config = FORM_CONFIG[form_key]
     entry = config["model"].query.get_or_404(form_id)
+    if form_key == "daily-site-report" and not can_access_daily_entry(entry, "view"):
+        flash("You can only view daily reports for a team you lead.", "danger")
+        return redirect(url_for("forms.list_forms", form_key=form_key))
 
     histories = ApprovalHistory.query.filter_by(
         module=config["title"],
@@ -316,9 +430,12 @@ def view_form(form_key, form_id):
         form_title=config["title"],
         entry=entry,
         display_rows=build_display_rows(entry, form_key),
-        can_edit_this_form=can_edit_form(current_user, form_key, entry),
+        can_edit_this_form=(can_access_daily_entry(entry, "edit") if form_key == "daily-site-report" else can_edit_form(current_user, form_key, entry)),
         can_delete_this_form=can_delete_form(current_user),
-        can_review_this_form=can_review_document(current_user),
+        can_review_this_form=(
+            can_access_module(current_user, form_key, "approve")
+            and entry.created_by_id != current_user.id
+        ),
         histories=histories,
         form_ref=form_reference(form_key, entry.id),
         field_choices=FIELD_CHOICES,
@@ -334,13 +451,29 @@ def edit_form(form_key, form_id):
     config = FORM_CONFIG[form_key]
     entry = config["model"].query.get_or_404(form_id)
 
-    if not can_edit_form(current_user, form_key, entry):
+    allowed_to_edit = can_access_daily_entry(entry, "edit") if form_key == "daily-site-report" else can_edit_form(current_user, form_key, entry)
+    if not allowed_to_edit:
         flash("You do not have permission to edit this form.", "danger")
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
 
     if request.method == "POST":
         form_data = build_form_data(form_key)
-        entry.project_id = request.form.get("project_id")
+        new_project_id = request.form.get("project_id")
+        if form_key == "daily-site-report":
+            new_team_id = request.form.get("team_id") or None
+            if daily_report_self_service_mode():
+                form_data["site_supervisor"] = current_user.full_name
+            error = validate_daily_report_scope(
+                new_project_id, new_team_id, form_data.get("report_date"), exclude_id=entry.id
+            )
+            if error:
+                flash(error, "danger")
+                return redirect(url_for("forms.edit_form", form_key=form_key, form_id=form_id))
+            if not (form_data.get("work_done_today") or "").strip():
+                flash("Work Completed Today is required.", "danger")
+                return redirect(url_for("forms.edit_form", form_key=form_key, form_id=form_id))
+            entry.team_id = new_team_id
+        entry.project_id = new_project_id
         for key, value in form_data.items():
             setattr(entry, key, value)
         if entry.approval_status in ["Rejected", "Need Correction"]:
@@ -355,7 +488,11 @@ def edit_form(form_key, form_id):
         form_key=form_key,
         form_title=config["title"],
         fields=get_render_fields(form_key),
-        projects=get_projects(),
+        projects=get_projects(form_key),
+        daily_teams=get_daily_report_teams() if form_key == "daily-site-report" else [],
+        daily_report_mode=form_key == "daily-site-report",
+        team_leader_mode=daily_report_self_service_mode() if form_key == "daily-site-report" else False,
+        selected_team=str(entry.team_id or "") if form_key == "daily-site-report" else "",
         values=entry_to_values(entry, form_key),
         selected_project=str(entry.project_id),
         approval_status=entry.approval_status,
@@ -372,7 +509,8 @@ def submit_form(form_key, form_id):
         return redirect(url_for("forms.forms_home"))
     config = FORM_CONFIG[form_key]
     entry = config["model"].query.get_or_404(form_id)
-    if not can_edit_form(current_user, form_key, entry):
+    allowed_to_submit = can_access_daily_entry(entry, "edit") if form_key == "daily-site-report" else can_edit_form(current_user, form_key, entry)
+    if not allowed_to_submit:
         flash("You do not have permission to submit this form.", "danger")
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
     if entry.approval_status not in ["Draft", "Need Correction", "Rejected"]:
@@ -383,6 +521,13 @@ def submit_form(form_key, form_id):
     log_approval(config["title"], entry.id, previous_status, "Submitted", "Submitted for approval")
     log_activity("Submit", config["title"], entry.id, f"Submitted {config['title']} #{entry.id}")
     db.session.commit()
+    if form_key == "daily-site-report":
+        notify_roles(
+            ["Admin", "Management", "Operation Manager"],
+            subject=f"Daily report {form_reference(form_key, entry.id)} submitted",
+            message=f"{current_user.full_name} submitted a daily report for {entry.project.project_name} / {entry.team.team_name if entry.team else 'Team'}.",
+            module="daily-site-report", record_id=entry.id,
+        )
     flash("Form submitted for approval.", "success")
     return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
 
@@ -392,11 +537,14 @@ def review_form(form_key, form_id):
     if form_key not in FORM_CONFIG:
         flash("Invalid form type.", "danger")
         return redirect(url_for("forms.forms_home"))
-    if not can_review_document(current_user):
+    if not can_access_module(current_user, form_key, "approve"):
         flash("Only Admin, Management, or Operation Manager can review forms.", "danger")
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
     config = FORM_CONFIG[form_key]
     entry = config["model"].query.get_or_404(form_id)
+    if entry.created_by_id == current_user.id:
+        flash("A report creator cannot approve their own report.", "danger")
+        return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
     if request.method == "POST":
         new_status = request.form.get("approval_status")
         if new_status not in ["Under Review", "Approved", "Rejected", "Need Correction"]:
@@ -410,6 +558,13 @@ def review_form(form_key, form_id):
         log_approval(config["title"], entry.id, previous_status, new_status, entry.manager_comments)
         log_activity("Review", config["title"], entry.id, f"Changed status from {previous_status} to {new_status}")
         db.session.commit()
+        if form_key == "daily-site-report":
+            notify_user(
+                entry.creator,
+                subject=f"Daily report {form_reference(form_key, entry.id)}: {new_status}",
+                message=entry.manager_comments or f"Your daily report is now {new_status}.",
+                module="daily-site-report", record_id=entry.id,
+            )
         flash("Form review saved.", "success")
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
     return render_template("forms/review.html", form_key=form_key, form_title=config["title"], entry=entry)
@@ -442,6 +597,9 @@ def print_form(form_key, form_id):
 
     config = FORM_CONFIG[form_key]
     entry = config["model"].query.get_or_404(form_id)
+    if form_key == "daily-site-report" and not can_access_daily_entry(entry, "print_export"):
+        flash("You can only print daily reports for a team you lead.", "danger")
+        return redirect(url_for("forms.list_forms", form_key=form_key))
     return render_template(
         "forms/print.html",
         form_key=form_key,

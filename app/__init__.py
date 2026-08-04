@@ -252,9 +252,10 @@ def create_app():
     def inject_permission_helpers():
         try:
             from app.permissions import can_access_module, has_any_permission, allowed_form_keys, allowed_permission_keys
-            return {"can_access_module": can_access_module, "has_any_permission": has_any_permission, "allowed_form_keys": allowed_form_keys, "allowed_permission_keys": allowed_permission_keys}
+            from app.team_leader_access import is_team_leader
+            return {"can_access_module": can_access_module, "has_any_permission": has_any_permission, "allowed_form_keys": allowed_form_keys, "allowed_permission_keys": allowed_permission_keys, "is_team_leader": is_team_leader}
         except Exception:
-            return {"can_access_module": lambda user, key, action="view": False, "has_any_permission": lambda user, keys, action="view": False, "allowed_form_keys": lambda user, action="view": [], "allowed_permission_keys": lambda user: []}
+            return {"can_access_module": lambda user, key, action="view": False, "has_any_permission": lambda user, keys, action="view": False, "allowed_form_keys": lambda user, action="view": [], "allowed_permission_keys": lambda user: [], "is_team_leader": lambda user: False}
 
     @app.context_processor
     def inject_notification_badge():

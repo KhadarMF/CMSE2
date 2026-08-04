@@ -7,8 +7,10 @@
   </div>
   <div class="d-flex gap-2">
     <a class="btn btn-outline-dark" href="{{ url_for('payments.my_requests') }}">My Requests</a>
+    {% if can_view_all %}
     <a class="btn btn-outline-dark" href="{{ url_for('payments.list_requests') }}">All Requests</a>
     <a class="btn btn-outline-dark" href="{{ url_for('payments.payment_reports') }}">Reports</a>
+    {% endif %}
     <a class="btn btn-primary" href="{{ url_for('payments.create_request') }}">New Payment Request</a>
   </div>
 </div>

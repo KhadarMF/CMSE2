@@ -3,6 +3,7 @@
 <div class="mt-4 mb-3">
   <h2 class="fw-bold">New Payment Request</h2>
   <p class="text-muted mb-0">Goes to Manager approval first, then Finance, before any payment can be recorded.</p>
+  {% if team_leader_mode %}<div class="alert alert-info mt-3 mb-0">Team Leader self-service: only teams you lead and projects assigned to those teams are available.</div>{% endif %}
 </div>
 
 <form method="post" enctype="multipart/form-data">
@@ -27,6 +28,19 @@
     <div class="card-header bg-white fw-bold">What it's for</div>
     <div class="card-body">
       <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Request Type</label>
+          <select class="form-select" name="request_type">
+            {% for request_type in request_types %}<option value="{{ request_type }}">{{ request_type }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Team{% if team_leader_mode %} <span class="text-danger">*</span>{% endif %}</label>
+          <select class="form-select" name="team_id" {% if team_leader_mode %}required{% endif %}>
+            <option value="">— Select Team —</option>
+            {% for team in teams %}<option value="{{ team.id }}">{{ team.team_name }}</option>{% endfor %}
+          </select>
+        </div>
         <div class="col-md-4">
           <label class="form-label">Category</label>
           <select class="form-select" name="category">
@@ -52,8 +66,8 @@
           <input class="form-control" type="date" name="needed_by_date">
         </div>
         <div class="col-md-4">
-          <label class="form-label">Project (optional)</label>
-          <select class="form-select" name="project_id">
+          <label class="form-label">Project{% if team_leader_mode %} <span class="text-danger">*</span>{% else %} (optional){% endif %}</label>
+          <select class="form-select" name="project_id" {% if team_leader_mode %}required{% endif %}>
             <option value="">— None —</option>
             {% for p in projects %}<option value="{{ p.id }}" {% if selected_project|string == p.id|string %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}
           </select>
@@ -73,20 +87,20 @@
     <div class="card-header bg-white fw-bold">Routing &amp; Attachment</div>
     <div class="card-body">
       <div class="row g-3">
-        <div class="col-md-6">
+        {% if not team_leader_mode %}<div class="col-md-6">
           <label class="form-label">Branch</label>
           <select class="form-select" name="branch_id">
             <option value="">— Use my branch —</option>
             {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
           </select>
-        </div>
-        <div class="col-md-6">
+        </div>{% endif %}
+        {% if not team_leader_mode %}<div class="col-md-6">
           <label class="form-label">Department</label>
           <select class="form-select" name="department_id">
             <option value="">— Use my department —</option>
             {% for d in departments %}<option value="{{ d.id }}">{{ d.department_name }}</option>{% endfor %}
           </select>
-        </div>
+        </div>{% endif %}
         <div class="col-12">
           <label class="form-label">Attachment (quotation, invoice, receipt — optional)</label>
           <input class="form-control" type="file" name="attachment" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png">
@@ -97,7 +111,7 @@
 
   <div class="d-flex gap-2">
     <button class="btn btn-primary" type="submit">Submit for Approval</button>
-    <a class="btn btn-outline-secondary" href="{{ url_for('payments.dashboard') }}">Cancel</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('payments.my_requests') }}">Cancel</a>
   </div>
 </form>
 {% endblock %}

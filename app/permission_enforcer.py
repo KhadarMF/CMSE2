@@ -255,6 +255,24 @@ def register_permission_enforcer(app):
             return redirect(url_for("auth.login", next=request.url))
         if str(getattr(current_user, "role", "") or "").strip().lower() == "admin":
             return None
+
+        # Phase 20H self-service: a user linked to the Employee selected as an
+        # active Team's leader may create/track their own payment requests and
+        # maintain daily reports for that Team. Route-level checks still scope
+        # every record and project; this bypass never grants approval, finance,
+        # delete, master-data, or all-record reporting access.
+        try:
+            from app.team_leader_access import (
+                is_team_leader,
+                is_team_leader_self_service_endpoint,
+            )
+            if is_team_leader(current_user) and is_team_leader_self_service_endpoint(
+                endpoint, request.method, request.view_args
+            ):
+                return None
+        except Exception:
+            # Fail closed: the normal explicit permission matrix below applies.
+            pass
         if endpoint in READ_ONLY_ENDPOINTS:
             return None
 

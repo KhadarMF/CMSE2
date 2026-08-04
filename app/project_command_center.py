@@ -52,10 +52,14 @@ def _as_float(value):
 
 
 def _latest_daily_report(project):
-    if not project.daily_reports:
+    approved_reports = [
+        report for report in project.daily_reports
+        if report.approval_status in APPROVED_STATUSES
+    ]
+    if not approved_reports:
         return None
     return max(
-        project.daily_reports,
+        approved_reports,
         key=lambda item: (item.report_date or date.min, item.created_at or datetime.min),
     )
 
@@ -96,7 +100,7 @@ def _physical_progress(project, milestone_progress):
         source = "Latest site report + task completion"
     elif reported_progress is not None:
         progress = reported_progress
-        source = "Latest approved/entered site report"
+        source = "Latest approved site report"
     elif task_progress is not None:
         progress = task_progress
         source = "Average task completion"

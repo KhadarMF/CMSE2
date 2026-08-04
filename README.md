@@ -18,6 +18,15 @@ and project records remain intact. See
 `PHASE20F_EMPLOYEE_WORKSPACE_360_RELEASE_NOTES.md`. No schema migration is
 required.
 
+## Phase 20H — Team Leader Self-Service
+
+Team Leaders linked through Employee → Team can now submit their own Payment
+Requests and create one Team Daily Report per assigned project, team, and day.
+They only see teams they lead, projects assigned to those teams, and their own
+payment requests. Manager and Finance approvals remain separate. Deploy this
+phase with `flask db upgrade`; do not run `init_db.py` on an existing database.
+See `PHASE20H_TEAM_LEADER_SELF_SERVICE_RELEASE_NOTES.md`.
+
 ## Earlier Phase 8 notes
 
 Phase 8 focuses on preparing the system for real deployment and multi-user use.

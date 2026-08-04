@@ -6,7 +6,7 @@ from app.types import Money, Quantity, Rate
 ROLES = [
     "Admin", "Management", "Operation Manager", "Technical Engineer",
     "Site Supervisor", "Warehouse Officer", "Transport Officer",
-    "Sales Officer", "Finance Officer",
+    "Sales Officer", "Finance Officer", "Team Leader",
 ]
 
 PROJECT_STATUSES = [
@@ -167,17 +167,37 @@ class DailySiteReport(db.Model):
     reviewed_at = db.Column(db.DateTime, nullable=True)
     reviewer = db.relationship("User", foreign_keys=[reviewed_by_id])
     report_date = db.Column(db.Date)
+    team_id = db.Column(db.Integer, db.ForeignKey("team.id"), nullable=True)
+    site_location = db.Column(db.String(200), nullable=True)
+    weather = db.Column(db.String(100), nullable=True)
     site_supervisor = db.Column(db.String(150))
+    planned_activities = db.Column(db.Text, nullable=True)
     manpower = db.Column(db.Text)
+    employees_present = db.Column(db.String(80), nullable=True)
+    employees_absent = db.Column(db.String(80), nullable=True)
+    normal_hours = db.Column(db.String(50), nullable=True)
+    overtime_hours = db.Column(db.String(50), nullable=True)
     work_done_today = db.Column(db.Text)
+    completed_quantity = db.Column(db.String(80), nullable=True)
+    quantity_unit = db.Column(db.String(80), nullable=True)
     materials_used = db.Column(db.Text)
     tools_equipment_used = db.Column(db.Text)
+    delayed_activities = db.Column(db.Text, nullable=True)
+    delay_reason = db.Column(db.Text, nullable=True)
     issues_challenges = db.Column(db.Text)
     safety_notes = db.Column(db.Text)
     next_day_plan = db.Column(db.Text)
     progress_percentage = db.Column(db.String(50))
     remarks = db.Column(db.Text)
     creator = db.relationship("User", foreign_keys=[created_by_id])
+    team = db.relationship("Team", foreign_keys=[team_id])
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "project_id", "team_id", "report_date",
+            name="uq_daily_site_report_project_team_date",
+        ),
+    )
 
 class DeliveryNoteForm(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -1259,6 +1279,10 @@ PAYMENT_REQUEST_CATEGORIES = [
     "Transport & Fuel", "Salaries & Wages", "Professional Services",
     "Equipment", "Other",
 ]
+PAYMENT_REQUEST_TYPES = [
+    "Team Expense", "Vendor Payment", "Cash Advance",
+    "Expense Reimbursement", "Petty Cash", "Other",
+]
 # Same values/spelling as PROJECT_PAYMENT_METHODS (payroll module) so
 # reporting and filtering stay consistent across both modules.
 PAYMENT_REQUEST_METHODS = PROJECT_PAYMENT_METHODS
@@ -1273,6 +1297,8 @@ class PaymentRequest(db.Model):
     department_id = db.Column(db.Integer, db.ForeignKey("department.id"), nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=True)
     material_request_id = db.Column(db.Integer, db.ForeignKey("material_request.id"), nullable=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("team.id"), nullable=True)
+    request_type = db.Column(db.String(100), default="Team Expense")
 
     payee_name = db.Column(db.String(180), nullable=False)
     payee_phone = db.Column(db.String(80), nullable=True)
@@ -1310,6 +1336,7 @@ class PaymentRequest(db.Model):
     department = db.relationship("Department")
     project = db.relationship("Project", backref=db.backref("payment_requests", lazy=True))
     material_request = db.relationship("MaterialRequest", backref=db.backref("payment_requests", lazy=True))
+    team = db.relationship("Team", foreign_keys=[team_id])
     manager_approved_by = db.relationship("User", foreign_keys=[manager_approved_by_id])
     finance_approved_by = db.relationship("User", foreign_keys=[finance_approved_by_id])
     rejected_by = db.relationship("User", foreign_keys=[rejected_by_id])
