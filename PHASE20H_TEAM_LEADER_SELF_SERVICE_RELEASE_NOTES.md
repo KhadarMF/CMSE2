@@ -40,7 +40,10 @@ Draft → Submitted → Approved / Need Correction / Rejected
 ## Database migration
 
 Revision `b20h0000a001` adds the Team Leader fields and the daily-report unique
-constraint without deleting existing data.
+constraint without deleting existing data. Revision `b20h0000a002` repairs
+legacy installations that were missing the `payment_request` and
+`payment_request_payment` tables even though their Alembic baseline had
+already been stamped. The repair is additive and preserves existing tables.
 
 Before upgrading, download a fresh backup. Then run:
 
@@ -67,6 +70,7 @@ After deployment, the log should include:
 
 ```text
 Running upgrade b20g0000a001 -> b20h0000a001
+Running upgrade b20h0000a001 -> b20h0000a002
 ```
 
 ## Administrator setup
@@ -81,7 +85,7 @@ Running upgrade b20g0000a001 -> b20h0000a001
 
 ## Verification
 
-- Existing automated suite: 30 passed, 1 intentionally skipped.
-- New Team Leader self-service tests: 3 passed.
-- Fresh SQLite migration through revision `b20h0000a001`: passed.
+- Existing and new automated suite: 34 passed, 1 intentionally skipped.
+- Missing-payment-table repair regression test: passed.
+- Fresh SQLite migration through revision `b20h0000a002`: passed.
 - Unauthorized project, team, and payment-record access tests: passed.

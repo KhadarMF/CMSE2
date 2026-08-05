@@ -1,4 +1,4 @@
-# Deploy Phase 8 on Render
+# Deploy the current release on Render
 
 ## 1. Upload project to GitHub
 
@@ -52,13 +52,15 @@ MAIL_PASSWORD=your_gmail_app_password
 MAIL_DEFAULT_SENDER=your_email@gmail.com
 ```
 
-## 7. Create database tables
+## 7. Apply database migrations
 
-Open Render Shell:
+Set the Render **Pre-Deploy Command** to:
 
 ```bash
-python init_db.py
+flask db upgrade
 ```
+
+Do not run `init_db.py` against an existing Render database.
 
 ## Important
 
@@ -112,12 +114,15 @@ The schema is now owned by Alembic. `db.create_all()` has been removed from
 every route - it only ever created missing *tables* and silently ignored
 missing *columns*, which is how the schema drifted.
 
-For the **existing** production database (tables already exist):
+For an **existing database that has already been stamped or migrated**:
 
 ```
-flask db stamp cc82184d6822
 flask db upgrade
 ```
+
+Do not repeat `flask db stamp`: stamping records a migration as complete
+without applying it. An unstamped legacy database needs its schema inspected
+before a one-time baseline stamp is chosen.
 
 For a **brand new empty** database:
 
@@ -132,11 +137,13 @@ flask db migrate -m "what changed"
 flask db upgrade
 ```
 
-Add this to the Render start command so migrations run on every deploy:
+Keep this permanent Render **Pre-Deploy Command**:
 
 ```
-flask db upgrade && gunicorn wsgi:app
+flask db upgrade
 ```
+
+Keep the **Start Command** as `gunicorn wsgi:app`.
 
 ### 5. Verify
 
