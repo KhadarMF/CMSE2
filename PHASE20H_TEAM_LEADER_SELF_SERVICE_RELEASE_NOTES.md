@@ -43,7 +43,9 @@ Revision `b20h0000a001` adds the Team Leader fields and the daily-report unique
 constraint without deleting existing data. Revision `b20h0000a002` repairs
 legacy installations that were missing the `payment_request` and
 `payment_request_payment` tables even though their Alembic baseline had
-already been stamped. The repair is additive and preserves existing tables.
+already been stamped. Revision `b20h0000a003` makes the obsolete legacy
+`request_date`, `payment_type`, and `created_by_id` fields optional so they do
+not block new requests. Both repairs are additive and preserve existing data.
 
 Before upgrading, download a fresh backup. Then run:
 
@@ -71,6 +73,7 @@ After deployment, the log should include:
 ```text
 Running upgrade b20g0000a001 -> b20h0000a001
 Running upgrade b20h0000a001 -> b20h0000a002
+Running upgrade b20h0000a002 -> b20h0000a003
 ```
 
 ## Administrator setup
@@ -85,7 +88,8 @@ Running upgrade b20h0000a001 -> b20h0000a002
 
 ## Verification
 
-- Existing and new automated suite: 34 passed, 1 intentionally skipped.
+- Existing and new automated suite: 35 passed, 1 intentionally skipped.
 - Missing-payment-table repair regression test: passed.
-- Fresh SQLite migration through revision `b20h0000a002`: passed.
+- Legacy required-column repair regression test: passed.
+- Fresh SQLite migration through revision `b20h0000a003`: passed.
 - Unauthorized project, team, and payment-record access tests: passed.

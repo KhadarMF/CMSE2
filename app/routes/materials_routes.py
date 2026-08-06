@@ -3,7 +3,8 @@ from datetime import datetime, date
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
-from app.models import Project, MaterialItem, MaterialRequest, MaterialRequestLine, MaterialIssue, MaterialIssueLine, MaterialReturn, MaterialReturnLine, MATERIAL_DOC_STATUSES
+from app.milestone_service import mark_milestone_started
+from app.models import Project, ProjectMilestone, MaterialItem, MaterialRequest, MaterialRequestLine, MaterialIssue, MaterialIssueLine, MaterialReturn, MaterialReturnLine, MATERIAL_DOC_STATUSES
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials")
 
 def parse_date(value):
@@ -56,10 +57,12 @@ def requests_list():
 @materials_bp.route("/requests/create", methods=["GET","POST"])
 @login_required
 def create_request():
-    projects=Project.query.order_by(Project.project_name.asc()).all(); items=MaterialItem.query.filter_by(is_active=True).order_by(MaterialItem.item_name.asc()).all()
+    projects=Project.query.order_by(Project.project_name.asc()).all(); items=MaterialItem.query.filter_by(is_active=True).order_by(MaterialItem.item_name.asc()).all(); milestones=ProjectMilestone.query.order_by(ProjectMilestone.project_id, ProjectMilestone.sequence).all()
     if request.method=="POST":
-        req=MaterialRequest(ref_no=make_ref("MRF"), project_id=request.form.get("project_id"), request_date=parse_date(request.form.get("request_date")) or date.today(), purpose=request.form.get("purpose"), status=request.form.get("status") or "Submitted", requested_by_id=current_user.id, remarks=request.form.get("remarks"))
-        db.session.add(req); db.session.flush(); created=0
+        project_id=request.form.get("project_id"); milestone_id=request.form.get("milestone_id") or None
+        if milestone_id and not ProjectMilestone.query.filter_by(id=milestone_id, project_id=project_id).first(): flash("Selected milestone does not belong to this project.","danger"); return redirect(request.url)
+        req=MaterialRequest(ref_no=make_ref("MRF"), project_id=project_id, milestone_id=milestone_id, milestone_required=request.form.get("milestone_required")=="on", milestone_critical=request.form.get("milestone_critical")=="on", request_date=parse_date(request.form.get("request_date")) or date.today(), purpose=request.form.get("purpose"), status=request.form.get("status") or "Submitted", requested_by_id=current_user.id, remarks=request.form.get("remarks"))
+        db.session.add(req); db.session.flush(); mark_milestone_started(req.milestone_id); created=0
         item_ids=request.form.getlist("item_id")
         for idx,item_id in enumerate(item_ids, start=1):
             selected=MaterialItem.query.get(item_id) if item_id else None
@@ -70,7 +73,7 @@ def create_request():
             created+=1
         if created==0: db.session.rollback(); flash("No material lines entered.","danger"); return redirect(url_for("materials.create_request"))
         db.session.commit(); flash(f"Material request {req.ref_no} created.","success"); return redirect(url_for("materials.request_detail", request_id=req.id))
-    return render_template("materials/request_form.html", projects=projects, items=items, statuses=MATERIAL_DOC_STATUSES, selected_project=request.args.get("project_id", ""))
+    return render_template("materials/request_form.html", projects=projects, milestones=milestones, items=items, statuses=MATERIAL_DOC_STATUSES, selected_project=request.args.get("project_id", ""), selected_milestone=request.args.get("milestone_id", ""))
 
 @materials_bp.route("/requests/<int:request_id>")
 @login_required

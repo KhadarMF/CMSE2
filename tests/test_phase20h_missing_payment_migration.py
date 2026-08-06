@@ -39,4 +39,4 @@ def test_upgrade_repairs_missing_payment_request_tables(app):
     current_revision = db.session.execute(
         sa.text("SELECT version_num FROM alembic_version")
     ).scalar_one()
-    assert current_revision == "b20h0000a002"
+    assert current_revision == "b20i0000a001"

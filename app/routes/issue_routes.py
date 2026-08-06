@@ -2,8 +2,9 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
-from app.models import Project, ProjectIssue, User, ISSUE_STATUSES, ISSUE_SEVERITIES
+from app.models import Project, ProjectMilestone, ProjectIssue, User, ISSUE_STATUSES, ISSUE_SEVERITIES
 from app.activity import log_activity
+from app.milestone_service import mark_milestone_started
 
 issue_bp = Blueprint("issues", __name__, url_prefix="/issues")
 MANAGE_ROLES = ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor"]
@@ -39,10 +40,15 @@ def list_issues():
 def create_issue():
     projects = Project.query.order_by(Project.project_name.asc()).all()
     users = User.query.filter_by(is_active=True).order_by(User.full_name.asc()).all()
+    milestones = ProjectMilestone.query.order_by(ProjectMilestone.project_id, ProjectMilestone.sequence).all()
     selected_project_id = request.args.get("project_id", "")
     if request.method == "POST":
+        project_id=int(request.form.get("project_id")); milestone_id=request.form.get("milestone_id") or None
+        if milestone_id and not ProjectMilestone.query.filter_by(id=milestone_id, project_id=project_id).first():
+            flash("Selected milestone does not belong to this project.", "danger"); return redirect(request.url)
         issue = ProjectIssue(
-            project_id=int(request.form.get("project_id")),
+            project_id=project_id,
+            milestone_id=milestone_id,
             title=request.form.get("title"),
             description=request.form.get("description"),
             issue_type=request.form.get("issue_type", "General"),
@@ -57,11 +63,12 @@ def create_issue():
             issue.resolved_at = datetime.utcnow()
         db.session.add(issue)
         db.session.flush()
+        mark_milestone_started(issue.milestone_id)
         log_activity("Create", "Project Issue", issue.id, f"Reported issue: {issue.title}")
         db.session.commit()
         flash("Issue created successfully.", "success")
         return redirect(url_for("issues.list_issues", project_id=issue.project_id))
-    return render_template("issues/form.html", issue=None, projects=projects, users=users, statuses=ISSUE_STATUSES, severities=ISSUE_SEVERITIES, issue_types=ISSUE_TYPES, selected_project_id=selected_project_id)
+    return render_template("issues/form.html", issue=None, projects=projects, milestones=milestones, users=users, statuses=ISSUE_STATUSES, severities=ISSUE_SEVERITIES, issue_types=ISSUE_TYPES, selected_project_id=selected_project_id, selected_milestone_id=request.args.get("milestone_id", ""))
 
 @issue_bp.route("/<int:issue_id>/edit", methods=["GET", "POST"])
 @login_required
@@ -72,10 +79,16 @@ def edit_issue(issue_id):
         return redirect(url_for("issues.list_issues"))
     projects = Project.query.order_by(Project.project_name.asc()).all()
     users = User.query.filter_by(is_active=True).order_by(User.full_name.asc()).all()
+    milestones = ProjectMilestone.query.order_by(ProjectMilestone.project_id, ProjectMilestone.sequence).all()
     if request.method == "POST":
         old_status = issue.status
         if can_manage_issues(current_user) or issue.reported_by_id == current_user.id:
             issue.project_id = int(request.form.get("project_id"))
+            milestone_id=request.form.get("milestone_id") or None
+            if milestone_id and not ProjectMilestone.query.filter_by(id=milestone_id, project_id=issue.project_id).first():
+                flash("Selected milestone does not belong to this project.", "danger"); return redirect(request.url)
+            issue.milestone_id=milestone_id
+            mark_milestone_started(issue.milestone_id)
             issue.title = request.form.get("title")
             issue.description = request.form.get("description")
             issue.issue_type = request.form.get("issue_type", "General")
@@ -92,7 +105,7 @@ def edit_issue(issue_id):
         db.session.commit()
         flash("Issue updated successfully.", "success")
         return redirect(url_for("issues.list_issues", project_id=issue.project_id))
-    return render_template("issues/form.html", issue=issue, projects=projects, users=users, statuses=ISSUE_STATUSES, severities=ISSUE_SEVERITIES, issue_types=ISSUE_TYPES, selected_project_id=issue.project_id)
+    return render_template("issues/form.html", issue=issue, projects=projects, milestones=milestones, users=users, statuses=ISSUE_STATUSES, severities=ISSUE_SEVERITIES, issue_types=ISSUE_TYPES, selected_project_id=issue.project_id, selected_milestone_id=issue.milestone_id or "")
 
 @issue_bp.route("/<int:issue_id>/delete", methods=["POST"])
 @login_required

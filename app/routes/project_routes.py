@@ -3,8 +3,10 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
 from app.models import Project, PROJECT_STATUSES, Customer, ProjectType, Team
-from app.permissions import can_create_project, can_create_form
+from app.permissions import can_create_project, can_create_form, can_access_module
 from app.project_command_center import build_project_command_center
+from app.milestone_service import ensure_default_milestones, project_completion_ready
+from app.team_leader_access import assigned_projects_for_user, is_team_leader, team_leader_can_access_project
 
 project_bp = Blueprint("projects", __name__, url_prefix="/projects")
 
@@ -18,8 +20,11 @@ def parse_date(value):
 def list_projects():
     search = request.args.get("search", "").strip()
     status = request.args.get("status", "").strip()
+    active = request.args.get("active", "").strip()
 
     query = Project.query
+    if is_team_leader(current_user) and not can_access_module(current_user, "projects", "view"):
+        query = query.filter(Project.id.in_([item.id for item in assigned_projects_for_user(current_user)]))
     if search:
         like = f"%{search}%"
         query = query.filter(
@@ -29,6 +34,8 @@ def list_projects():
         )
     if status:
         query = query.filter_by(status=status)
+    elif active == "1":
+        query = query.filter(Project.status != "Completed")
 
     projects = query.order_by(Project.created_at.desc()).all()
     return render_template(
@@ -36,6 +43,7 @@ def list_projects():
         projects=projects,
         statuses=PROJECT_STATUSES,
         selected_status=status,
+        active=active,
         search=search,
     )
 
@@ -61,6 +69,8 @@ def create_project():
             created_by_id=current_user.id,
         )
         db.session.add(project)
+        db.session.flush()
+        ensure_default_milestones(project, current_user.id)
         db.session.commit()
         flash("Project created successfully.", "success")
         return redirect(url_for("projects.detail", project_id=project.id))
@@ -71,6 +81,9 @@ def create_project():
 @login_required
 def detail(project_id):
     project = Project.query.get_or_404(project_id)
+    if not can_access_module(current_user, "projects", "view") and not team_leader_can_access_project(current_user, project):
+        flash("You can only open projects assigned to a team you lead.", "danger")
+        return redirect(url_for("projects.list_projects"))
     allowed_forms = {
         "site-survey": can_create_form(current_user, "site-survey"),
         "load-assessment": can_create_form(current_user, "load-assessment"),
@@ -110,7 +123,11 @@ def edit_project(project_id):
         project.capacity = request.form.get("capacity")
         project.start_date = parse_date(request.form.get("start_date"))
         project.expected_completion_date = parse_date(request.form.get("expected_completion_date"))
-        project.status = request.form.get("status")
+        requested_status = request.form.get("status")
+        if requested_status == "Completed" and not project_completion_ready(project):
+            flash("Project completion is blocked until all configured milestones are completed or formally overridden.", "danger")
+            return redirect(url_for("projects.detail", project_id=project.id) + "#milestones")
+        project.status = requested_status
         project.assigned_team = request.form.get("assigned_team")
         project.description = request.form.get("description")
         db.session.commit()

@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 import re
 
 from app.models import PROJECT_STATUSES, SalesQuotation
+from app.milestone_service import build_project_milestone_portfolio
 
 
 APPROVED_QUOTATION_STATUSES = {"Approved by Customer", "Converted to Project"}
@@ -371,24 +372,48 @@ def _forecast(project, overall, schedule, physical, procurement, documents, risk
 def build_project_command_center(project, today=None):
     """Return a template-friendly, read-only snapshot for one project."""
     today = today or date.today()
-    milestones, milestone_progress = _milestones(project)
+    active_team_names = [
+        assignment.team.team_name
+        for assignment in project.team_assignments
+        if assignment.status == "Active" and assignment.team
+    ]
+    milestone_engine = build_project_milestone_portfolio(project)
+    if milestone_engine["configured"]:
+        milestones = milestone_engine["milestones"]
+        milestone_progress = milestone_engine["overall"]
+    else:
+        milestones, milestone_progress = _milestones(project)
     physical = _physical_progress(project, milestone_progress)
     schedule = _schedule(project, today)
     documents = _documents(project)
     procurement = _procurement(project)
     financials = _financials(project, procurement)
     risks = _risks(project, schedule, physical, procurement, documents)
-    overall = _clamp(
-        (milestone_progress * 0.25)
-        + (physical["progress"] * 0.35)
-        + (procurement["progress"] * 0.20)
-        + (documents["progress"] * 0.20)
-    )
+    if milestone_engine["configured"]:
+        for key, target in (
+            ("physical", physical),
+            ("procurement", procurement),
+            ("documents", documents),
+        ):
+            dimension = milestone_engine["dimensions"][key]
+            target["applicable"] = dimension["applicable"]
+            if dimension["progress"] is not None:
+                target["progress"] = dimension["progress"]
+        overall = milestone_engine["overall"]
+    else:
+        physical["applicable"] = procurement["applicable"] = documents["applicable"] = True
+        overall = _clamp(
+            (milestone_progress * 0.25)
+            + (physical["progress"] * 0.35)
+            + (procurement["progress"] * 0.20)
+            + (documents["progress"] * 0.20)
+        )
     forecast = _forecast(
         project, overall, schedule, physical, procurement, documents, risks, financials
     )
     return {
         "today": today,
+        "assigned_team": project.assigned_team or ", ".join(active_team_names) or None,
         "overall": overall,
         "milestone_progress": milestone_progress,
         "milestones": milestones,
@@ -400,4 +425,5 @@ def build_project_command_center(project, today=None):
         "financials": financials,
         "risks": risks,
         "forecast": forecast,
+        "milestone_engine": milestone_engine,
     }

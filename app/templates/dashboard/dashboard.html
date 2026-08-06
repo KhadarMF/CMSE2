@@ -1,79 +1,272 @@
 {% extends "base.html" %}
+{% set cc = command_center %}
+
+{% macro progress_value(value, tone="primary") -%}
+<div class="cc-progress-value">
+  <div class="d-flex justify-content-between small"><span>{{ value }}%</span></div>
+  <div class="progress" role="progressbar" aria-valuenow="{{ value }}" aria-valuemin="0" aria-valuemax="100">
+    <div class="progress-bar bg-{{ tone }}" style="width: {{ value }}%"></div>
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro kpi_card(label, value, icon, target, tone="primary", suffix="", note="View details") -%}
+<a class="cc-kpi cc-kpi-{{ tone }}" href="{{ target }}" aria-label="{{ label }}: {{ value }}{{ suffix }}. {{ note }}">
+  <div class="cc-kpi-top"><span class="cc-kpi-icon">{{ icon }}</span><span class="cc-kpi-arrow">↗</span></div>
+  <div class="cc-kpi-value">{{ value }}{{ suffix }}</div>
+  <div class="cc-kpi-label">{{ label }}</div>
+  <div class="cc-kpi-note">{{ note }}</div>
+</a>
+{%- endmacro %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mt-4 mb-3"><div><h2 class="fw-bold">Dashboard</h2><p class="text-muted mb-0">Project documents, online forms, and approvals overview</p></div></div>
-<div class="row g-3">
-<div class="col-md-2"><div class="stat-card"><span>Total Projects</span><strong>{{ total_projects }}</strong></div></div>
-<div class="col-md-2"><div class="stat-card"><span>Active Projects</span><strong>{{ active_projects }}</strong></div></div>
-<div class="col-md-2"><div class="stat-card"><span>Completed</span><strong>{{ completed_projects }}</strong></div></div>
-<div class="col-md-2"><div class="stat-card warning"><span>Pending Docs</span><strong>{{ pending_approvals }}</strong></div></div>
-<div class="col-md-2"><div class="stat-card danger"><span>Rejected Docs</span><strong>{{ rejected_documents }}</strong></div></div>
-<div class="col-md-2"><div class="stat-card"><span>Total Forms</span><strong>{{ total_online_forms }}</strong></div></div>
-</div>
-<div class="row g-3 mt-1">
-<div class="col-md-4"><div class="stat-card warning"><span>Pending Form Approvals</span><strong>{{ pending_form_approvals }}</strong></div></div>
-<div class="col-md-4"><div class="stat-card success-border"><span>Approved Forms</span><strong>{{ approved_forms }}</strong></div></div>
-<div class="col-md-4"><div class="stat-card danger"><span>Rejected Forms</span><strong>{{ rejected_forms }}</strong></div></div>
-</div>
-
-{% if can_access_module(current_user, 'whatsapp-integration', 'view') or current_user.role == "Admin" %}
-<div class="row g-3 mt-1">
-  <div class="col-md-4"><a class="text-decoration-none" href="{{ url_for('whatsapp.conversations') }}"><div class="stat-card warning"><span>WhatsApp Unread</span><strong>{{ whatsapp_unread }}</strong></div></a></div>
-  <div class="col-md-4"><a class="text-decoration-none" href="{{ url_for('whatsapp.conversations', status='Failed') }}"><div class="stat-card danger"><span>WhatsApp Failed</span><strong>{{ whatsapp_failed }}</strong></div></a></div>
-  <div class="col-md-4"><a class="text-decoration-none" href="{{ url_for('whatsapp.conversations') }}"><div class="stat-card"><span>WhatsApp Messages</span><strong>{{ whatsapp_total }}</strong></div></a></div>
-</div>
-{% endif %}
-
-<div class="row g-3 mt-1">
-{% if can_access_module(current_user, 'project-tasks', 'view') %}<div class="col-md-3"><a class="text-decoration-none" href="{{ url_for('project_tasks.list_tasks') }}"><div class="stat-card"><span>Open Tasks</span><strong>{{ open_tasks }}</strong></div></a></div>{% endif %}
-{% if can_access_module(current_user, 'project-tasks', 'view') %}<div class="col-md-3"><a class="text-decoration-none" href="{{ url_for('project_tasks.list_tasks') }}"><div class="stat-card danger"><span>Overdue Tasks</span><strong>{{ overdue_tasks }}</strong></div></a></div>{% endif %}
-{% if can_access_module(current_user, 'issues-risks', 'view') %}<div class="col-md-3"><a class="text-decoration-none" href="{{ url_for('issues.list_issues') }}"><div class="stat-card warning"><span>Open Issues</span><strong>{{ open_issues }}</strong></div></a></div>{% endif %}
-{% if can_access_module(current_user, 'issues-risks', 'view') %}<div class="col-md-3"><a class="text-decoration-none" href="{{ url_for('issues.list_issues', severity='Critical') }}"><div class="stat-card danger"><span>Critical Issues</span><strong>{{ critical_issues }}</strong></div></a></div>{% endif %}
-</div>
-
-
-
-{% if current_user.role != "Admin" %}
-<div class="card mt-4 shadow-sm border-0">
-  <div class="card-header bg-white fw-bold">My Allowed Access / Waxa La Ii Oggol Yahay</div>
-  <div class="card-body">
-    <div class="row g-2">
-      {% if can_access_module(current_user, 'forms-home', 'view') %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('forms.forms_home') }}">Online Forms</a></div>{% endif %}
-      {% if can_access_module(current_user, 'project-tasks', 'view') %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('project_tasks.list_tasks') }}">Project Tasks</a></div>{% endif %}
-      {% if can_access_module(current_user, 'service-ticket', 'view') %}<div class="col-md-3"><a class="btn btn-outline-success w-100" href="{{ url_for('support.tickets') }}">Service Tickets</a></div>{% endif %}
-      {% if can_access_module(current_user, 'customer-inquiry', 'view') %}<div class="col-md-3"><a class="btn btn-outline-info w-100" href="{{ url_for('sales.inquiries') }}">Customer Inquiries</a></div>{% endif %}
-      {% if can_access_module(current_user, 'quotation', 'view') %}<div class="col-md-3"><a class="btn btn-outline-info w-100" href="{{ url_for('sales.quotations') }}">Quotations</a></div>{% endif %}
-      {% if can_access_module(current_user, 'notifications', 'view') %}<div class="col-md-3"><a class="btn btn-outline-warning w-100" href="{{ url_for('notifications.list_notifications') }}">Notifications</a></div>{% endif %}
+<div class="cc-page mt-4">
+  <div class="cc-heading d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+    <div>
+      <div class="cc-eyebrow">Executive portfolio overview</div>
+      <h2 class="fw-bold mb-1">Dashboard Command Center</h2>
+      <p class="text-muted mb-0">{{ cc.scope_label }} · Snapshot as of {{ cc.as_of.strftime('%d %b %Y') }}</p>
     </div>
-    {% if not (can_access_module(current_user, 'forms-home', 'view') or can_access_module(current_user, 'project-tasks', 'view') or can_access_module(current_user, 'service-ticket', 'view') or can_access_module(current_user, 'customer-inquiry', 'view') or can_access_module(current_user, 'quotation', 'view') or can_access_module(current_user, 'notifications', 'view')) %}
-      <div class="alert alert-warning mb-0">No permissions assigned yet. Admin must open Admin → User Form Permissions and grant access to this user.</div>
+    <div class="d-flex gap-2 flex-wrap d-print-none">
+      <button type="button" class="btn btn-outline-dark" onclick="window.print()">🖨 Print / PDF</button>
+      <a class="btn btn-success" href="{{ cc.export_url }}">⬇ Export Excel (CSV)</a>
+    </div>
+  </div>
+
+  <form class="card border-0 shadow-sm cc-filter-card mb-4 d-print-none" method="get" action="{{ url_for('dashboard.dashboard') }}">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-xl-3 col-md-6">
+          <label class="form-label">Project</label>
+          <select class="form-select" name="project_id">
+            <option value="">All projects</option>
+            {% for project in cc.project_options %}
+              <option value="{{ project.id }}" {% if cc.filters.project_id == project.id %}selected{% endif %}>{{ project.project_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-xl-2 col-md-6">
+          <label class="form-label">Branch</label>
+          <select class="form-select" name="branch_id">
+            <option value="">All branches</option>
+            {% for branch in cc.branches %}
+              <option value="{{ branch.id }}" {% if cc.filters.branch_id == branch.id %}selected{% endif %}>{{ branch.branch_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-xl-2 col-md-6">
+          <label class="form-label">Project Status</label>
+          <select class="form-select" name="status">
+            <option value="">All statuses</option>
+            {% for status in ['New', 'Survey', 'Design', 'Approved', 'Installation', 'Testing', 'Commissioning', 'Handover', 'Completed'] %}
+              <option value="{{ status }}" {% if cc.filters.status == status %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-xl-2 col-md-6">
+          <label class="form-label">As-of Date</label>
+          <input class="form-control" type="date" name="as_of" value="{{ cc.as_of.isoformat() }}">
+        </div>
+        <div class="col-xl-3 col-md-12">
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary flex-grow-1" type="submit">Apply Filters</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('dashboard.dashboard') }}">Reset</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <section aria-labelledby="executive-kpis" class="mb-4">
+    <div class="cc-section-heading">
+      <div><h5 id="executive-kpis" class="mb-0">Executive Summary</h5><small>Every card opens the underlying detail or filtered list.</small></div>
+    </div>
+    <div class="row g-3">
+      <div class="col-6 col-xl-3">{{ kpi_card('Selected Projects', cc.kpis.total_projects, '▦', cc.links.projects, 'primary', '', 'Open project portfolio') }}</div>
+      <div class="col-6 col-xl-3">{{ kpi_card('Active Projects', cc.kpis.active_projects, '▶', cc.links.active_projects, 'info', '', 'View active projects') }}</div>
+      <div class="col-6 col-xl-3">{{ kpi_card('Overall Progress', cc.kpis.overall_progress, '◎', '#portfolio', 'success', '%', 'Portfolio weighted progress') }}</div>
+      <div class="col-6 col-xl-3">{{ kpi_card('Physical Progress', cc.kpis.physical_progress, '⚒', '#portfolio', 'success', '%', 'Approved reports and tasks') }}</div>
+      {% if cc.flags.finance %}
+      <div class="col-6 col-xl-3">{{ kpi_card('Financial Progress', cc.kpis.financial_progress, '$', '#finance', 'primary', '%', 'Paid against committed cost') }}</div>
+      {% else %}
+      <div class="col-6 col-xl-3">{{ kpi_card('Document Readiness', cc.kpis.document_progress, '▤', '#approvals', 'primary', '%', 'Forms and document status') }}</div>
+      {% endif %}
+      <div class="col-6 col-xl-3">{{ kpi_card('Delayed Projects', cc.kpis.delayed_projects, '◷', '#portfolio', 'warning', '', 'Review schedule variance') }}</div>
+      <div class="col-6 col-xl-3">{{ kpi_card('Pending Approvals', cc.kpis.pending_approvals, '✓', '#approvals', 'warning', '', 'Documents, forms and payments') }}</div>
+      <div class="col-6 col-xl-3">{{ kpi_card('Critical Issues', cc.kpis.critical_issues, '!', cc.links.critical_issues, 'danger', '', 'Open critical risks') }}</div>
+    </div>
+  </section>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-7" id="attention">
+      <div class="card border-0 shadow-sm h-100 cc-panel">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+          <div><h5 class="mb-0">Attention Required</h5><small class="text-muted">Items requiring a person, decision, or deadline.</small></div>
+          <span class="badge text-bg-danger">{{ cc.attention|length }} categories</span>
+        </div>
+        <div class="card-body pt-2">
+          {% if cc.attention %}
+            <div class="cc-attention-list">
+              {% for item in cc.attention %}
+              <a class="cc-attention-row {{ item.tone }}" href="{{ item.url }}">
+                <span class="cc-attention-count">{{ item.count }}</span>
+                <span class="cc-attention-copy"><strong>{{ item.title }}</strong><small>{{ item.detail }}</small></span>
+                <span class="cc-attention-go" aria-hidden="true">→</span>
+              </a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="cc-empty-state"><span>✓</span><strong>No urgent attention items</strong><small>Continue updating daily reports, tasks, approvals, and risks.</small></div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-5">
+      <div class="card border-0 shadow-sm h-100 cc-panel cc-ai-panel">
+        <div class="card-header bg-transparent border-0">
+          <div class="d-flex justify-content-between gap-2"><div><h5 class="mb-0">AI Executive Summary</h5><small>Data-driven portfolio insight</small></div><span class="cc-ai-badge">AI</span></div>
+        </div>
+        <div class="card-body pt-2">
+          <p class="cc-ai-summary">{{ cc.executive.summary }}</p>
+          <h6>Recommended actions</h6>
+          <ol class="cc-action-list mb-0">
+            {% for action in cc.executive.actions %}<li>{{ action }}</li>{% endfor %}
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="portfolio" class="card border-0 shadow-sm cc-panel mb-4">
+    <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div><h5 class="mb-0">Project Portfolio 360</h5><small class="text-muted">Physical, financial, schedule, procurement, documents, and risk in one table.</small></div>
+      <span class="badge text-bg-light">{{ cc.portfolio|length }} project(s)</span>
+    </div>
+    <div class="card-body pt-2">
+      {% if cc.portfolio %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle cc-portfolio-table">
+          <thead><tr><th>Project</th><th>Status</th><th>Overall</th><th>Physical</th>{% if cc.flags.finance %}<th>Financial</th>{% endif %}<th>Schedule</th><th>Procurement</th><th>Documents</th><th>Risk</th><th></th></tr></thead>
+          <tbody>
+          {% for row in cc.portfolio %}
+            <tr class="{% if row.risk == 'Critical' %}cc-row-critical{% elif row.is_delayed %}cc-row-delayed{% endif %}">
+              <td><strong>{{ row.project.project_name }}</strong><small class="d-block text-muted">{{ row.project.customer_name }} · {{ row.project.location }}</small></td>
+              <td><span class="badge text-bg-secondary">{{ row.project.status }}</span></td>
+              <td>{{ progress_value(row.overall, 'primary') }}</td>
+              <td>{{ progress_value(row.physical, 'success') }}</td>
+              {% if cc.flags.finance %}<td>{{ progress_value(row.financial_progress, 'info') }}<small class="text-muted d-block mt-1">USD {{ "{:,.0f}".format(row.outstanding) }} due</small></td>{% endif %}
+              <td>{% if row.is_delayed %}<span class="badge text-bg-danger">Delayed</span>{% elif row.days_remaining is not none %}<span class="badge text-bg-success">{{ row.days_remaining }} days left</span>{% else %}<span class="badge text-bg-light">Dates missing</span>{% endif %}</td>
+              <td>{{ progress_value(row.procurement, 'warning') }}</td>
+              <td>{{ progress_value(row.documents, 'secondary') }}</td>
+              <td>{% if row.risk == 'Critical' %}<span class="badge text-bg-danger">Critical</span>{% elif row.risk == 'High' %}<span class="badge text-bg-warning">High</span>{% elif row.risk == 'Medium' %}<span class="badge text-bg-info">Medium</span>{% else %}<span class="badge text-bg-success">Low</span>{% endif %}<small class="d-block mt-1">Health {{ row.health_score }}%</small></td>
+              <td><a class="btn btn-sm btn-outline-primary" href="{{ row.url }}">Open</a></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="cc-empty-state"><span>⌕</span><strong>No projects match these filters</strong><small>Reset the filters or choose another branch/status.</small></div>
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-4">
+      <div class="card border-0 shadow-sm h-100 cc-panel">
+        <div class="card-header bg-white border-0"><h5 class="mb-0">Portfolio by Status</h5><small class="text-muted">Current project phase distribution</small></div>
+        <div class="card-body pt-2">
+          {% for item in cc.status_distribution %}
+          <div class="cc-distribution-row"><div class="d-flex justify-content-between"><span>{{ item.status }}</span><strong>{{ item.count }}</strong></div><div class="progress"><div class="progress-bar" style="width: {{ item.percent }}%"></div></div></div>
+          {% else %}<p class="text-muted">No status data for the current filters.</p>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4" id="approvals">
+      <div class="card border-0 shadow-sm h-100 cc-panel">
+        <div class="card-header bg-white border-0"><h5 class="mb-0">Documents & Approvals</h5><small class="text-muted">Drill down to pending or rejected records</small></div>
+        <div class="card-body pt-2 cc-metric-list">
+          <a href="{{ cc.links.documents_pending }}"><span>Pending documents</span><strong>{{ cc.approvals.documents_pending }}</strong></a>
+          <a href="{{ cc.links.documents_rejected }}"><span>Rejected documents</span><strong class="text-danger">{{ cc.approvals.documents_rejected }}</strong></a>
+          <a href="{{ cc.links.forms }}"><span>Total online forms</span><strong>{{ cc.approvals.forms_total }}</strong></a>
+          <a href="{{ cc.links.forms }}"><span>Pending form approvals</span><strong class="text-warning">{{ cc.approvals.forms_pending }}</strong></a>
+          <a href="{{ cc.links.forms }}"><span>Approved forms</span><strong class="text-success">{{ cc.approvals.forms_approved }}</strong></a>
+          <a href="{{ cc.links.forms }}"><span>Rejected forms</span><strong class="text-danger">{{ cc.approvals.forms_rejected }}</strong></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4" id="operations">
+      <div class="card border-0 shadow-sm h-100 cc-panel">
+        <div class="card-header bg-white border-0"><h5 class="mb-0">Operations & Procurement</h5><small class="text-muted">Site execution and resource readiness</small></div>
+        <div class="card-body pt-2 cc-metric-list">
+          <a href="{{ cc.links.tasks }}"><span>Open tasks</span><strong>{{ cc.operations.open_tasks }}</strong></a>
+          <a href="{{ cc.links.overdue_tasks }}"><span>Overdue tasks</span><strong class="text-danger">{{ cc.operations.overdue_tasks }}</strong></a>
+          <a href="{{ cc.links.issues }}"><span>Open issues</span><strong>{{ cc.operations.open_issues }}</strong></a>
+          <a href="{{ cc.links.material_requests }}"><span>Open material requests</span><strong>{{ cc.operations.open_material_requests }}</strong></a>
+          <a href="{{ cc.links.daily_reports }}"><span>Reports received today</span><strong class="text-success">{{ cc.operations.reports_today }}</strong></a>
+          <a href="{{ cc.links.daily_reports }}"><span>Daily reports missing</span><strong class="text-warning">{{ cc.operations.missing_daily_reports }}</strong></a>
+          <div><span>Active employees / teams</span><strong>{{ cc.operations.active_employees }} / {{ cc.operations.active_teams }}</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if cc.flags.finance %}
+  <section id="finance" class="card border-0 shadow-sm cc-panel mb-4">
+    <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center"><div><h5 class="mb-0">Financial Overview</h5><small class="text-muted">Approved revenue, committed cost, paid cost, outstanding balance, and projected profit</small></div><a class="btn btn-sm btn-outline-primary d-print-none" href="{{ cc.links.payments }}">Payment Requests</a></div>
+    <div class="card-body pt-2">
+      <div class="row g-3">
+        <div class="col-6 col-lg"><div class="cc-finance-metric"><span>Revenue</span><strong>USD {{ "{:,.2f}".format(cc.finance.revenue) }}</strong></div></div>
+        <div class="col-6 col-lg"><div class="cc-finance-metric"><span>Committed Cost</span><strong>USD {{ "{:,.2f}".format(cc.finance.committed_cost) }}</strong></div></div>
+        <div class="col-6 col-lg"><div class="cc-finance-metric"><span>Paid Cost</span><strong>USD {{ "{:,.2f}".format(cc.finance.paid_cost) }}</strong></div></div>
+        <div class="col-6 col-lg"><div class="cc-finance-metric warning"><span>Outstanding</span><strong>USD {{ "{:,.2f}".format(cc.finance.outstanding) }}</strong></div></div>
+        <div class="col-6 col-lg"><div class="cc-finance-metric {% if cc.finance.profit < 0 %}danger{% else %}success{% endif %}"><span>Projected Profit</span><strong>USD {{ "{:,.2f}".format(cc.finance.profit) }}</strong><small>{% if cc.finance.margin is not none %}Margin {{ cc.finance.margin }}%{% else %}Revenue not recorded{% endif %}</small></div></div>
+      </div>
+      <div class="mt-3">{{ progress_value(cc.finance.payment_progress, 'success') }}<small class="text-muted">Paid against committed project cost</small></div>
+      <div class="row g-2 mt-2 cc-finance-links d-print-none">
+        <div class="col-md-4"><a href="{{ cc.links.pending_manager }}">Manager approvals <strong>{{ cc.approvals.pending_manager }}</strong></a></div>
+        <div class="col-md-4"><a href="{{ cc.links.pending_finance }}">Finance approvals <strong>{{ cc.approvals.pending_finance }}</strong></a></div>
+        <div class="col-md-4"><a href="{{ cc.links.payments }}">Approved / unpaid <strong>{{ cc.approvals.approved_unpaid }}</strong></a></div>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <div class="row g-4 mb-4">
+    {% if cc.flags.tasks %}
+    <div class="col-xl-7">
+      <div class="card border-0 shadow-sm cc-panel h-100">
+        <div class="card-header bg-white border-0 d-flex justify-content-between"><div><h5 class="mb-0">Upcoming / Active Tasks</h5><small class="text-muted">Nearest due dates first</small></div><a class="btn btn-sm btn-outline-secondary d-print-none" href="{{ cc.links.tasks }}">View all</a></div>
+        <div class="card-body pt-2">
+          {% if cc.upcoming_tasks %}<div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Task</th><th>Project</th><th>Status</th><th>Due</th></tr></thead><tbody>{% for task in cc.upcoming_tasks %}<tr class="{% if task.due_date and task.due_date < cc.as_of %}table-danger{% endif %}"><td><a href="{{ url_for('project_tasks.edit_task', task_id=task.id) }}">{{ task.title }}</a></td><td>{{ task.project.project_name }}</td><td>{{ task.status }}</td><td>{{ task.due_date or '-' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-muted mb-0">No active tasks for the selected portfolio.</p>{% endif %}
+        </div>
+      </div>
+    </div>
     {% endif %}
-  </div>
-</div>
-{% endif %}
 
-{% if can_access_module(current_user, 'sales-crm', 'view') or can_access_module(current_user, 'after-sales', 'view') or can_access_module(current_user, 'notifications', 'view') or can_access_module(current_user, 'production-readiness', 'view') %}
-<div class="card mt-4 shadow-sm border-0">
-  <div class="card-header bg-white fw-bold">Phase 15 Quick Access</div>
-  <div class="card-body">
-    <div class="row g-2">
-      {% if can_access_module(current_user, 'sales-crm', 'view') %}<div class="col-md-3"><a class="btn btn-outline-primary w-100" href="{{ url_for('sales.dashboard') }}">Sales CRM</a></div>{% endif %}
-      {% if can_access_module(current_user, 'after-sales', 'view') %}<div class="col-md-3"><a class="btn btn-outline-success w-100" href="{{ url_for('support.dashboard') }}">Warranty & After-Sales</a></div>{% endif %}
-      {% if can_access_module(current_user, 'notifications', 'view') %}<div class="col-md-3"><a class="btn btn-outline-warning w-100" href="{{ url_for('notifications.list_notifications') }}">Notifications Center</a></div>{% endif %}
-      {% if can_access_module(current_user, 'production-readiness', 'view') %}<div class="col-md-3"><a class="btn btn-outline-dark w-100" href="{{ url_for('production.readiness') }}">Production Readiness</a></div>{% endif %}
+    <div class="{% if cc.flags.tasks %}col-xl-5{% else %}col-12{% endif %}">
+      <div class="card border-0 shadow-sm cc-panel h-100">
+        <div class="card-header bg-white border-0"><h5 class="mb-0">Data Quality</h5><small class="text-muted">Missing data that weakens forecasts and reports</small></div>
+        <div class="card-body pt-2 cc-metric-list">
+          <div><span>Projects missing schedule dates</span><strong class="{% if cc.data_quality.projects_missing_dates %}text-warning{% endif %}">{{ cc.data_quality.projects_missing_dates }}</strong></div>
+          <div><span>Projects without approved daily report</span><strong class="{% if cc.data_quality.projects_without_reports %}text-warning{% endif %}">{{ cc.data_quality.projects_without_reports }}</strong></div>
+          {% if cc.flags.finance %}<div><span>Projects without approved revenue</span><strong class="{% if cc.data_quality.projects_without_revenue %}text-warning{% endif %}">{{ cc.data_quality.projects_without_revenue }}</strong></div>{% endif %}
+          <div><span>Projects without assigned team</span><strong class="{% if cc.data_quality.projects_without_team %}text-warning{% endif %}">{{ cc.data_quality.projects_without_team }}</strong></div>
+        </div>
+      </div>
     </div>
   </div>
+
+  {% if cc.flags.documents %}
+  <section class="card border-0 shadow-sm cc-panel mb-4">
+    <div class="card-header bg-white border-0 d-flex justify-content-between"><div><h5 class="mb-0">Recent Documents</h5><small class="text-muted">Latest uploads in the selected portfolio</small></div><a class="btn btn-sm btn-outline-secondary d-print-none" href="{{ cc.links.documents_pending }}">Open documents</a></div>
+    <div class="card-body pt-2">
+      {% if cc.recent_documents %}<div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Title</th><th>Project</th><th>Type</th><th>Status</th><th>Date</th></tr></thead><tbody>{% for doc in cc.recent_documents %}<tr><td><a href="{{ url_for('documents.detail', document_id=doc.id) }}">{{ doc.document_title }}</a></td><td>{{ doc.project.project_name }}</td><td>{{ doc.document_type }}</td><td><span class="badge text-bg-secondary">{{ doc.approval_status }}</span></td><td>{{ doc.upload_date.strftime('%Y-%m-%d') if doc.upload_date else '-' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-muted mb-0">No uploaded documents for the selected portfolio.</p>{% endif %}
+    </div>
+  </section>
+  {% endif %}
 </div>
-{% endif %}
-
-{% if can_access_module(current_user, 'project-tasks', 'view') %}
-<div class="card mt-4 shadow-sm"><div class="card-header bg-white fw-bold">Upcoming / Active Tasks</div><div class="card-body">
-{% if upcoming_tasks %}<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Task</th><th>Project</th><th>Assigned</th><th>Status</th><th>Due</th></tr></thead><tbody>{% for task in upcoming_tasks %}<tr class="{% if task.is_overdue %}table-danger{% endif %}"><td><a href="{{ url_for('project_tasks.edit_task', task_id=task.id) }}">{{ task.title }}</a></td><td>{{ task.project.project_name }}</td><td>{{ task.assigned_employee.full_name if task.assigned_employee else (task.assigned_to.full_name if task.assigned_to else '-') }}</td><td>{{ task.status }}</td><td>{{ task.due_date or '-' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-muted mb-0">No active tasks.</p>{% endif %}
-</div></div>
-{% endif %}
-
-{% if can_access_module(current_user, 'documents', 'view') %}
-<div class="card mt-4 shadow-sm"><div class="card-header bg-white fw-bold">Recent Uploaded Documents</div><div class="card-body">
-{% if recent_documents %}<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Title</th><th>Project</th><th>Type</th><th>Status</th><th>Uploaded By</th><th>Date</th></tr></thead><tbody>{% for doc in recent_documents %}<tr><td><a href="{{ url_for('documents.detail', document_id=doc.id) }}">{{ doc.document_title }}</a></td><td>{{ doc.project.project_name }}</td><td>{{ doc.document_type }}</td><td><span class="badge bg-secondary">{{ doc.approval_status }}</span></td><td>{{ doc.uploader.full_name }}</td><td>{{ doc.upload_date.strftime("%Y-%m-%d") }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-muted mb-0">No documents uploaded yet.</p>{% endif %}
-</div></div>
-{% endif %}
 {% endblock %}

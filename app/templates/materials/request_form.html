@@ -9,10 +9,13 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="card shadow-sm mb-2"><div class="card-body"><div class="row g-2">
 <div class="col-md-4"><label class="form-label">Project *</label><select class="form-select" name="project_id" required><option value="">Select project</option>{% for p in projects %}<option value="{{ p.id }}" {% if selected_project|string == p.id|string %}selected{% endif %}>{{ p.project_name }} — {{ p.customer_name }}</option>{% endfor %}</select></div>
+<div class="col-md-4"><label class="form-label">Milestone</label><select class="form-select" name="milestone_id"><option value="">Not linked</option>{% for milestone in milestones %}<option value="{{ milestone.id }}" {% if selected_milestone|string == milestone.id|string %}selected{% endif %}>{{ milestone.project.project_name }} — {{ milestone.name }}</option>{% endfor %}</select><small class="text-muted">Linked requests drive Procurement progress.</small></div>
 <div class="col-md-2"><label class="form-label">Request Date</label><input class="form-control" type="date" name="request_date"></div>
 <div class="col-md-3"><label class="form-label">Purpose</label><input class="form-control" name="purpose" placeholder="Installation / Replacement"></div>
 <div class="col-md-2"><label class="form-label">Status</label><select class="form-select" name="status">{% for s in statuses %}<option value="{{ s }}" {% if s=="Submitted" %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
 <div class="col-md-12"><label class="form-label">Remarks</label><input class="form-control" name="remarks"></div>
+<div class="col-md-3 form-check ms-2"><input class="form-check-input" type="checkbox" name="milestone_required" id="material_required" checked><label class="form-check-label" for="material_required">Required for completion</label></div>
+<div class="col-md-3 form-check ms-2"><input class="form-check-input" type="checkbox" name="milestone_critical" id="material_critical"><label class="form-check-label" for="material_critical">Critical material</label></div>
 </div></div></div>
 <div class="card shadow-sm"><div class="card-header py-2 fw-bold">Datasheet Lines — Item & Description</div><div class="card-body table-responsive">
 <table class="table table-bordered table-sm datasheet-table align-middle"><thead><tr><th style="min-width:210px">Item</th><th style="min-width:260px">Description</th><th style="width:90px">Qty</th><th style="width:80px">Unit</th><th style="width:120px">Est. Unit Cost</th><th style="min-width:170px">Remarks</th></tr></thead><tbody>

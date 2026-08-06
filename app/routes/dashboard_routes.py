@@ -1,52 +1,91 @@
-from flask import Blueprint, render_template
-from flask_login import login_required
-from app.models import (
-    Project, Document, SiteSurveyForm, LoadAssessmentForm, DailySiteReport,
-    DeliveryNoteForm, TestingForm, CommissioningForm, HandoverForm, ProjectTask, ProjectIssue, WhatsAppMessage
-)
+import csv
+import io
+
+from flask import Blueprint, make_response, render_template, request
+from flask_login import current_user, login_required
+
+from app.dashboard_command_center import build_dashboard_command_center
+
 
 dashboard_bp = Blueprint("dashboard", __name__)
-FORM_MODELS = [SiteSurveyForm, LoadAssessmentForm, DailySiteReport, DeliveryNoteForm, TestingForm, CommissioningForm, HandoverForm]
+
 
 @dashboard_bp.route("/dashboard")
 @login_required
 def dashboard():
-    total_projects = Project.query.count()
-    completed_projects = Project.query.filter_by(status="Completed").count()
-    active_projects = Project.query.filter(Project.status != "Completed").count()
-    pending_approvals = Document.query.filter(Document.approval_status.in_(["Submitted", "Under Review", "Need Correction"])).count()
-    rejected_documents = Document.query.filter_by(approval_status="Rejected").count()
-    recent_documents = Document.query.order_by(Document.upload_date.desc()).limit(8).all()
-    total_online_forms = sum(model.query.count() for model in FORM_MODELS)
-    pending_form_approvals = sum(model.query.filter(model.approval_status.in_(["Submitted", "Under Review", "Need Correction"])).count() for model in FORM_MODELS)
-    approved_forms = sum(model.query.filter_by(approval_status="Approved").count() for model in FORM_MODELS)
-    rejected_forms = sum(model.query.filter_by(approval_status="Rejected").count() for model in FORM_MODELS)
-    open_tasks = ProjectTask.query.filter(ProjectTask.status.notin_(["Completed", "Cancelled"])).count()
-    overdue_tasks = len([t for t in ProjectTask.query.filter(ProjectTask.status.notin_(["Completed", "Cancelled"])).all() if t.is_overdue])
-    open_issues = ProjectIssue.query.filter(ProjectIssue.status.notin_(["Resolved", "Closed"])).count()
-    critical_issues = ProjectIssue.query.filter(ProjectIssue.severity == "Critical", ProjectIssue.status.notin_(["Resolved", "Closed"])).count()
-    upcoming_tasks = ProjectTask.query.filter(ProjectTask.status.notin_(["Completed", "Cancelled"])).order_by(ProjectTask.due_date.asc().nullslast()).limit(8).all()
-    whatsapp_unread = WhatsAppMessage.query.filter_by(direction="Inbound", status="Received").count()
-    whatsapp_failed = WhatsAppMessage.query.filter_by(status="Failed").count()
-    whatsapp_total = WhatsAppMessage.query.count()
+    command_center = build_dashboard_command_center(current_user, request.args)
     return render_template(
         "dashboard/dashboard.html",
-        total_projects=total_projects,
-        active_projects=active_projects,
-        completed_projects=completed_projects,
-        pending_approvals=pending_approvals,
-        rejected_documents=rejected_documents,
-        recent_documents=recent_documents,
-        total_online_forms=total_online_forms,
-        pending_form_approvals=pending_form_approvals,
-        approved_forms=approved_forms,
-        rejected_forms=rejected_forms,
-        open_tasks=open_tasks,
-        overdue_tasks=overdue_tasks,
-        open_issues=open_issues,
-        critical_issues=critical_issues,
-        upcoming_tasks=upcoming_tasks,
-        whatsapp_unread=whatsapp_unread,
-        whatsapp_failed=whatsapp_failed,
-        whatsapp_total=whatsapp_total,
+        command_center=command_center,
     )
+
+
+@dashboard_bp.route("/dashboard/export.csv")
+@login_required
+def export_csv():
+    """Export the filtered portfolio in an Excel-friendly UTF-8 CSV."""
+    command_center = build_dashboard_command_center(current_user, request.args)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Dashboard Command Center V5"])
+    writer.writerow(["As of", command_center["as_of"].isoformat()])
+    writer.writerow(["Scope", command_center["scope_label"]])
+    writer.writerow([])
+
+    header = [
+        "Project",
+        "Customer",
+        "Status",
+        "Overall %",
+        "Physical %",
+        "Procurement %",
+        "Documents %",
+        "Risk",
+        "Delayed",
+        "Open Issues",
+        "Overdue Tasks",
+        "Last Approved Daily Report",
+    ]
+    if command_center["flags"]["finance"]:
+        header[5:5] = [
+            "Financial %",
+            "Revenue USD",
+            "Committed Cost USD",
+            "Paid Cost USD",
+            "Outstanding USD",
+            "Profit USD",
+        ]
+    writer.writerow(header)
+
+    for row in command_center["portfolio"]:
+        values = [
+            row["project"].project_name,
+            row["project"].customer_name,
+            row["project"].status,
+            row["overall"],
+            row["physical"],
+            row["procurement"],
+            row["documents"],
+            row["risk"],
+            "Yes" if row["is_delayed"] else "No",
+            row["open_issues"],
+            row["overdue_tasks"],
+            row["last_report_date"].isoformat() if row["last_report_date"] else "",
+        ]
+        if command_center["flags"]["finance"]:
+            values[5:5] = [
+                row["financial_progress"],
+                f"{row['revenue']:.2f}",
+                f"{row['committed_cost']:.2f}",
+                f"{row['paid_cost']:.2f}",
+                f"{row['outstanding']:.2f}",
+                f"{row['profit']:.2f}",
+            ]
+        writer.writerow(values)
+
+    response = make_response("\ufeff" + output.getvalue())
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = (
+        f"attachment; filename=dashboard_command_center_{command_center['as_of'].isoformat()}.csv"
+    )
+    return response

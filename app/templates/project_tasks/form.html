@@ -14,6 +14,27 @@
   </div>
 
   <div class="col-md-6">
+    <label class="form-label">Milestone</label>
+    <select name="milestone_id" class="form-select" {% if team_leader_mode and task %}disabled{% endif %}>
+      <option value="">Not linked to a milestone</option>
+      {% for milestone in milestones %}
+      <option value="{{ milestone.id }}" {% if selected_milestone_id|string == milestone.id|string %}selected{% endif %}>{{ milestone.project.project_name }} — {{ milestone.sequence }}. {{ milestone.name }}</option>
+      {% endfor %}
+    </select>
+    {% if team_leader_mode and task %}<input type="hidden" name="milestone_id" value="{{ task.milestone_id or '' }}">{% endif %}
+    <small class="text-muted">Only linked tasks contribute to milestone physical progress.</small>
+  </div>
+
+  <div class="col-md-3 form-check ms-2 mt-4">
+    <input class="form-check-input" type="checkbox" name="milestone_required" id="milestone_required" {% if not task or task.milestone_required %}checked{% endif %} {% if team_leader_mode and task %}disabled{% endif %}>
+    <label class="form-check-label" for="milestone_required">Required for completion</label>
+  </div>
+  <div class="col-md-3 form-check ms-2 mt-4">
+    <input class="form-check-input" type="checkbox" name="milestone_critical" id="milestone_critical" {% if task and task.milestone_critical %}checked{% endif %} {% if team_leader_mode and task %}disabled{% endif %}>
+    <label class="form-check-label" for="milestone_critical">Critical task</label>
+  </div>
+
+  <div class="col-md-6">
     <label class="form-label">Assigned Employee</label>
     <select name="assigned_employee_id" class="form-select">
       <option value="">Unassigned</option>

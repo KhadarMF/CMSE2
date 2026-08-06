@@ -27,6 +27,17 @@ payment requests. Manager and Finance approvals remain separate. Deploy this
 phase with `flask db upgrade`; do not run `init_db.py` on an existing database.
 See `PHASE20H_TEAM_LEADER_SELF_SERVICE_RELEASE_NOTES.md`.
 
+## Phase 20I — Evidence-Based Milestone Engine
+
+Every project now receives six weighted delivery milestones: Survey, Design,
+Procurement, Installation, Testing/Commissioning, and Handover. Physical,
+procurement, and document progress are calculated from linked operational
+records. A 0% dimension is displayed as N/A and is excluded from the score.
+Team Leaders can submit a ready milestone, but a different manager must approve
+it. The system blocks completion when required evidence or critical work is
+missing; emergency completion needs an audited reason. See
+`PHASE20I_MILESTONE_ENGINE_RELEASE_NOTES.md`.
+
 ## Earlier Phase 8 notes
 
 Phase 8 focuses on preparing the system for real deployment and multi-user use.

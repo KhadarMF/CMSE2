@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% set components = snapshot.components %}
+{% block content %}
+<section class="mile-hero mt-3">
+  <div>
+    <span class="mile-eyebrow">Project Milestone Gate</span>
+    <h1>{{ milestone.sequence }}. {{ milestone.name }}</h1>
+    <p><a href="{{ url_for('projects.detail', project_id=project.id) }}#milestones">{{ project.project_name }}</a> / {{ milestone.code }}</p>
+  </div>
+  <div class="mile-hero-score"><strong>{{ snapshot.progress }}%</strong><span>{{ milestone.status }}</span></div>
+  <div class="mile-hero-actions no-print">
+    <a class="btn btn-light" href="{{ url_for('projects.detail', project_id=project.id) }}#milestones">Back to Command Center</a>
+    {% if can_submit and milestone.status not in ['Completed','Completed with Exception'] %}
+    <form method="post" action="{{ url_for('milestones.submit', milestone_id=milestone.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-warning">Run gates & submit</button></form>
+    {% endif %}
+    {% if can_approve and milestone.status == 'Ready for Approval' %}
+    <form method="post" action="{{ url_for('milestones.approve', milestone_id=milestone.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-success">Manager approve</button></form>
+    {% endif %}
+  </div>
+</section>
+
+{% if snapshot.exception %}
+<div class="alert alert-warning mt-3"><strong>Completed with Exception.</strong> {{ milestone.override_reason }} — {{ milestone.override_by.full_name if milestone.override_by else 'Legacy migration' }}{% if milestone.override_at %}, {{ milestone.override_at.strftime('%d %b %Y %H:%M') }}{% endif %}</div>
+{% endif %}
+
+<section class="mile-score-grid mt-3">
+  {% for key in ['physical','procurement','documents'] %}
+  {% set item = components[key] %}
+  <article class="mile-score-card">
+    <div><span>{{ item.name }}</span><small>{{ item.weight }}% of milestone</small></div>
+    <strong>{{ item.progress|string + '%' if item.applicable else 'N/A' }}</strong>
+    {% if item.applicable %}<div class="pcc-progress"><span style="width:{{ item.progress }}%"></span></div>{% endif %}
+    <p>{{ item.source }}</p>
+  </article>
+  {% endfor %}
+  <article class="mile-score-card total">
+    <div><span>Calculated gate score</span><small>{{ milestone.project_weight }}% of project</small></div>
+    <strong>{{ snapshot.raw_progress }}%</strong>
+    <div class="pcc-progress"><span style="width:{{ snapshot.raw_progress }}%"></span></div>
+    <p>Only applicable dimensions are included.</p>
+  </article>
+</section>
+
+<section class="mile-layout mt-3">
+  <article class="pcc-panel">
+    <div class="pcc-panel-head"><div><h2>Automatic completion gates</h2><p>The system rechecks these before submit and approval.</p></div><span class="pcc-head-metric {{ 'mile-ready' if snapshot.ready else 'mile-blocked' }}">{{ 'Ready' if snapshot.ready else snapshot.blockers|length|string + ' blocked' }}</span></div>
+    <div class="mile-gates">
+      {% for gate in snapshot.gates %}
+      <div class="mile-gate {{ 'passed' if gate.passed else 'failed' }}"><span>{{ '✓' if gate.passed else '!' }}</span><div><strong>{{ gate.label }}</strong><small>{{ gate.detail }}</small></div></div>
+      {% endfor %}
+    </div>
+  </article>
+
+  <aside class="pcc-panel">
+    <div class="pcc-panel-head"><div><h2>Workflow & ownership</h2><p>Submission and approval remain separate.</p></div></div>
+    <dl class="mile-facts">
+      <div><dt>Status</dt><dd>{{ milestone.status }}</dd></div>
+      <div><dt>Responsible team</dt><dd>{{ milestone.responsible_team.team_name if milestone.responsible_team else 'Not assigned' }}</dd></div>
+      <div><dt>Responsible manager</dt><dd>{{ milestone.responsible_user.full_name if milestone.responsible_user else 'Not assigned' }}</dd></div>
+      <div><dt>Planned dates</dt><dd>{{ milestone.planned_start or '—' }} to {{ milestone.planned_end or '—' }}</dd></div>
+      <div><dt>Submitted by</dt><dd>{{ milestone.submitted_by.full_name if milestone.submitted_by else 'Not submitted' }}</dd></div>
+      <div><dt>Approved by</dt><dd>{{ milestone.approved_by.full_name if milestone.approved_by else 'Not approved' }}</dd></div>
+    </dl>
+    {% if can_override and milestone.status not in ['Completed','Completed with Exception'] %}
+    <details class="mile-exception no-print"><summary>Emergency override</summary><form method="post" action="{{ url_for('milestones.override', milestone_id=milestone.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Mandatory reason</label><textarea class="form-control" name="reason" rows="3" minlength="15" required></textarea><button class="btn btn-outline-danger btn-sm mt-2" onclick="return confirm('Complete this milestone with an audited exception?')">Complete with Exception</button></form></details>
+    {% endif %}
+    {% if can_override and milestone.status in ['Completed','Completed with Exception'] %}
+    <details class="mile-exception no-print"><summary>Reopen milestone</summary><form method="post" action="{{ url_for('milestones.reopen', milestone_id=milestone.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Mandatory reason</label><textarea class="form-control" name="reason" rows="2" minlength="10" required></textarea><button class="btn btn-outline-warning btn-sm mt-2">Reopen</button></form></details>
+    {% endif %}
+  </aside>
+</section>
+
+<section class="pcc-panel mt-3">
+  <div class="pcc-panel-head"><div><h2>Required documents & forms</h2><p>Requirements resolve automatically from approved project records.</p></div><span class="pcc-head-metric">{{ snapshot.requirements|selectattr('approved')|list|length }}/{{ snapshot.requirements|length }} approved</span></div>
+  <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Requirement</th><th>Source</th><th>Status</th><th>Gate</th>{% if can_configure %}<th></th>{% endif %}</tr></thead><tbody>
+    {% for row in snapshot.requirements %}<tr><td><strong>{{ row.requirement.title }}</strong><small class="d-block text-muted">{{ 'Critical' if row.requirement.is_critical else ('Required' if row.requirement.is_required else 'Optional') }}</small></td><td>{{ row.source }}</td><td><span class="pcc-status pcc-status-{{ row.status|lower|replace(' ', '-') }}">{{ row.status }}</span></td><td>{{ '✓ Approved' if row.approved else 'Pending' }}</td>{% if can_configure %}<td><form method="post" action="{{ url_for('milestones.delete_requirement', milestone_id=milestone.id, requirement_id=row.requirement.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove requirement?')">Remove</button></form></td>{% endif %}</tr>{% else %}<tr><td colspan="5" class="text-center text-muted py-4">No requirements configured.</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if can_configure %}
+  <details class="mile-config no-print"><summary>Add document/form requirement</summary><form method="post" action="{{ url_for('milestones.add_requirement', milestone_id=milestone.id) }}" class="row g-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="col-md-4"><label>Requirement title</label><input class="form-control" name="title" required></div><div class="col-md-3"><label>Online form source</label><select class="form-select" name="form_key">{% for value,label in form_requirement_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div><div class="col-md-3"><label>Uploaded document type</label><select class="form-select" name="document_type"><option value="">Any explicitly selected document</option>{% for dtype in document_types %}<option value="{{ dtype }}">{{ dtype }}</option>{% endfor %}</select></div><div class="col-md-2"><label>Exact document</label><select class="form-select" name="document_id"><option value="">Auto resolve</option>{% for doc in all_documents %}<option value="{{ doc.id }}">{{ doc.document_title }}</option>{% endfor %}</select></div><div class="col-md-3 form-check ms-2"><input class="form-check-input" type="checkbox" name="is_required" id="req_required" checked><label class="form-check-label" for="req_required">Required</label></div><div class="col-md-3 form-check ms-2"><input class="form-check-input" type="checkbox" name="is_critical" id="req_critical"><label class="form-check-label" for="req_critical">Critical</label></div><div class="col-md-12"><label>Notes</label><input class="form-control" name="notes"></div><div class="col-12"><button class="btn btn-primary btn-sm">Add requirement</button></div></form></details>
+  {% endif %}
+</section>
+
+{% if can_configure %}
+<section class="pcc-panel mt-3 no-print">
+  <div class="pcc-panel-head"><div><h2>Link operational records</h2><p>Only linked records count toward this milestone.</p></div></div>
+  <form method="post" action="{{ url_for('milestones.link_records', milestone_id=milestone.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="mile-record-grid">
+    <div><h3>Tasks</h3>{% for item in all_tasks %}<label class="mile-record"><input type="checkbox" name="task_ids" value="{{ item.id }}" {% if item.milestone_id==milestone.id %}checked{% endif %}><span><strong>{{ item.title }}</strong><small>{{ item.status }} / {{ item.progress_percent }}%{% if item.milestone and item.milestone_id!=milestone.id %} / {{ item.milestone.name }}{% endif %}</small></span><em><input type="checkbox" name="task_required_{{ item.id }}" {% if item.milestone_id==milestone.id and item.milestone_required %}checked{% endif %}> Req <input type="checkbox" name="task_critical_{{ item.id }}" {% if item.milestone_id==milestone.id and item.milestone_critical %}checked{% endif %}> Critical</em></label>{% else %}<p class="text-muted">No tasks.</p>{% endfor %}</div>
+    <div><h3>Material requests</h3>{% for item in all_materials %}<label class="mile-record"><input type="checkbox" name="material_ids" value="{{ item.id }}" {% if item.milestone_id==milestone.id %}checked{% endif %}><span><strong>{{ item.ref_no }}</strong><small>{{ item.status }} / {{ item.purpose or 'No purpose' }}{% if item.milestone and item.milestone_id!=milestone.id %} / {{ item.milestone.name }}{% endif %}</small></span><em><input type="checkbox" name="material_required_{{ item.id }}" {% if item.milestone_id==milestone.id and item.milestone_required %}checked{% endif %}> Req <input type="checkbox" name="material_critical_{{ item.id }}" {% if item.milestone_id==milestone.id and item.milestone_critical %}checked{% endif %}> Critical</em></label>{% else %}<p class="text-muted">No requests.</p>{% endfor %}</div>
+    <div><h3>Daily reports</h3>{% for item in all_reports %}<label class="mile-record"><input type="checkbox" name="report_ids" value="{{ item.id }}" {% if item.milestone_id==milestone.id %}checked{% endif %}><span><strong>#{{ item.id }} — {{ item.report_date or 'No date' }}</strong><small>{{ item.approval_status }} / {{ item.progress_percentage or 0 }}%</small></span></label>{% else %}<p class="text-muted">No reports.</p>{% endfor %}</div>
+    <div><h3>Documents</h3>{% for item in all_documents %}<label class="mile-record"><input type="checkbox" name="document_ids" value="{{ item.id }}" {% if item.milestone_id==milestone.id %}checked{% endif %}><span><strong>{{ item.document_title }}</strong><small>{{ item.document_type }} / {{ item.approval_status }}</small></span></label>{% else %}<p class="text-muted">No documents.</p>{% endfor %}</div>
+    <div><h3>Issues / risks</h3>{% for item in all_issues %}<label class="mile-record"><input type="checkbox" name="issue_ids" value="{{ item.id }}" {% if item.milestone_id==milestone.id %}checked{% endif %}><span><strong>{{ item.title }}</strong><small>{{ item.severity }} / {{ item.status }}</small></span></label>{% else %}<p class="text-muted">No issues.</p>{% endfor %}</div>
+  </div><button class="btn btn-primary mt-3">Save linked records</button></form>
+</section>
+
+<section class="pcc-panel mt-3 no-print">
+  <div class="pcc-panel-head"><div><h2>Milestone configuration</h2><p>0% marks a dimension N/A; applicable dimensions must total 100%.</p></div></div>
+  <details class="mile-config" open><summary>Edit weights, dates & responsibility</summary><form method="post" action="{{ url_for('milestones.edit', milestone_id=milestone.id) }}" class="row g-3"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="col-md-5"><label>Name</label><input class="form-control" name="name" value="{{ milestone.name }}" required></div><div class="col-md-2"><label>Sequence</label><input class="form-control" type="number" min="1" name="sequence" value="{{ milestone.sequence }}"></div><div class="col-md-2"><label>Project weight %</label><input class="form-control" type="number" min="0" max="100" name="project_weight" value="{{ milestone.project_weight }}"></div><div class="col-md-12"><label>Description</label><textarea class="form-control" name="description" rows="2">{{ milestone.description or '' }}</textarea></div><div class="col-md-2"><label>Physical %</label><input class="form-control" type="number" min="0" max="100" name="physical_weight" value="{{ milestone.physical_weight }}"></div><div class="col-md-2"><label>Procurement %</label><input class="form-control" type="number" min="0" max="100" name="procurement_weight" value="{{ milestone.procurement_weight }}"></div><div class="col-md-2"><label>Documents %</label><input class="form-control" type="number" min="0" max="100" name="document_weight" value="{{ milestone.document_weight }}"></div><div class="col-md-3"><label>Planned start</label><input class="form-control" type="date" name="planned_start" value="{{ milestone.planned_start or '' }}"></div><div class="col-md-3"><label>Planned end</label><input class="form-control" type="date" name="planned_end" value="{{ milestone.planned_end or '' }}"></div><div class="col-md-4"><label>Responsible team</label><select class="form-select" name="responsible_team_id"><option value="">Not assigned</option>{% for team in teams %}<option value="{{ team.id }}" {% if milestone.responsible_team_id==team.id %}selected{% endif %}>{{ team.team_name }}</option>{% endfor %}</select></div><div class="col-md-4"><label>Responsible manager/user</label><select class="form-select" name="responsible_user_id"><option value="">Not assigned</option>{% for user in users %}<option value="{{ user.id }}" {% if milestone.responsible_user_id==user.id %}selected{% endif %}>{{ user.full_name }} — {{ user.role }}</option>{% endfor %}</select></div><div class="col-md-3 form-check ms-2 mt-4"><input class="form-check-input" type="checkbox" name="requires_daily_report" id="requires_daily" {% if milestone.requires_daily_report %}checked{% endif %}><label class="form-check-label" for="requires_daily">Approved daily report required</label></div><div class="col-12"><button class="btn btn-primary">Save configuration</button></div></form></details>
+</section>
+{% endif %}
+
+<section class="pcc-panel mt-3 mb-4">
+  <div class="pcc-panel-head"><div><h2>Audit history</h2><p>Every submit, approval, exception, and reopen is retained.</p></div></div>
+  <div class="mile-audit">{% for audit in milestone.audit_logs|reverse %}<div><span>{{ audit.created_at.strftime('%d %b %Y %H:%M') if audit.created_at else '—' }}</span><strong>{{ audit.action }}</strong><p>{{ audit.from_status or '—' }} → {{ audit.to_status or '—' }} / {{ audit.user.full_name }}{% if audit.notes %}<br>{{ audit.notes }}{% endif %}</p></div>{% else %}<p class="text-muted p-3">No workflow actions yet.</p>{% endfor %}</div>
+</section>
+{% endblock %}

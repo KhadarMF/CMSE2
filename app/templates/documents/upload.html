@@ -6,6 +6,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="row g-3">
 <div class="col-md-6"><label class="form-label">Project</label><select class="form-select" name="project_id" required><option value="">Select Project</option>{% for project in projects %}<option value="{{ project.id }}" {% if selected_project|string == project.id|string %}selected{% endif %}>{{ project.project_name }} — {{ project.customer_name }}</option>{% endfor %}</select></div>
+<div class="col-md-6"><label class="form-label">Milestone</label><select class="form-select" name="milestone_id"><option value="">Not linked to a milestone</option>{% for milestone in milestones %}<option value="{{ milestone.id }}" {% if selected_milestone|string == milestone.id|string %}selected{% endif %}>{{ milestone.project.project_name }} — {{ milestone.name }}</option>{% endfor %}</select></div>
 <div class="col-md-6"><label class="form-label">Document Title</label><input class="form-control" name="document_title" required></div>
 <div class="col-md-6"><label class="form-label">Document Type</label><select class="form-select" name="document_type" required>{% for dtype in document_types %}<option value="{{ dtype }}">{{ dtype }}</option>{% endfor %}</select></div>
 <div class="col-md-6"><label class="form-label">Approval Status</label><select class="form-select" name="approval_status"><option value="Draft">Draft</option><option value="Submitted">Submitted</option></select></div>

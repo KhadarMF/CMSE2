@@ -20,6 +20,7 @@
 
     {% if daily_report_mode %}
     <div class="col-md-6"><label class="form-label">Team</label><select class="form-select" name="team_id" required><option value="">Select Team</option>{% for team in daily_teams %}<option value="{{ team.id }}" {% if selected_team|string == team.id|string %}selected{% endif %}>{{ team.team_name }}</option>{% endfor %}</select></div>
+    <div class="col-md-6"><label class="form-label">Milestone</label><select class="form-select" name="milestone_id"><option value="">Not linked</option>{% for milestone in milestones %}<option value="{{ milestone.id }}" {% if selected_milestone|string == milestone.id|string %}selected{% endif %}>{{ milestone.project.project_name }} — {{ milestone.name }}</option>{% endfor %}</select><small class="text-muted">Approved linked reports become physical completion evidence.</small></div>
     {% endif %}
 
     {% if mode == "create" %}<div class="col-md-6"><label class="form-label">Initial Status</label><select class="form-select" name="approval_status"><option value="Draft">Draft</option><option value="Submitted">Submit for Approval</option></select></div>{% else %}<div class="col-md-6"><label class="form-label">Current Status</label><input class="form-control" value="{{ approval_status }}" readonly></div>{% endif %}

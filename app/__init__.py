@@ -120,6 +120,7 @@ def create_app():
     from app.routes.whatsapp_routes import whatsapp_bp
     from app.routes.payment_routes import payments_bp
     from app.routes.accounting_routes import accounting_bp
+    from app.routes.milestone_routes import milestone_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -145,6 +146,7 @@ def create_app():
     app.register_blueprint(whatsapp_bp)
     app.register_blueprint(payments_bp)
     app.register_blueprint(accounting_bp)
+    app.register_blueprint(milestone_bp)
 
     # Phase 20D: global CSRF protection. Must run after the blueprints are
     # registered because it exempts the WhatsApp webhook by function object.

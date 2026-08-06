@@ -29,6 +29,11 @@ FORM_APPROVAL_STATUSES = [
     "Draft", "Submitted", "Under Review", "Approved", "Rejected", "Need Correction",
 ]
 
+MILESTONE_STATUSES = [
+    "Not Started", "In Progress", "Blocked", "Ready for Approval",
+    "Completed", "Completed with Exception",
+]
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(150), nullable=False)
@@ -92,8 +97,12 @@ class Document(db.Model):
     manager_comments = db.Column(db.Text, nullable=True)
     reviewed_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     reviewed_at = db.Column(db.DateTime, nullable=True)
+    milestone_id = db.Column(db.Integer, db.ForeignKey("project_milestone.id"), nullable=True)
 
     reviewer = db.relationship("User", foreign_keys=[reviewed_by_id])
+    milestone = db.relationship(
+        "ProjectMilestone", backref=db.backref("documents", lazy=True), foreign_keys=[milestone_id]
+    )
 
 class SiteSurveyForm(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -168,6 +177,7 @@ class DailySiteReport(db.Model):
     reviewer = db.relationship("User", foreign_keys=[reviewed_by_id])
     report_date = db.Column(db.Date)
     team_id = db.Column(db.Integer, db.ForeignKey("team.id"), nullable=True)
+    milestone_id = db.Column(db.Integer, db.ForeignKey("project_milestone.id"), nullable=True)
     site_location = db.Column(db.String(200), nullable=True)
     weather = db.Column(db.String(100), nullable=True)
     site_supervisor = db.Column(db.String(150))
@@ -191,6 +201,9 @@ class DailySiteReport(db.Model):
     remarks = db.Column(db.Text)
     creator = db.relationship("User", foreign_keys=[created_by_id])
     team = db.relationship("Team", foreign_keys=[team_id])
+    milestone = db.relationship(
+        "ProjectMilestone", backref=db.backref("daily_reports", lazy=True), foreign_keys=[milestone_id]
+    )
 
     __table_args__ = (
         db.UniqueConstraint(
@@ -367,9 +380,94 @@ TASK_PRIORITIES = ["Low", "Normal", "High", "Urgent"]
 ISSUE_STATUSES = ["Open", "In Progress", "Resolved", "Closed"]
 ISSUE_SEVERITIES = ["Low", "Medium", "High", "Critical"]
 
+
+class ProjectMilestone(db.Model):
+    """A weighted project gate backed by existing operational records."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    code = db.Column(db.String(80), nullable=False)
+    name = db.Column(db.String(180), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    sequence = db.Column(db.Integer, nullable=False, default=1)
+    project_weight = db.Column(db.Integer, nullable=False, default=0)
+    physical_weight = db.Column(db.Integer, nullable=False, default=0)
+    procurement_weight = db.Column(db.Integer, nullable=False, default=0)
+    document_weight = db.Column(db.Integer, nullable=False, default=0)
+    planned_start = db.Column(db.Date, nullable=True)
+    planned_end = db.Column(db.Date, nullable=True)
+    responsible_team_id = db.Column(db.Integer, db.ForeignKey("team.id"), nullable=True)
+    responsible_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    requires_daily_report = db.Column(db.Boolean, nullable=False, default=False)
+    status = db.Column(db.String(80), nullable=False, default="Not Started")
+    submitted_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    submitted_at = db.Column(db.DateTime, nullable=True)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    override_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    override_at = db.Column(db.DateTime, nullable=True)
+    override_reason = db.Column(db.Text, nullable=True)
+    gate_snapshot = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = db.relationship(
+        "Project", backref=db.backref("milestones", lazy=True, cascade="all, delete-orphan")
+    )
+    responsible_team = db.relationship("Team", foreign_keys=[responsible_team_id])
+    responsible_user = db.relationship("User", foreign_keys=[responsible_user_id])
+    submitted_by = db.relationship("User", foreign_keys=[submitted_by_id])
+    approved_by = db.relationship("User", foreign_keys=[approved_by_id])
+    override_by = db.relationship("User", foreign_keys=[override_by_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "code", name="uq_project_milestone_project_code"),
+    )
+
+
+class MilestoneDocumentRequirement(db.Model):
+    """Required evidence slot resolved from a form or uploaded document."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    milestone_id = db.Column(db.Integer, db.ForeignKey("project_milestone.id"), nullable=False)
+    title = db.Column(db.String(180), nullable=False)
+    form_key = db.Column(db.String(80), nullable=True)
+    form_record_id = db.Column(db.Integer, nullable=True)
+    document_type = db.Column(db.String(120), nullable=True)
+    document_id = db.Column(db.Integer, db.ForeignKey("document.id"), nullable=True)
+    is_required = db.Column(db.Boolean, nullable=False, default=True)
+    is_critical = db.Column(db.Boolean, nullable=False, default=False)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    milestone = db.relationship(
+        "ProjectMilestone",
+        backref=db.backref("document_requirements", lazy=True, cascade="all, delete-orphan"),
+    )
+    document = db.relationship("Document", foreign_keys=[document_id])
+
+
+class MilestoneAuditLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    milestone_id = db.Column(db.Integer, db.ForeignKey("project_milestone.id"), nullable=False)
+    action = db.Column(db.String(80), nullable=False)
+    from_status = db.Column(db.String(80), nullable=True)
+    to_status = db.Column(db.String(80), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    milestone = db.relationship(
+        "ProjectMilestone", backref=db.backref("audit_logs", lazy=True, cascade="all, delete-orphan")
+    )
+    user = db.relationship("User", foreign_keys=[user_id])
+
 class ProjectTask(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    milestone_id = db.Column(db.Integer, db.ForeignKey("project_milestone.id"), nullable=True)
+    milestone_required = db.Column(db.Boolean, nullable=False, default=True)
+    milestone_critical = db.Column(db.Boolean, nullable=False, default=False)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     # Legacy field kept for backward compatibility with older tasks.
@@ -393,6 +491,9 @@ class ProjectTask(db.Model):
     assigned_employee = db.relationship("Employee", foreign_keys=[assigned_employee_id])
     supervisor_user = db.relationship("User", foreign_keys=[supervisor_user_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
+    milestone = db.relationship(
+        "ProjectMilestone", backref=db.backref("tasks", lazy=True), foreign_keys=[milestone_id]
+    )
 
     @property
     def is_overdue(self):
@@ -403,6 +504,7 @@ class ProjectTask(db.Model):
 class ProjectIssue(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    milestone_id = db.Column(db.Integer, db.ForeignKey("project_milestone.id"), nullable=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     issue_type = db.Column(db.String(120), default="General")
@@ -418,6 +520,9 @@ class ProjectIssue(db.Model):
     project = db.relationship("Project", backref=db.backref("issues", lazy=True, cascade="all, delete-orphan"))
     responsible_user = db.relationship("User", foreign_keys=[responsible_user_id])
     reported_by = db.relationship("User", foreign_keys=[reported_by_id])
+    milestone = db.relationship(
+        "ProjectMilestone", backref=db.backref("issues", lazy=True), foreign_keys=[milestone_id]
+    )
 
     @property
     def is_overdue(self):
@@ -703,6 +808,9 @@ class MaterialRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     ref_no = db.Column(db.String(120), unique=True, nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    milestone_id = db.Column(db.Integer, db.ForeignKey("project_milestone.id"), nullable=True)
+    milestone_required = db.Column(db.Boolean, nullable=False, default=True)
+    milestone_critical = db.Column(db.Boolean, nullable=False, default=False)
     request_date = db.Column(db.Date, nullable=True)
     purpose = db.Column(db.String(250), nullable=True)
     status = db.Column(db.String(80), default="Draft")
@@ -714,6 +822,9 @@ class MaterialRequest(db.Model):
     project = db.relationship("Project", backref=db.backref("material_requests", lazy=True, cascade="all, delete-orphan"))
     requested_by = db.relationship("User", foreign_keys=[requested_by_id])
     approved_by = db.relationship("User", foreign_keys=[approved_by_id])
+    milestone = db.relationship(
+        "ProjectMilestone", backref=db.backref("material_requests", lazy=True), foreign_keys=[milestone_id]
+    )
     @property
     def total_estimated_cost(self):
         return sum(line.estimated_cost for line in self.lines)
@@ -1028,6 +1139,7 @@ FORM_PERMISSION_KEYS = [
     ("dashboard", "Dashboard", "Core"),
     ("projects", "Projects", "Project Management"),
     ("project-tasks", "Project Tasks", "Project Management"),
+    ("project-milestones", "Project Milestones", "Project Management"),
     ("issues-risks", "Issues / Risks", "Project Management"),
     ("documents", "Documents", "Project Management"),
     ("project-workforce", "Project Workforce", "Project Management"),

@@ -17,6 +17,7 @@ FORM_PERMISSION_MAP = {
     "load-assessment": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Sales Officer"],
     "projects": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor", "Sales Officer"],
     "project-tasks": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor"],
+    "project-milestones": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor"],
     "issues-risks": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor"],
     "materials": ["Admin", "Management", "Operation Manager", "Warehouse Officer"],
     "sales-crm": ["Admin", "Management", "Operation Manager", "Sales Officer"],

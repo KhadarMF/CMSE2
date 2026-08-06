@@ -39,6 +39,17 @@ ENDPOINT_KEYS = {
     "projects.detail": "projects",
     "projects.create_project": "projects",
     "projects.edit_project": "projects",
+    # Evidence-based project milestones
+    "milestones.initialize_project": "project-milestones",
+    "milestones.detail": "project-milestones",
+    "milestones.edit": "project-milestones",
+    "milestones.link_records": "project-milestones",
+    "milestones.add_requirement": "project-milestones",
+    "milestones.delete_requirement": "project-milestones",
+    "milestones.submit": "project-milestones",
+    "milestones.approve": "project-milestones",
+    "milestones.override": "project-milestones",
+    "milestones.reopen": "project-milestones",
     # Project Tasks
     "project_tasks.list_tasks": "project-tasks",
     "project_tasks.create_task": "project-tasks",
@@ -194,7 +205,7 @@ ENDPOINT_KEYS = {
 }
 
 BLUEPRINT_FALLBACK_KEYS = {
-    "projects": "projects", "project_tasks": "project-tasks", "tasks": "project-tasks",
+    "projects": "projects", "milestones": "project-milestones", "project_tasks": "project-tasks", "tasks": "project-tasks",
     "issues": "issues-risks", "documents": "documents", "materials": "materials",
     "sales": "sales-crm", "support": "after-sales", "notifications": "notifications",
     "production": "production-readiness", "ai": "ai-assistant", "reports": "reports",
@@ -207,10 +218,15 @@ ACTION_WORDS = {
     "edit": "edit", "update": "edit", "toggle": "edit", "status": "edit", "read": "edit",
     "delete": "delete", "remove": "delete",
     "review": "approve", "approve": "approve",
+    "initialize": "create", "link": "edit", "submit": "edit",
+    "override": "approve", "reopen": "approve",
     "pdf": "print_export", "print": "print_export", "download": "print_export", "template": "print_export", "report": "print_export",
 }
 
-READ_ONLY_ENDPOINTS = {"dashboard.dashboard"}
+# Both dashboard routes are read-only and build their results through the same
+# role/project-scoped command-center service.  The export therefore contains
+# no more data than the authenticated user can already see on the dashboard.
+READ_ONLY_ENDPOINTS = {"dashboard.dashboard", "dashboard.export_csv"}
 PUBLIC_PREFIXES = (
     "static",
     "auth",

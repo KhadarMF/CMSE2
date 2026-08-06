@@ -5,11 +5,12 @@ from app import db
 from app.models import (
     Project, SiteSurveyForm, LoadAssessmentForm, DailySiteReport,
     DeliveryNoteForm, TestingForm, CommissioningForm, HandoverForm,
-    FORM_APPROVAL_STATUSES, ApprovalHistory, Team,
+    FORM_APPROVAL_STATUSES, ApprovalHistory, ProjectMilestone, Team,
 )
 from app.permissions import can_create_form, can_edit_form, can_delete_form, can_access_module
 from app.activity import log_activity, log_approval
 from app.notifications import notify_roles, notify_user
+from app.milestone_service import mark_milestone_started
 from app.team_leader_access import (
     assigned_projects_for_user, is_team_leader, led_teams_for_user,
     team_is_assigned_to_project, team_leader_can_access_daily_report,
@@ -188,6 +189,18 @@ def get_daily_report_teams():
     return Team.query.filter_by(status="Active").order_by(Team.team_name.asc()).all()
 
 
+def get_milestones(form_key=None):
+    if form_key != "daily-site-report":
+        return []
+    query = ProjectMilestone.query
+    if daily_report_self_service_mode():
+        project_ids = [project.id for project in assigned_projects_for_user(current_user)]
+        if not project_ids:
+            return []
+        query = query.filter(ProjectMilestone.project_id.in_(project_ids))
+    return query.order_by(ProjectMilestone.project_id, ProjectMilestone.sequence).all()
+
+
 def can_create_requested_form(form_key):
     return can_create_form(current_user, form_key) or (
         form_key == "daily-site-report" and is_team_leader(current_user)
@@ -267,6 +280,7 @@ def build_display_rows(entry, form_key):
     display_rows = []
     if form_key == "daily-site-report":
         display_rows.append(("Team", entry.team.team_name if entry.team else ""))
+        display_rows.append(("Milestone", entry.milestone.name if entry.milestone else "Not linked"))
     for field_name, label, field_type in FORM_CONFIG[form_key]["fields"]:
         value = getattr(entry, field_name, "")
         display_rows.append((label, value or ""))
@@ -355,6 +369,10 @@ def create_form(form_key):
         form_data["approval_status"] = request.form.get("approval_status", "Draft")
         if form_key == "daily-site-report":
             form_data["team_id"] = request.form.get("team_id") or None
+            form_data["milestone_id"] = request.form.get("milestone_id") or None
+            if form_data["milestone_id"] and not ProjectMilestone.query.filter_by(id=form_data["milestone_id"], project_id=form_data["project_id"]).first():
+                flash("Selected milestone does not belong to this project.", "danger")
+                return redirect(url_for("forms.create_form", form_key=form_key))
             if daily_report_self_service_mode():
                 form_data["site_supervisor"] = current_user.full_name
             error = validate_daily_report_scope(
@@ -369,8 +387,9 @@ def create_form(form_key):
         entry = Model(**form_data)
         db.session.add(entry)
         db.session.flush()
+        if form_key == "daily-site-report":
+            mark_milestone_started(entry.milestone_id)
         log_activity("Create", config["title"], entry.id, f"Created {config['title']} #{entry.id}")
-        db.session.commit()
         if form_key == "daily-site-report" and entry.approval_status == "Submitted":
             notify_roles(
                 ["Admin", "Management", "Operation Manager"],
@@ -378,6 +397,7 @@ def create_form(form_key):
                 message=f"{current_user.full_name} submitted a daily report for {entry.project.project_name} / {entry.team.team_name}.",
                 module="daily-site-report", record_id=entry.id,
             )
+        db.session.commit()
         flash(f"{config['title']} saved successfully.", "success")
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=entry.id))
 
@@ -396,11 +416,13 @@ def create_form(form_key):
         fields=get_render_fields(form_key),
         projects=get_projects(form_key),
         daily_teams=get_daily_report_teams() if form_key == "daily-site-report" else [],
+        milestones=get_milestones(form_key),
         daily_report_mode=form_key == "daily-site-report",
         team_leader_mode=daily_report_self_service_mode() if form_key == "daily-site-report" else False,
         values=initial_values,
         selected_project=request.args.get("project_id", ""),
         selected_team=request.args.get("team_id", ""),
+        selected_milestone=request.args.get("milestone_id", ""),
         approval_status="Draft",
         form_ref=form_reference(form_key),
         field_choices=FIELD_CHOICES,
@@ -461,6 +483,10 @@ def edit_form(form_key, form_id):
         new_project_id = request.form.get("project_id")
         if form_key == "daily-site-report":
             new_team_id = request.form.get("team_id") or None
+            new_milestone_id = request.form.get("milestone_id") or None
+            if new_milestone_id and not ProjectMilestone.query.filter_by(id=new_milestone_id, project_id=new_project_id).first():
+                flash("Selected milestone does not belong to this project.", "danger")
+                return redirect(url_for("forms.edit_form", form_key=form_key, form_id=form_id))
             if daily_report_self_service_mode():
                 form_data["site_supervisor"] = current_user.full_name
             error = validate_daily_report_scope(
@@ -473,6 +499,8 @@ def edit_form(form_key, form_id):
                 flash("Work Completed Today is required.", "danger")
                 return redirect(url_for("forms.edit_form", form_key=form_key, form_id=form_id))
             entry.team_id = new_team_id
+            entry.milestone_id = new_milestone_id
+            mark_milestone_started(entry.milestone_id)
         entry.project_id = new_project_id
         for key, value in form_data.items():
             setattr(entry, key, value)
@@ -490,9 +518,11 @@ def edit_form(form_key, form_id):
         fields=get_render_fields(form_key),
         projects=get_projects(form_key),
         daily_teams=get_daily_report_teams() if form_key == "daily-site-report" else [],
+        milestones=get_milestones(form_key),
         daily_report_mode=form_key == "daily-site-report",
         team_leader_mode=daily_report_self_service_mode() if form_key == "daily-site-report" else False,
         selected_team=str(entry.team_id or "") if form_key == "daily-site-report" else "",
+        selected_milestone=str(entry.milestone_id or "") if form_key == "daily-site-report" else "",
         values=entry_to_values(entry, form_key),
         selected_project=str(entry.project_id),
         approval_status=entry.approval_status,

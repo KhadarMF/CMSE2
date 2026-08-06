@@ -1,8 +1,10 @@
 # Render repair: missing payment_request table
 
-This package contains additive migration `b20h0000a002`. It repairs a legacy
+This package contains additive migrations `b20h0000a002` and `b20h0000a003`.
+The first repairs a legacy
 database whose Alembic history was stamped even though the payment request
-tables were absent.
+tables were absent. The second makes obsolete required fields optional in old
+SQLite payment tables, allowing new requests without deleting legacy data.
 
 ## Deploy
 
@@ -21,6 +23,7 @@ tables were absent.
 
    ```text
    Running upgrade b20h0000a001 -> b20h0000a002
+   Running upgrade b20h0000a002 -> b20h0000a003
    ```
 
 7. Open a project and test Payment Requests and Team Daily Reports.

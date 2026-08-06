@@ -101,6 +101,12 @@ def team_leader_can_access_payment(user, payment_request):
     )
 
 
+def team_leader_can_access_project(user, project):
+    if not project:
+        return False
+    return project.id in {item.id for item in assigned_projects_for_user(user)}
+
+
 def is_team_leader_self_service_endpoint(endpoint, method="GET", view_args=None):
     """Endpoints whose route-level ownership checks make leader bypass safe."""
     view_args = view_args or {}
@@ -116,6 +122,12 @@ def is_team_leader_self_service_endpoint(endpoint, method="GET", view_args=None)
         return True
 
     if endpoint == "forms.forms_home":
+        return True
+    if endpoint in {"projects.list_projects", "projects.detail"}:
+        return True
+    if endpoint in {"milestones.detail", "milestones.submit"}:
+        return True
+    if endpoint in {"project_tasks.list_tasks", "project_tasks.create_task", "project_tasks.edit_task"}:
         return True
     if view_args.get("form_key") != "daily-site-report":
         return False

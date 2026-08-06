@@ -4,10 +4,11 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from app import db
-from app.models import Project, Document, DocumentVersion, DOCUMENT_TYPES, APPROVAL_STATUSES
+from app.models import Project, ProjectMilestone, Document, DocumentVersion, DOCUMENT_TYPES, APPROVAL_STATUSES
 from app.permissions import can_upload_document, can_review_document
 from app.activity import log_activity, log_approval
 from app.notifications import notify_roles, notify_user
+from app.milestone_service import mark_milestone_started
 
 document_bp = Blueprint('documents', __name__, url_prefix='/documents')
 ALLOWED_EXTENSIONS={'pdf','doc','docx','xls','xlsx','jpg','jpeg','png'}
@@ -27,18 +28,21 @@ def list_documents():
 @login_required
 def upload_document():
     if not can_upload_document(current_user): flash('You do not have permission to upload documents.','danger'); return redirect(url_for('documents.list_documents'))
-    projects=Project.query.order_by(Project.project_name.asc()).all()
+    projects=Project.query.order_by(Project.project_name.asc()).all(); milestones=ProjectMilestone.query.order_by(ProjectMilestone.project_id, ProjectMilestone.sequence).all()
     if request.method=='POST':
         file=request.files.get('file')
         if not file or file.filename=='': flash('Please select a file.','danger'); return redirect(request.url)
         if not allowed_file(file.filename): flash('File type not allowed.','danger'); return redirect(request.url)
+        project_id=request.form.get('project_id'); milestone_id=request.form.get('milestone_id') or None
+        if milestone_id and not ProjectMilestone.query.filter_by(id=milestone_id, project_id=project_id).first(): flash('Selected milestone does not belong to this project.','danger'); return redirect(request.url)
         orig,stored=save_file(file)
-        doc=Document(project_id=request.form.get('project_id'), document_title=request.form.get('document_title'), document_type=request.form.get('document_type'), uploaded_by_id=current_user.id, file_name=orig, stored_file_name=stored, remarks=request.form.get('remarks'), approval_status=request.form.get('approval_status','Draft'))
+        doc=Document(project_id=project_id, milestone_id=milestone_id, document_title=request.form.get('document_title'), document_type=request.form.get('document_type'), uploaded_by_id=current_user.id, file_name=orig, stored_file_name=stored, remarks=request.form.get('remarks'), approval_status=request.form.get('approval_status','Draft'))
         db.session.add(doc); db.session.flush(); db.session.add(DocumentVersion(document_id=doc.id, version_number=1, file_name=orig, stored_file_name=stored, uploaded_by_id=current_user.id, remarks='Initial upload'))
+        mark_milestone_started(doc.milestone_id)
         log_activity('Upload','Document',doc.id,f'Uploaded document: {doc.document_title}')
         if doc.approval_status=='Submitted': notify_roles(['Admin','Management','Operation Manager'], 'Document submitted for approval', f"{current_user.full_name} submitted document '{doc.document_title}' for approval.", 'Document', doc.id)
         db.session.commit(); flash('Document uploaded successfully.','success'); return redirect(url_for('documents.list_documents'))
-    return render_template('documents/upload.html', projects=projects, document_types=DOCUMENT_TYPES, statuses=APPROVAL_STATUSES, selected_project=request.args.get('project_id', ''))
+    return render_template('documents/upload.html', projects=projects, milestones=milestones, document_types=DOCUMENT_TYPES, statuses=APPROVAL_STATUSES, selected_project=request.args.get('project_id', ''), selected_milestone=request.args.get('milestone_id', ''))
 @document_bp.route('/<int:document_id>')
 @login_required
 def detail(document_id):
