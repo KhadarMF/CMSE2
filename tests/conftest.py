@@ -14,10 +14,12 @@ os.environ.setdefault("SECRET_KEY", "test-key-not-used-in-production-0123456789"
 
 
 @pytest.fixture()
-def app():
+def app(monkeypatch, tmp_path):
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
-    os.environ["DATABASE_URL"] = f"sqlite:///{path}"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{path}")
+    monkeypatch.setenv("UPLOAD_FOLDER", str(tmp_path / "uploads"))
+    monkeypatch.delenv("ADMIN_RECOVERY_PASSWORD", raising=False)
 
     from app import create_app, db
     application = create_app()
@@ -43,11 +45,13 @@ def client(app):
 
 
 @pytest.fixture()
-def csrf_app():
+def csrf_app(monkeypatch, tmp_path):
     """Same as `app` but with CSRF left ON, for the CSRF tests."""
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
-    os.environ["DATABASE_URL"] = f"sqlite:///{path}"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{path}")
+    monkeypatch.setenv("UPLOAD_FOLDER", str(tmp_path / "uploads"))
+    monkeypatch.delenv("ADMIN_RECOVERY_PASSWORD", raising=False)
 
     from app import create_app, db
     application = create_app()

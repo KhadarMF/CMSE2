@@ -54,7 +54,7 @@ def change_password(user_id):
         user.password_hash = generate_password_hash(password); db.session.commit(); flash("Password changed successfully.", "success"); return redirect(url_for("users.list_users"))
     return render_template("users/change_password.html", user=user)
 
-@user_bp.route("/<int:user_id>/toggle")
+@user_bp.route("/<int:user_id>/toggle", methods=["POST"])
 @login_required
 def toggle_user(user_id):
     if not can_manage_users(current_user): flash("Only Admin can enable or disable users.", "danger"); return redirect(url_for("dashboard.dashboard"))

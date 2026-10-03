@@ -9,8 +9,9 @@ from app.models import (
     CommissioningForm, DailySiteReport, DeliveryNoteForm, Document,
     HandoverForm, LoadAssessmentForm, MilestoneAuditLog,
     MilestoneDocumentRequirement, ProjectIssue, ProjectMilestone,
-    SiteSurveyForm, TestingForm,
+    SiteSurveyForm, SolarPumpSurveyForm, TestingForm,
 )
+from app.survey_config import survey_group
 
 
 COMPLETED_MILESTONE_STATUSES = {"Completed", "Completed with Exception"}
@@ -28,6 +29,7 @@ DOCUMENT_SCORES = {
 }
 FORM_MODELS = {
     "site-survey": SiteSurveyForm,
+    "solar-pump-survey": SolarPumpSurveyForm,
     "load-assessment": LoadAssessmentForm,
     "daily-site-report": DailySiteReport,
     "delivery-note": DeliveryNoteForm,
@@ -37,6 +39,7 @@ FORM_MODELS = {
 }
 FORM_RELATIONSHIPS = {
     "site-survey": "site_surveys",
+    "solar-pump-survey": "solar_pump_surveys",
     "load-assessment": "load_assessments",
     "daily-site-report": "daily_reports",
     "delivery-note": "delivery_notes",
@@ -159,6 +162,9 @@ def ensure_default_milestones(project, actor_id=None):
         db.session.add(milestone)
         db.session.flush()
         for title, form_key, document_type, critical in spec.get("requirements", ()):
+            if spec["code"] == "SURVEY":
+                label, _, form_key = survey_group(project)
+                title = f"Approved {label}"
             db.session.add(MilestoneDocumentRequirement(
                 milestone_id=milestone.id,
                 title=title,
@@ -509,6 +515,23 @@ def reopen_milestone(milestone, user, reason):
     if milestone.project.status == "Completed":
         milestone.project.status = "Handover"
     return True, "Milestone reopened."
+
+
+def invalidate_evidence(project, user, *, form_key=None, record_id=None, document_id=None):
+    """Reopen approvals whose supporting form/document content was changed."""
+    for milestone in project.milestones:
+        if milestone.status not in COMPLETED_MILESTONE_STATUSES | {"Ready for Approval"}:
+            continue
+        affected = False
+        for requirement in milestone.document_requirements:
+            row = _resolve_requirement(milestone, requirement)
+            record = row["record"]
+            if form_key and requirement.form_key == form_key and record and record.id == record_id:
+                affected = True
+            if document_id and isinstance(record, Document) and record.id == document_id:
+                affected = True
+        if affected:
+            reopen_milestone(milestone, user, "Supporting evidence changed; a new review is required.")
 
 
 def project_completion_ready(project):

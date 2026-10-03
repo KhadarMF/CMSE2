@@ -2,22 +2,22 @@ from collections import defaultdict
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, make_response
 from flask_login import login_required
-from weasyprint import HTML
+from app.pdf_service import pdf_response
 
 from app.models import Project, ProjectPayrollEntry, MaterialIssue, MaterialReturn, ProjectPayrollBatch, ProjectPayrollBatch
 from app.routes.form_routes import FORM_CONFIG, build_display_rows
+from app.survey_config import OFF_GRID_SURVEY, PUMP_SURVEY, survey_group
 
 report_bp = Blueprint("reports", __name__, url_prefix="/reports")
 
 FORM_REQUIREMENTS = [
-    ("Site Survey", "site_surveys"),
-    ("Load Assessment", "load_assessments"),
     ("Daily Site Report", "daily_reports"),
     ("Delivery Note", "delivery_notes"),
     ("Testing Form", "testing_forms"),
     ("Commissioning Form", "commissioning_forms"),
     ("Handover Form", "handover_forms"),
 ]
+FORM_SUMMARIES = [OFF_GRID_SURVEY[:2], PUMP_SURVEY[:2], ("Legacy Load Assessment", "load_assessments")] + FORM_REQUIREMENTS
 
 def safe_len(value):
     return len(value) if value is not None else 0
@@ -30,7 +30,7 @@ def status_count(records, attr_name="approval_status"):
 
 def project_checklist(project):
     items = []
-    for label, rel in FORM_REQUIREMENTS:
+    for label, rel in [survey_group(project)[:2]] + FORM_REQUIREMENTS:
         records = getattr(project, rel)
         count = safe_len(records)
         approved = len([r for r in records if getattr(r, "approval_status", "") == "Approved"])
@@ -55,7 +55,7 @@ def project_report_data(project):
     forms_summary = []
     total_forms = 0
     approved_forms = 0
-    for label, rel in FORM_REQUIREMENTS:
+    for label, rel in FORM_SUMMARIES:
         records = list(getattr(project, rel))
         counts = status_count(records)
         total_forms += len(records)
@@ -202,7 +202,7 @@ def build_customer_summary(projects):
         row["completed_count"] += 1 if project.status == "Completed" else 0
         row["active_count"] += 0 if project.status == "Completed" else 1
         row["documents"] += len(project.documents)
-        row["forms"] += sum(len(getattr(project, rel)) for _, rel in FORM_REQUIREMENTS)
+        row["forms"] += sum(len(getattr(project, rel)) for _, rel in FORM_SUMMARIES)
         row["open_tasks"] += len([t for t in getattr(project, "tasks", []) if t.status not in ["Completed", "Cancelled"]])
         row["open_issues"] += len([i for i in getattr(project, "issues", []) if i.status not in ["Resolved", "Closed"]])
         payroll_entries = ProjectPayrollEntry.query.join(ProjectPayrollBatch).filter(ProjectPayrollBatch.project_id == project.id).all()
@@ -217,13 +217,6 @@ def build_customer_summary(projects):
         row["locations"] = ", ".join(sorted(row["locations"]))
         rows.append(row)
     return sorted(rows, key=lambda r: r["customer_name"].lower())
-
-def pdf_response(html, filename):
-    pdf = HTML(string=html, base_url=request.host_url).write_pdf()
-    response = make_response(pdf)
-    response.headers["Content-Type"] = "application/pdf"
-    response.headers["Content-Disposition"] = f"inline; filename={filename}"
-    return response
 
 @report_bp.route("/")
 @login_required

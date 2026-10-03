@@ -432,11 +432,11 @@ def add_team_member(team_id):
         flash("Team member added.", "success")
     return redirect(url_for("master.team_detail", team_id=team_id))
 
-@master_bp.route("/teams/<int:team_id>/members/<int:member_id>/remove")
+@master_bp.route("/teams/<int:team_id>/members/<int:member_id>/remove", methods=["POST"])
 @login_required
 def remove_team_member(team_id, member_id):
     if not require_manager(): return redirect(url_for("master.team_detail", team_id=team_id))
-    member = TeamMember.query.get_or_404(member_id)
+    member = TeamMember.query.filter_by(id=member_id, team_id=team_id).first_or_404()
     member.is_active = False
     db.session.commit()
     flash("Team member removed from active list.", "success")
@@ -485,21 +485,21 @@ def project_workforce(project_id):
 
     return render_template("master/project_workforce.html", project=project, teams=teams, employees=employees, work_statuses=PROJECT_WORK_STATUSES)
 
-@master_bp.route("/projects/<int:project_id>/workforce/team/<int:assignment_id>/remove")
+@master_bp.route("/projects/<int:project_id>/workforce/team/<int:assignment_id>/remove", methods=["POST"])
 @login_required
 def remove_project_team(project_id, assignment_id):
     if not require_manager(): return redirect(url_for("projects.detail", project_id=project_id))
-    assignment = ProjectTeamAssignment.query.get_or_404(assignment_id)
+    assignment = ProjectTeamAssignment.query.filter_by(id=assignment_id, project_id=project_id).first_or_404()
     assignment.status = "Removed"
     db.session.commit()
     flash("Project team assignment removed.", "success")
     return redirect(url_for("master.project_workforce", project_id=project_id))
 
-@master_bp.route("/projects/<int:project_id>/workforce/employee/<int:assignment_id>/remove")
+@master_bp.route("/projects/<int:project_id>/workforce/employee/<int:assignment_id>/remove", methods=["POST"])
 @login_required
 def remove_project_employee(project_id, assignment_id):
     if not require_manager(): return redirect(url_for("projects.detail", project_id=project_id))
-    assignment = ProjectEmployeeAssignment.query.get_or_404(assignment_id)
+    assignment = ProjectEmployeeAssignment.query.filter_by(id=assignment_id, project_id=project_id).first_or_404()
     assignment.status = "Removed"
     db.session.commit()
     flash("Project employee assignment removed.", "success")

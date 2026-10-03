@@ -57,13 +57,13 @@ def _users_and_project():
     return admin, leader, team, project
 
 
-def test_default_template_has_six_weighted_milestones_and_na_dimensions(app):
+def test_default_template_has_simple_weighted_milestones_and_na_dimensions(app):
     from app import db
     from app.milestone_service import build_milestone_snapshot, mark_milestone_started
     from app.models import ProjectTask, SiteSurveyForm
 
     admin, _, _, project = _users_and_project()
-    assert len(project.milestones) == 6
+    assert len(project.milestones) == 8
     assert sum(item.project_weight for item in project.milestones) == 100
 
     survey = next(item for item in project.milestones if item.code == "SURVEY")
@@ -144,6 +144,8 @@ def test_team_leader_submits_and_manager_approves_only_after_gates_pass(app, cli
 
 
 def test_system_blocks_missing_evidence_and_supports_audited_exception(app, client):
+    from app.milestone_service import build_milestone_snapshot
+
     admin, leader, _, project = _users_and_project()
     installation = next(item for item in project.milestones if item.code == "INSTALLATION")
 
@@ -163,6 +165,7 @@ def test_system_blocks_missing_evidence_and_supports_audited_exception(app, clie
     )
     assert overridden.status_code == 200
     assert installation.status == "Completed with Exception"
+    assert build_milestone_snapshot(installation)["progress"] == 0
     assert installation.override_by_id == admin.id
     assert "Customer emergency" in installation.override_reason
     assert any(item.action == "Emergency override" for item in installation.audit_logs)
@@ -197,3 +200,85 @@ def test_project_cannot_be_marked_completed_until_every_milestone_is_closed(app,
         assert ok
     db.session.commit()
     assert project.status == "Completed"
+
+
+def test_site_survey_delete_handles_milestone_links_without_500(app, client):
+    from app import db
+    from app.models import SiteSurveyForm
+
+    admin, _, _, project = _users_and_project()
+    survey_milestone = next(item for item in project.milestones if item.code == "SURVEY")
+    entry = SiteSurveyForm(
+        project_id=project.id,
+        created_by_id=admin.id,
+        survey_date=date(2026, 8, 3),
+        approval_status="Approved",
+    )
+    db.session.add(entry)
+    db.session.flush()
+    requirement = next(
+        item for item in survey_milestone.document_requirements
+        if item.form_key == "site-survey"
+    )
+    requirement.form_record_id = entry.id
+    db.session.commit()
+
+    _login(client, admin)
+    get_response = client.get(f"/forms/site-survey/{entry.id}/delete")
+    assert get_response.status_code == 302
+    assert f"/forms/site-survey/{entry.id}" in get_response.headers["Location"]
+
+    delete_response = client.post(f"/forms/site-survey/{entry.id}/delete")
+    assert delete_response.status_code == 302
+    assert delete_response.headers["Location"].endswith("/forms/site-survey")
+    assert db.session.get(SiteSurveyForm, entry.id) is None
+    assert requirement.form_record_id is None
+
+
+def test_site_survey_delete_cleans_legacy_notification_and_history_links(app, client):
+    from app import db
+    from app.models import (
+        AIInteractionLog,
+        ApprovalHistory,
+        AuditLog,
+        Notification,
+        NotificationLog,
+        SMSQueue,
+        SiteSurveyForm,
+        SystemNotification,
+    )
+
+    admin, _, _, project = _users_and_project()
+    entry = SiteSurveyForm(
+        project_id=project.id,
+        created_by_id=admin.id,
+        survey_date=date(2026, 8, 4),
+        approval_status="Rejected",
+        manager_comments="Needs correction",
+    )
+    db.session.add(entry)
+    db.session.flush()
+    db.session.add_all([
+        Notification(recipient_user_id=admin.id, subject="Form", message="Linked", module="site-survey", record_id=entry.id),
+        AuditLog(user_id=admin.id, action="Review", module="Solar Off-Grid Site Survey & Load Assessment", record_id=entry.id),
+        ApprovalHistory(module="Solar Off-Grid Site Survey & Load Assessment", record_id=entry.id, previous_status="Submitted", new_status="Rejected"),
+        SystemNotification(ref_no="SYS-FORM-DEL-1", title="Form", related_module="site-survey", related_ref=str(entry.id)),
+        NotificationLog(notification_ref="LOG-FORM-DEL-1", related_module="site-survey", related_ref=str(entry.id)),
+        SMSQueue(ref_no="SMS-FORM-DEL-1", recipient_name="Admin", phone_number="252600000000", message="Linked", related_module="site-survey", related_ref=str(entry.id)),
+        AIInteractionLog(ref_no="AI-FORM-DEL-1", user_id=admin.id, context_type="AI Project Report Writer", related_module="site-survey", related_ref=str(entry.id), prompt="Draft"),
+    ])
+    db.session.commit()
+
+    _login(client, admin)
+    response = client.post(f"/forms/site-survey/{entry.id}/delete")
+    assert response.status_code == 302
+    db.session.expire_all()
+    assert db.session.get(SiteSurveyForm, entry.id) is None
+    assert Notification.query.filter_by(module="site-survey", record_id=entry.id).count() == 0
+    assert ApprovalHistory.query.filter_by(module="Solar Off-Grid Site Survey & Load Assessment", record_id=entry.id).count() == 0
+    assert AuditLog.query.filter_by(module="Solar Off-Grid Site Survey & Load Assessment", record_id=entry.id).count() == 0
+    assert SystemNotification.query.filter_by(related_module="site-survey", related_ref=str(entry.id)).count() == 0
+    assert NotificationLog.query.filter_by(related_module="site-survey", related_ref=str(entry.id)).count() == 0
+    assert SMSQueue.query.filter_by(related_module="site-survey", related_ref=str(entry.id)).count() == 0
+    assert AIInteractionLog.query.filter_by(related_module="site-survey", related_ref=str(entry.id)).count() == 0
+

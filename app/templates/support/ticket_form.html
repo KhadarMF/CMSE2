@@ -46,25 +46,25 @@
         <select class="form-select" name="customer_id" id="customerSelect">
           <option value="">-- select customer from Customers table --</option>
           {% for c in customers %}
-            <option value="{{ c.id }}" data-phone="{{ c.phone or '' }}" data-location="{{ c.address or '' }}">{{ c.customer_name }}</option>
+            <option value="{{ c.id }}" data-phone="{{ c.phone or '' }}" data-location="{{ c.address or '' }}" {% if selected_customer and selected_customer.id == c.id %}selected{% endif %}>{{ c.customer_name }}</option>
           {% endfor %}
         </select>
         <div class="form-text">Reads from Customers table.</div>
       </div>
       <div class="col-md-4">
         <label class="form-label">New Customer Name</label>
-        <input class="form-control" name="new_customer_name" placeholder="Use only if customer is not in the list">
+        <input class="form-control" name="new_customer_name" value="{% if selected_customer_name and not selected_customer %}{{ selected_customer_name }}{% endif %}" placeholder="Use only if customer is not in the list">
       </div>
       <div class="col-md-4">
         <label class="form-label">Phone</label>
-        <input class="form-control" name="phone" id="phoneInput">
+        <input class="form-control" name="phone" id="phoneInput" value="{{ selected_customer.phone if selected_customer else '' }}">
       </div>
 
       <div class="col-md-4">
         <label class="form-label">Project</label>
-        <select class="form-select" name="project_id">
+        <select class="form-select" name="project_id" id="ticketProjectSelect">
           <option value="">-- select project --</option>
-          {% for p in projects %}<option value="{{ p.id }}">{{ p.project_name }} - {{ p.customer_name }}</option>{% endfor %}
+          {% for p in projects %}<option value="{{ p.id }}" data-customer-name="{{ p.customer_name }}" data-location="{{ p.location or '' }}" {% if selected_project and selected_project.id == p.id %}selected{% endif %}>{{ p.project_name }} - {{ p.customer_name }}</option>{% endfor %}
         </select>
       </div>
       <div class="col-md-4">
@@ -82,7 +82,7 @@
 
       <div class="col-md-4">
         <label class="form-label">Location</label>
-        <input class="form-control" name="location" id="locationInput" placeholder="Hargeisa / Burco / Site location">
+        <input class="form-control" name="location" id="locationInput" value="{{ selected_project.location if selected_project else (selected_customer.address if selected_customer else '') }}" placeholder="Hargeisa / Burco / Site location">
       </div>
       <div class="col-md-4">
         <label class="form-label">Issue Category</label>
@@ -129,6 +129,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const customerSelect = document.getElementById('customerSelect');
+  const projectSelect = document.getElementById('ticketProjectSelect');
   const phoneInput = document.getElementById('phoneInput');
   const locationInput = document.getElementById('locationInput');
   if (customerSelect) {
@@ -137,6 +138,22 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!opt) return;
       if (opt.dataset.phone && !phoneInput.value) phoneInput.value = opt.dataset.phone;
       if (opt.dataset.location && !locationInput.value) locationInput.value = opt.dataset.location;
+    });
+  }
+  if (projectSelect) {
+    projectSelect.addEventListener('change', function () {
+      const opt = projectSelect.options[projectSelect.selectedIndex];
+      if (!opt || !opt.value) return;
+      if (customerSelect && opt.dataset.customerName) {
+        const matchingCustomer = Array.from(customerSelect.options).find(function (item) {
+          return item.textContent.trim() === opt.dataset.customerName.trim();
+        });
+        if (matchingCustomer) {
+          customerSelect.value = matchingCustomer.value;
+          customerSelect.dispatchEvent(new Event('change'));
+        }
+      }
+      if (locationInput) locationInput.value = opt.dataset.location || locationInput.value;
     });
   }
 });

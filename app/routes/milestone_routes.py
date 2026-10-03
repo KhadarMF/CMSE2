@@ -26,6 +26,7 @@ OVERRIDE_ROLES = {"Admin", "Management", "Operation Manager"}
 FORM_REQUIREMENT_CHOICES = (
     ("", "Uploaded document"),
     ("site-survey", "Site Survey & Load Assessment"),
+    ("solar-pump-survey", "Solar Pumping Site Survey"),
     ("load-assessment", "Load Assessment"),
     ("daily-site-report", "Daily Site Report"),
     ("delivery-note", "Delivery Note"),

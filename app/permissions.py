@@ -14,6 +14,7 @@ DELETE_FORM_ROLES = ["Admin", "Management", "Operation Manager"]
 
 FORM_PERMISSION_MAP = {
     "site-survey": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor"],
+    "solar-pump-survey": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor"],
     "load-assessment": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Sales Officer"],
     "projects": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor", "Sales Officer"],
     "project-tasks": ["Admin", "Management", "Operation Manager", "Technical Engineer", "Site Supervisor"],
@@ -246,7 +247,7 @@ def can_manage_users(user):
 # Example: if a technician has Site Survey permission, Online Forms menu/home opens.
 # ---------------------------------------------------------------------------
 PARENT_CHILD_PERMISSION_KEYS = {
-    "forms-home": ["site-survey", "load-assessment", "daily-site-report", "delivery-note", "testing", "commissioning", "handover"],
+    "forms-home": ["site-survey", "solar-pump-survey", "load-assessment", "daily-site-report", "delivery-note", "testing", "commissioning", "handover"],
     "projects": ["project-workforce"],
     "project-tasks": [],
     "materials": ["material-items", "material-request", "material-issue", "material-return", "material-reports"],
@@ -260,7 +261,7 @@ PARENT_CHILD_PERMISSION_KEYS = {
     "ai-assistant": ["ai-project-report", "ai-quotation", "ai-stock", "ai-service-ticket-agent", "ai-crm-agent", "ai-project-manager", "ai-reports", "ai-logs", "ai-settings"],
 }
 
-FORM_CHILD_KEYS = ["site-survey", "load-assessment", "daily-site-report", "delivery-note", "testing", "commissioning", "handover"]
+FORM_CHILD_KEYS = ["site-survey", "solar-pump-survey", "load-assessment", "daily-site-report", "delivery-note", "testing", "commissioning", "handover"]
 
 def _get_perm(user, key):
     try:

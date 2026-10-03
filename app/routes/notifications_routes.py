@@ -48,7 +48,7 @@ def create_notification():
         return redirect(url_for('notifications.list_notifications'))
     return render_template('notifications/form.html', users=User.query.filter_by(is_active=True).all(), priorities=TICKET_PRIORITIES)
 
-@notifications_bp.route('/<int:notification_id>/read')
+@notifications_bp.route('/<int:notification_id>/read', methods=["POST"])
 @login_required
 def mark_read(notification_id):
     n=SystemNotification.query.get_or_404(notification_id)
@@ -66,7 +66,7 @@ def logs():
     logs=query.order_by(NotificationLog.created_at.desc()).limit(500).all()
     return render_template('notifications/logs.html', logs=logs, channels=NOTIFICATION_CHANNELS, statuses=NOTIFICATION_DELIVERY_STATUSES, filters=request.args)
 
-@notifications_bp.route('/email/send/<int:log_id>')
+@notifications_bp.route('/email/send/<int:log_id>', methods=["POST"])
 @login_required
 def send_email_log(log_id):
     log=NotificationLog.query.get_or_404(log_id)
@@ -98,7 +98,7 @@ def create_sms_queue():
     db.session.commit(); flash('SMS added to manual queue. API is not connected yet.', 'success')
     return redirect(url_for('notifications.sms_queue'))
 
-@notifications_bp.route('/sms-queue/<int:sms_id>/sent')
+@notifications_bp.route('/sms-queue/<int:sms_id>/sent', methods=["POST"])
 @login_required
 def mark_sms_sent(sms_id):
     sms=SMSQueue.query.get_or_404(sms_id)

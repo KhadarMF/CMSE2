@@ -4,7 +4,23 @@
 <h2 class='fw-bold'>Register Warranty</h2>
 <form method='post' class='card'>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class='card-body'><div class='row g-3'>
-<div class='col-md-4'><label class='form-label'>Customer</label><input class='form-control' list='customerOptions' name='customer_name' placeholder='Select existing customer or type new customer' required><datalist id='customerOptions'>{% for c in customers %}<option value='{{ c.customer_name }}'>{% endfor %}</datalist><small class='text-muted'>Hal customer field oo keliya.</small></div>
-<div class='col-md-4'><label class='form-label'>Project</label><select class='form-select' name='project_id'><option value=''>-- select --</option>{% for p in projects %}<option value='{{ p.id }}'>{{ p.project_name }} - {{ p.customer_name }}</option>{% endfor %}</select></div>
-<div class='col-md-3'><label class='form-label'>System Type</label><input class='form-control' name='system_type'></div><div class='col-md-3'><label class='form-label'>Capacity</label><input class='form-control' name='capacity'></div><div class='col-md-3'><label class='form-label'>Warranty Start</label><input class='form-control' type='date' name='warranty_start'></div><div class='col-md-3'><label class='form-label'>Warranty End</label><input class='form-control' type='date' name='warranty_end'></div><div class='col-md-3'><label class='form-label'>Status</label><select class='form-select' name='status'>{% for s in statuses %}<option value='{{ s }}'>{{ s }}</option>{% endfor %}</select></div><div class='col-md-12'><label class='form-label'>Notes</label><textarea class='form-control' name='notes'></textarea></div></div><button class='btn btn-primary mt-3'>Save Warranty</button></div></form>
+<div class='col-md-4'><label class='form-label'>Customer</label><input class='form-control' id='warrantyCustomerName' list='customerOptions' name='customer_name' value='{{ selected_customer_name or "" }}' placeholder='Select existing customer or type new customer' required><datalist id='customerOptions'>{% for c in customers %}<option value='{{ c.customer_name }}'>{% endfor %}</datalist><small class='text-muted'>Hal customer field oo keliya.</small></div>
+<div class='col-md-4'><label class='form-label'>Project</label><select class='form-select' id='warrantyProjectSelect' name='project_id'><option value=''>-- select --</option>{% for p in projects %}<option value='{{ p.id }}' data-customer='{{ p.customer_name }}' data-system-type='{{ p.project_type or "" }}' data-capacity='{{ p.capacity or "" }}' {% if selected_project and selected_project.id == p.id %}selected{% endif %}>{{ p.project_name }} - {{ p.customer_name }}</option>{% endfor %}</select></div>
+<div class='col-md-3'><label class='form-label'>System Type</label><input class='form-control' id='warrantySystemType' name='system_type' value='{{ selected_project.project_type if selected_project else "" }}'></div><div class='col-md-3'><label class='form-label'>Capacity</label><input class='form-control' id='warrantyCapacity' name='capacity' value='{{ selected_project.capacity if selected_project else "" }}'></div><div class='col-md-3'><label class='form-label'>Warranty Start</label><input class='form-control' type='date' name='warranty_start'></div><div class='col-md-3'><label class='form-label'>Warranty End</label><input class='form-control' type='date' name='warranty_end'></div><div class='col-md-3'><label class='form-label'>Status</label><select class='form-select' name='status'>{% for s in statuses %}<option value='{{ s }}'>{{ s }}</option>{% endfor %}</select></div><div class='col-md-12'><label class='form-label'>Notes</label><textarea class='form-control' name='notes'></textarea></div></div><button class='btn btn-primary mt-3'>Save Warranty</button></div></form>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const project = document.getElementById('warrantyProjectSelect');
+  const customer = document.getElementById('warrantyCustomerName');
+  const systemType = document.getElementById('warrantySystemType');
+  const capacity = document.getElementById('warrantyCapacity');
+  if (!project) return;
+  project.addEventListener('change', function () {
+    const opt = project.options[project.selectedIndex];
+    if (!opt || !opt.value) return;
+    if (customer) customer.value = opt.dataset.customer || '';
+    if (systemType && !systemType.value) systemType.value = opt.dataset.systemType || '';
+    if (capacity && !capacity.value) capacity.value = opt.dataset.capacity || '';
+  });
+});
+</script>
 {% endblock %}

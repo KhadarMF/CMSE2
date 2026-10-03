@@ -1,4 +1,5 @@
 import os
+from uuid import uuid4
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, send_from_directory
 from flask_login import login_required, current_user
@@ -8,13 +9,13 @@ from app.models import Project, ProjectMilestone, Document, DocumentVersion, DOC
 from app.permissions import can_upload_document, can_review_document
 from app.activity import log_activity, log_approval
 from app.notifications import notify_roles, notify_user
-from app.milestone_service import mark_milestone_started
+from app.milestone_service import mark_milestone_started, invalidate_evidence
 
 document_bp = Blueprint('documents', __name__, url_prefix='/documents')
 ALLOWED_EXTENSIONS={'pdf','doc','docx','xls','xlsx','jpg','jpeg','png'}
 def allowed_file(fn): return '.' in fn and fn.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS
 def save_file(file):
-    orig=secure_filename(file.filename); stored=f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{orig}"; file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], stored)); return orig,stored
+    orig=secure_filename(file.filename); stored=f"{uuid4().hex}_{orig}"; file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], stored)); return orig,stored
 @document_bp.route('/')
 @login_required
 def list_documents():
@@ -30,10 +31,16 @@ def upload_document():
     if not can_upload_document(current_user): flash('You do not have permission to upload documents.','danger'); return redirect(url_for('documents.list_documents'))
     projects=Project.query.order_by(Project.project_name.asc()).all(); milestones=ProjectMilestone.query.order_by(ProjectMilestone.project_id, ProjectMilestone.sequence).all()
     if request.method=='POST':
+        if request.form.get('approval_status', 'Draft') not in {'Draft', 'Submitted'}:
+            flash('New documents must be Draft or Submitted for approval.', 'danger')
+            return redirect(request.url)
         file=request.files.get('file')
         if not file or file.filename=='': flash('Please select a file.','danger'); return redirect(request.url)
         if not allowed_file(file.filename): flash('File type not allowed.','danger'); return redirect(request.url)
         project_id=request.form.get('project_id'); milestone_id=request.form.get('milestone_id') or None
+        if not project_id or not project_id.isdigit() or not db.session.get(Project, int(project_id)):
+            flash('Select a valid project.', 'danger')
+            return redirect(request.url)
         if milestone_id and not ProjectMilestone.query.filter_by(id=milestone_id, project_id=project_id).first(): flash('Selected milestone does not belong to this project.','danger'); return redirect(request.url)
         orig,stored=save_file(file)
         doc=Document(project_id=project_id, milestone_id=milestone_id, document_title=request.form.get('document_title'), document_type=request.form.get('document_type'), uploaded_by_id=current_user.id, file_name=orig, stored_file_name=stored, remarks=request.form.get('remarks'), approval_status=request.form.get('approval_status','Draft'))
@@ -42,7 +49,7 @@ def upload_document():
         log_activity('Upload','Document',doc.id,f'Uploaded document: {doc.document_title}')
         if doc.approval_status=='Submitted': notify_roles(['Admin','Management','Operation Manager'], 'Document submitted for approval', f"{current_user.full_name} submitted document '{doc.document_title}' for approval.", 'Document', doc.id)
         db.session.commit(); flash('Document uploaded successfully.','success'); return redirect(url_for('documents.list_documents'))
-    return render_template('documents/upload.html', projects=projects, milestones=milestones, document_types=DOCUMENT_TYPES, statuses=APPROVAL_STATUSES, selected_project=request.args.get('project_id', ''), selected_milestone=request.args.get('milestone_id', ''))
+    return render_template('documents/upload.html', projects=projects, milestones=milestones, document_types=DOCUMENT_TYPES, statuses=['Draft', 'Submitted'], selected_project=request.args.get('project_id', ''), selected_milestone=request.args.get('milestone_id', ''))
 @document_bp.route('/<int:document_id>')
 @login_required
 def detail(document_id):
@@ -56,8 +63,10 @@ def new_version(document_id):
         if not file or file.filename=='': flash('Please select a file.','danger'); return redirect(request.url)
         if not allowed_file(file.filename): flash('File type not allowed.','danger'); return redirect(request.url)
         orig,stored=save_file(file); latest=DocumentVersion.query.filter_by(document_id=doc.id).order_by(DocumentVersion.version_number.desc()).first(); nxt=(latest.version_number+1) if latest else 1
+        invalidate_evidence(doc.project, current_user, document_id=doc.id)
         db.session.add(DocumentVersion(document_id=doc.id, version_number=nxt, file_name=orig, stored_file_name=stored, uploaded_by_id=current_user.id, remarks=request.form.get('remarks')))
         doc.file_name=orig; doc.stored_file_name=stored; doc.approval_status='Draft'; doc.manager_comments=None
+        doc.reviewed_by_id=None; doc.reviewed_at=None
         log_activity('New Version','Document',doc.id,f'Uploaded version {nxt} for document: {doc.document_title}')
         db.session.commit(); flash('New document version uploaded successfully.','success'); return redirect(url_for('documents.detail', document_id=doc.id))
     return render_template('documents/new_version.html', document=doc)
@@ -66,6 +75,10 @@ def new_version(document_id):
 def review_document(document_id):
     doc=Document.query.get_or_404(document_id)
     if not can_review_document(current_user): flash('Only Admin, Management, or Operation Manager can review documents.','danger'); return redirect(url_for('documents.detail', document_id=doc.id))
+    latest = DocumentVersion.query.filter_by(document_id=doc.id).order_by(DocumentVersion.version_number.desc()).first()
+    if (latest.uploaded_by_id if latest else doc.uploaded_by_id) == current_user.id:
+        flash('The uploader cannot review their own document version.', 'danger')
+        return redirect(url_for('documents.detail', document_id=doc.id))
     if request.method=='POST':
         new_status=request.form.get('approval_status')
         if new_status not in ['Under Review','Approved','Rejected','Need Correction']: flash('Invalid review status.','danger'); return redirect(request.url)

@@ -28,7 +28,7 @@
 <thead><tr><th>Team</th><th>Leader</th><th>Members</th><th>Scope</th><th>Status</th><th></th></tr></thead>
 <tbody>
 {% for a in project.team_assignments if a.status != "Removed" %}
-<tr><td>{{ a.team.team_name }}</td><td>{{ a.team.leader.full_name if a.team.leader else "" }}</td><td>{{ a.team.members|selectattr("is_active")|list|length }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td><td><a class="btn btn-sm btn-outline-danger" href="{{ url_for('master.remove_project_team', project_id=project.id, assignment_id=a.id) }}">Remove</a></td></tr>
+<tr><td>{{ a.team.team_name }}</td><td>{{ a.team.leader.full_name if a.team.leader else "" }}</td><td>{{ a.team.members|selectattr("is_active")|list|length }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td><td><form method="post" action="{{ url_for('master.remove_project_team', project_id=project.id, assignment_id=a.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger">Remove</button></form></td></tr>
 {% else %}<tr><td colspan="6" class="text-muted">No teams assigned.</td></tr>{% endfor %}
 </tbody>
 </table>
@@ -58,7 +58,7 @@
 <thead><tr><th>Employee</th><th>Job Title</th><th>Role</th><th>Scope</th><th>Status</th><th></th></tr></thead>
 <tbody>
 {% for a in project.employee_assignments if a.status != "Removed" %}
-<tr><td>{{ a.employee.full_name }}</td><td>{{ a.employee.job_title or "" }}</td><td>{{ a.role_on_project or "" }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td><td><a class="btn btn-sm btn-outline-danger" href="{{ url_for('master.remove_project_employee', project_id=project.id, assignment_id=a.id) }}">Remove</a></td></tr>
+<tr><td>{{ a.employee.full_name }}</td><td>{{ a.employee.job_title or "" }}</td><td>{{ a.role_on_project or "" }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td><td><form method="post" action="{{ url_for('master.remove_project_employee', project_id=project.id, assignment_id=a.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger">Remove</button></form></td></tr>
 {% else %}<tr><td colspan="6" class="text-muted">No direct employees assigned.</td></tr>{% endfor %}
 </tbody>
 </table>

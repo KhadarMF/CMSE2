@@ -17,7 +17,7 @@ def send_email(to_email, subject, message):
     msg["Subject"] = subject
     msg["From"] = cfg["MAIL_DEFAULT_SENDER"]
     msg["To"] = to_email
-    with smtplib.SMTP(cfg["MAIL_SERVER"], cfg["MAIL_PORT"]) as smtp:
+    with smtplib.SMTP(cfg["MAIL_SERVER"], cfg["MAIL_PORT"], timeout=10) as smtp:
         if cfg["MAIL_USE_TLS"]:
             smtp.starttls()
         smtp.login(cfg["MAIL_USERNAME"], cfg["MAIL_PASSWORD"])
@@ -28,14 +28,21 @@ def create_notification(to_user=None, to_email=None, subject="", message="", mod
     notification = Notification(recipient_user_id=to_user.id if to_user else None, recipient_email=recipient_email, subject=subject, message=message, module=module, record_id=record_id, status="Pending")
     db.session.add(notification)
     db.session.flush()
-    if send_now and recipient_email:
-        try:
-            send_email(recipient_email, subject, message)
-            notification.status = "Sent"
-            notification.sent_at = datetime.utcnow()
-        except Exception as e:
-            notification.status = "Failed"
-            notification.error_message = str(e)
+    if to_user and to_user.is_active:
+        from app.notification_gateway import create_notification_event
+        create_notification_event(subject, message, target_user=to_user,
+            related_module=module, related_ref=str(record_id) if record_id is not None else None,
+            send_email_now=send_now, notification_ref=f"WORKFLOW-{notification.id}")
+        notification.status = "Queued" if send_now else "Skipped"
+    elif recipient_email and to_user is None and send_now:
+        from app.models import NotificationLog
+        from app.notification_delivery import queue_email
+        log = NotificationLog(notification_ref=f"WORKFLOW-{notification.id}", channel="Email",
+            recipient=recipient_email, subject=subject, message=message, status="Queued")
+        db.session.add(log)
+        queue_email(log)
+    else:
+        notification.status = "Skipped"
     return notification
 
 def notify_roles(roles, subject, message, module=None, record_id=None):
@@ -45,6 +52,16 @@ def notify_roles(roles, subject, message, module=None, record_id=None):
     return users
 
 def notify_user(user, subject, message, module=None, record_id=None):
-    if user:
+    if user and user.is_active:
         return create_notification(user, subject=subject, message=message, module=module, record_id=record_id)
     return None
+
+
+def notify_approvers(form_key, subject, message, record_id, exclude_user_id=None):
+    from app.permissions import can_access_module
+    users = User.query.filter_by(is_active=True).all()
+    recipients = [user for user in users if user.id != exclude_user_id
+                  and can_access_module(user, form_key, "approve")]
+    for user in recipients:
+        notify_user(user, subject, message, module=form_key, record_id=record_id)
+    return recipients

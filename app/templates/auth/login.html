@@ -1,23 +1,30 @@
 {% extends "base.html" %}
+{% from "components/icons.html" import icon %}
 {% block content %}
-<div class="login-wrapper">
-    <div class="card login-card shadow-sm">
-        <div class="card-body p-4">
-            <h3 class="fw-bold mb-1">{{ company_profile.company_name if company_profile else "Solar Project Document System" }}</h3>
-            <p class="text-muted mb-4">{{ company_profile.tagline if company_profile else "Project Document & Approval Management System" }}</p>
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="mb-3">
-                    <label class="form-label">Email address</label>
-                    <input type="email" name="email" class="form-control" required autofocus>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Password</label>
-                    <input type="password" name="password" class="form-control" required>
-                </div>
-                <button type="submit" class="btn btn-primary w-100">Login</button>
-            </form>
-        </div>
-    </div>
+<div class="erp-login">
+    <section class="erp-login-story">
+        <div class="erp-login-brand">{{ icon('sun', 32) }} {{ company_profile.company_name if company_profile else 'Cadceed-Maal Solar Energy' }}</div>
+        <div><div class="erp-eyebrow">POWERING BETTER PROJECTS</div><h2>Good energy.<br>Great teamwork.</h2><p>Your projects, documents and approvals.<br>One connected workspace for your solar team.</p></div>
+        <small>Solar operations, from survey to handover.</small>
+        <div class="erp-login-art" aria-hidden="true"></div>
+    </section>
+    <section class="erp-login-form">
+        <div class="erp-eyebrow">YOUR TEAM WORKSPACE</div>
+        <h1>Welcome back.</h1>
+        <p>Sign in to keep your projects moving.</p>
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-4">
+                <label class="form-label" for="loginEmail">Email address</label>
+                <input id="loginEmail" type="email" name="email" class="form-control" placeholder="you@company.com" autocomplete="username" required autofocus>
+            </div>
+            <div class="mb-4">
+                <label class="form-label" for="loginPassword">Password</label>
+                <div class="erp-password-wrap"><input id="loginPassword" type="password" name="password" class="form-control" autocomplete="current-password" required><button id="erpPasswordToggle" class="erp-password-toggle" type="button" aria-controls="loginPassword" aria-pressed="false" aria-label="Show or hide password">Show</button></div>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Login {{ icon('arrow', 17) }}</button>
+        </form>
+        <small>Need access? Contact your system administrator.</small>
+    </section>
 </div>
 {% endblock %}

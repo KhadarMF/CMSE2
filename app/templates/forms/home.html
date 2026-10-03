@@ -1,31 +1,27 @@
 {% extends "base.html" %}
+{% from "components/icons.html" import icon %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
-    <div><h2 class="fw-bold">Online Forms</h2><p class="text-muted mb-0">Create, view, edit, print, and manage project forms.</p></div>
-</div>
-<div class="alert alert-info">Your role: <strong>{{ current_user.role }}</strong>. Restricted forms are view-only.</div>
-<div class="row g-3">
+<div class="erp-page-heading"><div><div class="erp-eyebrow">FROM SITE VISIT TO SIGN-OFF</div><h2>Online Forms</h2><p>Capture the details. Keep every project moving.</p></div><span class="badge bg-light text-dark">{{ current_user.role }}</span></div>
 {% set forms = [
-("site-survey", "Site Survey & Load Assessment", counts.site_surveys),
-("daily-site-report", "Daily Site Report", counts.daily_reports),
-("delivery-note", "Delivery Note", counts.delivery_notes),
-("testing", "Testing Form", counts.testing_forms),
-("commissioning", "Commissioning", counts.commissioning_forms),
-("handover", "Handover Form", counts.handover_forms)
+('site-survey', 'Solar Off-Grid Survey & Load Assessment', counts.site_surveys, 'sun', 'Site conditions, energy needs and installation details.'),
+('solar-pump-survey', 'Solar Pumping Site Survey', counts.solar_pump_surveys, 'water', 'Water source, pump requirements and delivery layout.'),
+('daily-site-report', 'Daily Site Report', counts.daily_reports, 'clock', 'Daily progress, site activities and team updates.'),
+('delivery-note', 'Delivery Note', counts.delivery_notes, 'box', 'Track the materials delivered to your project site.'),
+('testing', 'Testing Form', counts.testing_forms, 'check', 'Record system checks and verify performance.'),
+('commissioning', 'Commissioning', counts.commissioning_forms, 'settings', 'Document the final checks before going live.'),
+('handover', 'Handover Form', counts.handover_forms, 'project', 'Complete the project and capture customer sign-off.')
 ] %}
-{% for key, title, count in forms %}
+<div class="erp-forms-grid">
+{% for key, title, count, symbol, description in forms %}
 {% if allowed_view_forms.get(key) %}
-<div class="col-md-3"><div class="card form-card shadow-sm"><div class="card-body">
-<h5>{{ title }}</h5><p class="text-muted">Total: {{ count }}</p>
-{% if allowed_forms[key] %}<a class="btn btn-primary btn-sm" href="{{ url_for('forms.create_form', form_key=key) }}">New Form</a>{% else %}<span class="badge bg-secondary">View Only</span>{% endif %}
-<a class="btn btn-light btn-sm" href="{{ url_for('forms.list_forms', form_key=key) }}">View</a>
-</div></div></div>
+<article class="erp-form-card">
+    <div class="erp-form-card-top"><span class="erp-form-card-icon {{ 'water' if symbol == 'water' else '' }}">{{ icon(symbol, 23) }}</span><span class="erp-count">{{ count }} {{ 'record' if count == 1 else 'records' }}</span></div>
+    <h3>{{ title }}</h3><p>{{ description }}</p>
+    <div class="erp-form-card-actions">{% if allowed_forms[key] %}<a class="btn btn-primary" href="{{ url_for('forms.create_form', form_key=key) }}">{{ icon('plus', 14) }} New Form</a>{% else %}<span class="badge bg-secondary align-self-center">View Only</span>{% endif %}<a class="btn btn-light" href="{{ url_for('forms.list_forms', form_key=key) }}" aria-label="View {{ title }} records">View records {{ icon('arrow', 14) }}</a></div>
+</article>
 {% endif %}
 {% endfor %}
 </div>
-{% if not (allowed_view_forms.get('site-survey') or allowed_view_forms.get('daily-site-report') or allowed_view_forms.get('delivery-note') or allowed_view_forms.get('testing') or allowed_view_forms.get('commissioning') or allowed_view_forms.get('handover')) %}<div class="alert alert-warning mt-3">No online forms have been assigned to your account. Contact the administrator.</div>{% endif %}
-<div class="alert alert-secondary mt-4 small">
-  <strong>Note:</strong> Site Survey and Load Assessment are now combined into one form. Old Load Assessment records remain accessible for reference:
-  {% if allowed_view_forms.get('load-assessment') %}<a href="{{ url_for('forms.list_forms', form_key='load-assessment') }}">Legacy Load Assessment Records</a>.{% else %}Legacy Load Assessment Records are hidden unless permission is granted.{% endif %}
-</div>
+{% if not (allowed_view_forms.get('site-survey') or allowed_view_forms.get('solar-pump-survey') or allowed_view_forms.get('daily-site-report') or allowed_view_forms.get('delivery-note') or allowed_view_forms.get('testing') or allowed_view_forms.get('commissioning') or allowed_view_forms.get('handover')) %}<div class="card erp-empty"><strong>No forms assigned yet</strong>Contact your administrator to request access to online forms.</div>{% endif %}
+<p class="erp-legacy-note">Off-grid Site Survey and Load Assessment are combined in one form. Solar Pumping has its own dedicated survey.{% if allowed_view_forms.get('load-assessment') %} <a href="{{ url_for('forms.list_forms', form_key='load-assessment') }}">Browse legacy Load Assessment records {{ icon('arrow', 12) }}</a>{% endif %}</p>
 {% endblock %}

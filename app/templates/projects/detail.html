@@ -35,6 +35,24 @@
     </div>
 </section>
 
+<section class="pcc-project-commands no-print" aria-label="Project commands">
+    <div class="pcc-project-command-copy">
+        <strong>Project commands</strong>
+        <span>New records opened here stay linked to {{ project.project_name }} / {{ project.customer_name }}.</span>
+    </div>
+    <div class="pcc-project-command-links">
+        {% if can_access_module(current_user, 'quotation') %}<a href="{{ url_for('sales.create_quotation', project_id=project.id, customer_name=project.customer_name) }}">Quotation</a>{% endif %}
+        {% if can_access_module(current_user, 'project-tasks') or is_team_leader(current_user) %}<a href="{{ url_for('project_tasks.create_task', project_id=project.id) }}">Task</a>{% endif %}
+        {% if can_access_module(current_user, 'material-request') %}<a href="{{ url_for('materials.create_request', project_id=project.id) }}">Material request</a>{% endif %}
+        {% if can_access_module(current_user, 'payment-requests') or is_team_leader(current_user) %}<a href="{{ url_for('payments.create_request', project_id=project.id) }}">Payment request</a>{% endif %}
+        {% if allowed_forms['daily-site-report'] %}<a href="{{ url_for('forms.create_form', form_key='daily-site-report', project_id=project.id) }}">Daily report</a>{% endif %}
+        {% if can_access_module(current_user, 'documents', 'create') %}<a href="{{ url_for('documents.upload_document', project_id=project.id) }}">Document</a>{% endif %}
+        {% if can_access_module(current_user, 'issues-risks', 'create') %}<a href="{{ url_for('issues.create_issue', project_id=project.id) }}">Issue / risk</a>{% endif %}
+        {% if can_access_module(current_user, 'service-ticket') %}<a href="{{ url_for('support.create_ticket', project_id=project.id, customer_name=project.customer_name) }}">Service ticket</a>{% endif %}
+        {% if can_access_module(current_user, 'warranty') %}<a href="{{ url_for('support.create_warranty', project_id=project.id, customer_name=project.customer_name) }}">Warranty</a>{% endif %}
+    </div>
+</section>
+
 <nav class="pcc-section-nav no-print" aria-label="Command center sections">
     <a href="#overview">Overview</a>
     <a href="#milestones">Milestones</a>

@@ -39,4 +39,5 @@ def test_upgrade_repairs_missing_payment_request_tables(app):
     current_revision = db.session.execute(
         sa.text("SELECT version_num FROM alembic_version")
     ).scalar_one()
-    assert current_revision == "b20i0000a001"
+    from alembic.script import ScriptDirectory
+    assert current_revision == ScriptDirectory("migrations").get_current_head()

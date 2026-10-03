@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% set cc = command_center %}
+{% from "components/icons.html" import icon as ui_icon %}
 
 {% macro progress_value(value, tone="primary") -%}
 <div class="cc-progress-value">
@@ -12,7 +13,7 @@
 
 {% macro kpi_card(label, value, icon, target, tone="primary", suffix="", note="View details") -%}
 <a class="cc-kpi cc-kpi-{{ tone }}" href="{{ target }}" aria-label="{{ label }}: {{ value }}{{ suffix }}. {{ note }}">
-  <div class="cc-kpi-top"><span class="cc-kpi-icon">{{ icon }}</span><span class="cc-kpi-arrow">↗</span></div>
+  <div class="cc-kpi-top"><span class="cc-kpi-icon">{% set icon_names = {'▦':'project','▶':'briefcase','◎':'chart','⚒':'settings','$':'wallet','▤':'form','◷':'clock','✓':'check','!':'alert'} %}{{ ui_icon(icon_names.get(icon, 'grid'),20) }}</span><span class="cc-kpi-arrow">↗</span></div>
   <div class="cc-kpi-value">{{ value }}{{ suffix }}</div>
   <div class="cc-kpi-label">{{ label }}</div>
   <div class="cc-kpi-note">{{ note }}</div>
@@ -20,20 +21,25 @@
 {%- endmacro %}
 
 {% block content %}
-<div class="cc-page mt-4">
+<div class="cc-page erp-dashboard">
   <div class="cc-heading d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
     <div>
-      <div class="cc-eyebrow">Executive portfolio overview</div>
+      <div class="cc-eyebrow">YOUR WORKSPACE, AT A GLANCE</div>
       <h2 class="fw-bold mb-1">Dashboard Command Center</h2>
       <p class="text-muted mb-0">{{ cc.scope_label }} · Snapshot as of {{ cc.as_of.strftime('%d %b %Y') }}</p>
     </div>
     <div class="d-flex gap-2 flex-wrap d-print-none">
-      <button type="button" class="btn btn-outline-dark" onclick="window.print()">🖨 Print / PDF</button>
-      <a class="btn btn-success" href="{{ cc.export_url }}">⬇ Export Excel (CSV)</a>
+      <button type="button" class="btn btn-outline-dark" onclick="window.print()">{{ ui_icon("form",16) }} Print / PDF</button>
+      <a class="btn btn-success" href="{{ cc.export_url }}">{{ ui_icon("chart",16) }} Export Excel (CSV)</a>
     </div>
   </div>
 
-  <form class="card border-0 shadow-sm cc-filter-card mb-4 d-print-none" method="get" action="{{ url_for('dashboard.dashboard') }}">
+  <section class="erp-welcome">
+    <div class="erp-welcome-copy"><div class="erp-welcome-tag">{{ ui_icon('sun',16) }} CADCEED-MAAL SOLAR ENERGY</div><h3>Welcome back, {{ current_user.full_name.split()[0] }}.</h3><p>Your projects, your people, your next steps.<br>Everything you need to keep work moving.</p><div class="erp-welcome-actions"><a class="btn btn-primary" href="{{ cc.links.projects }}">Explore projects {{ ui_icon('arrow',17) }}</a><a href="#attention" class="erp-hero-link">Review priorities <span>↗</span></a></div></div>
+    <div class="erp-orbit" aria-label="Overall project progress: {{ cc.kpis.overall_progress }} percent"><div class="erp-orbit-ring" style="--progress:{{ cc.kpis.overall_progress }}"><div><strong>{{ cc.kpis.overall_progress }}<small>%</small></strong><span>Overall progress</span></div></div><span class="erp-orbit-caption">{{ cc.kpis.active_projects }} active · {{ cc.kpis.total_projects }} total projects</span></div>
+  </section>
+  <div class="erp-dashboard-nav no-print"><a href="#executive-kpis" class="active">Overview</a><a href="#portfolio">Projects</a><a href="#approvals">Approvals</a>{% if cc.flags.finance %}<a href="#finance">Finance</a>{% endif %}<span>{{ ui_icon('clock',16) }} {{ cc.as_of.strftime('%A, %d %B') }}</span></div>
+  <form class="card border-0 shadow-sm cc-filter-card mb-4 d-print-none erp-filter-bar" method="get" action="{{ url_for('dashboard.dashboard') }}">
     <div class="card-body">
       <div class="row g-3 align-items-end">
         <div class="col-xl-3 col-md-6">

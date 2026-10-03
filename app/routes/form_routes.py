@@ -1,16 +1,19 @@
 from datetime import datetime, date
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from sqlalchemy import inspect, text, update
+from sqlalchemy.exc import SQLAlchemyError
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
+from app.form_layouts import form_sections
 from app.models import (
-    Project, SiteSurveyForm, LoadAssessmentForm, DailySiteReport,
+    Project, SiteSurveyForm, SolarPumpSurveyForm, LoadAssessmentForm, DailySiteReport,
     DeliveryNoteForm, TestingForm, CommissioningForm, HandoverForm,
     FORM_APPROVAL_STATUSES, ApprovalHistory, ProjectMilestone, Team,
 )
 from app.permissions import can_create_form, can_edit_form, can_delete_form, can_access_module
 from app.activity import log_activity, log_approval
-from app.notifications import notify_roles, notify_user
-from app.milestone_service import mark_milestone_started
+from app.notifications import notify_approvers, notify_user
+from app.milestone_service import mark_milestone_started, invalidate_evidence
 from app.team_leader_access import (
     assigned_projects_for_user, is_team_leader, led_teams_for_user,
     team_is_assigned_to_project, team_leader_can_access_daily_report,
@@ -44,25 +47,39 @@ def get_field_type(field_name, default_type):
 
 FORM_CONFIG = {
     "site-survey": {
-        "title": "Site Survey & Load Assessment Form", "model": SiteSurveyForm,
-        "template": "forms/site_survey.html",
-        "detail_template": "forms/detail.html",
+        "title": "Solar Off-Grid Site Survey & Load Assessment", "model": SiteSurveyForm,
+        "template": "forms/form_editor.html", "detail_template": "forms/detail.html",
         "fields": [
-            ("site_name", "Site Name", "text"), ("survey_date", "Survey Date", "date"),
-            ("surveyed_by", "Surveyed By", "text"), ("gps_coordinates", "GPS Coordinates", "text"),
-            ("roof_type", "Roof Type", "text"), ("roof_condition", "Roof Condition", "text"),
-            ("available_space", "Available Space", "text"), ("shading_status", "Shading Status", "text"),
-            ("existing_power_source", "Existing Power Source", "text"),
-            ("earthing_condition", "Earthing Condition", "text"), ("access_road", "Access Road", "text"),
-            ("assessment_date", "Load Assessment Date", "date"), ("assessed_by", "Assessed By", "text"),
-            ("daytime_load_kw", "Daytime Load kW", "text"), ("nighttime_load_kw", "Nighttime Load kW", "text"),
-            ("total_daily_consumption_kwh", "Total Daily Consumption kWh", "text"),
-            ("critical_loads", "Critical Loads", "textarea"), ("ac_loads", "AC Loads", "textarea"),
-            ("pump_loads", "Pump Loads", "textarea"), ("lighting_loads", "Lighting Loads", "textarea"),
-            ("backup_hours_required", "Backup Hours Required", "text"),
-            ("recommended_system_size", "Recommended System Size", "text"),
-            ("recommendation", "Technical Recommendation", "textarea"),
-            ("remarks", "Remarks", "textarea"),
+            ("survey_date", "Survey Date", "date"), ("surveyed_by", "Surveyed By", "text"),
+            ("gps_coordinates", "GPS Coordinates (Optional)", "text"),
+            ("existing_power_source", "Existing Power Source", "text"), ("power_supply", "Power Supply (Single / Three Phase)", "text"),
+            ("monthly_consumption_kwh", "Average Monthly Consumption (kWh)", "text"),
+            ("monthly_electricity_bill", "Average Monthly Electricity Bill (USD)", "text"),
+            ("ac_loads", "Major Loads (AC / Pump / Motor / Other)", "textarea"),
+            ("connected_load_kw", "Connected Load (kW)", "text"), ("estimated_peak_load_kw", "Estimated Peak Load (kW)", "text"),
+            ("total_daily_consumption_kwh", "Total Daily Energy (kWh/day)", "text"),
+            ("day_consumption_kwh", "Day Consumption (kWh/day)", "text"), ("night_consumption_kwh", "Night Consumption (kWh/night)", "text"),
+            ("critical_load_kw", "Critical Load (kW)", "text"), ("critical_energy_kwh", "Critical Energy (kWh/day)", "text"),
+            ("available_space", "Solar Installation Area / Available Space", "text"),
+            ("roof_type", "Installation Type / Roof Type", "text"), ("roof_condition", "Roof / Installation Condition", "text"),
+            ("shading_status", "Shading Condition", "text"), ("earthing_condition", "Earthing Condition", "text"),
+            ("inverter_battery_location", "Proposed Inverter & Battery Location", "text"), ("access_road", "Site Access", "text"),
+            ("remarks", "Surveyor Remarks / Special Requirements", "textarea"),
+        ],
+    },
+    "solar-pump-survey": {
+        "title": "Solar Pumping Site Survey", "model": SolarPumpSurveyForm,
+        "template": "forms/form_editor.html", "detail_template": "forms/detail.html",
+        "fields": [
+            ("survey_date", "Survey Date", "date"), ("surveyed_by", "Surveyed By", "text"), ("gps_coordinates", "GPS Coordinates (Optional)", "text"),
+            ("water_source", "Water Source (Borehole / Well / Surface)", "text"), ("total_depth_m", "Borehole / Well Total Depth (m)", "text"),
+            ("static_water_level_m", "Static Water Level (m)", "text"), ("dynamic_water_level_m", "Dynamic Water Level (m)", "text"),
+            ("required_flow_m3h", "Required Flow Rate (m³/h)", "text"), ("required_water_m3day", "Required Water per Day (m³/day)", "text"),
+            ("vertical_delivery_height_m", "Vertical Delivery Height (m)", "text"), ("horizontal_pipe_distance_m", "Horizontal Pipe Distance (m)", "text"),
+            ("pipe_diameter", "Pipe Diameter (inch/mm)", "text"), ("existing_pump", "Existing Pump (kW/HP, AC/DC, Phase)", "text"),
+            ("tank_details", "Water Tank (Capacity & Height)", "text"), ("solar_area", "Solar Panel Installation Area", "text"),
+            ("shading_status", "Shading Condition", "text"), ("access_road", "Site Access / Special Conditions", "text"),
+            ("remarks", "Surveyor Remarks", "textarea"),
         ],
     },
     "load-assessment": {
@@ -151,15 +168,26 @@ DATE_FIELDS = {
     "testing_date", "commissioning_date", "handover_date",
 }
 
-def parse_date(value):
+
+class FormValidationError(ValueError):
+    def __init__(self, field, message):
+        super().__init__(message)
+        self.field = field
+        self.message = message
+
+
+def parse_date(value, field_name=None):
     if not value:
         return None
-    return datetime.strptime(value, "%Y-%m-%d").date()
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise FormValidationError(field_name, "Enter a valid date.") from exc
 
 
 def form_reference(form_key, form_id=None):
     prefixes = {
-        "site-survey": "SSLA", "load-assessment": "LAF", "daily-site-report": "DSR",
+        "site-survey": "SSLA", "solar-pump-survey": "SPS", "load-assessment": "LAF", "daily-site-report": "DSR",
         "delivery-note": "DNF", "testing": "TST", "commissioning": "COM", "handover": "HOF",
     }
     prefix = prefixes.get(form_key, "FRM")
@@ -249,6 +277,7 @@ def validate_daily_report_scope(project_id, team_id, report_date, exclude_id=Non
 def get_counts():
     return {
         "site_surveys": SiteSurveyForm.query.count(),
+        "solar_pump_surveys": SolarPumpSurveyForm.query.count(),
         "load_assessments": LoadAssessmentForm.query.count(),
         "daily_reports": DailySiteReport.query.count(),
         "delivery_notes": DeliveryNoteForm.query.count(),
@@ -262,10 +291,24 @@ def build_form_data(form_key):
     for field_name, label, field_type in FORM_CONFIG[form_key]["fields"]:
         value = request.form.get(field_name)
         if field_name in DATE_FIELDS:
-            form_data[field_name] = parse_date(value)
+            form_data[field_name] = parse_date(value, field_name)
         else:
             form_data[field_name] = value
     return form_data
+
+
+def lock_form_project(project_id):
+    """Serialize duplicate checks, including on SQLite where FOR UPDATE is ignored."""
+    try:
+        project_id = int(project_id)
+    except (TypeError, ValueError):
+        raise ValueError("Select a valid project.")
+    result = db.session.execute(
+        update(Project).where(Project.id == project_id).values(id=Project.id)
+    )
+    if result.rowcount != 1:
+        raise ValueError("Select a valid project.")
+    return project_id
 
 def entry_to_values(entry, form_key):
     values = {}
@@ -276,6 +319,67 @@ def entry_to_values(entry, form_key):
         values[field_name] = value or ""
     return values
 
+
+def request_to_values(form_key):
+    return {
+        field_name: request.form.get(field_name, "")
+        for field_name, _, _ in FORM_CONFIG[form_key]["fields"]
+    }
+
+
+def required_form_fields(form_key):
+    if form_key == "daily-site-report":
+        return {"report_date", "work_done_today"}
+    return set()
+
+
+def render_form_editor(form_key, mode, config, values, selected_project="", selected_team="",
+                       selected_milestone="", approval_status="Draft", form_ref=None,
+                       invalid_fields=None, status_code=200):
+    response = render_template(
+        "forms/form_editor.html",
+        mode=mode,
+        form_key=form_key,
+        form_title=config["title"],
+        fields=get_render_fields(form_key),
+        sections=form_sections(form_key, get_render_fields(form_key)),
+        projects=get_projects(form_key),
+        daily_teams=get_daily_report_teams() if form_key == "daily-site-report" else [],
+        milestones=get_milestones(form_key),
+        daily_report_mode=form_key == "daily-site-report",
+        team_leader_mode=daily_report_self_service_mode() if form_key == "daily-site-report" else False,
+        selected_team=selected_team,
+        selected_milestone=selected_milestone,
+        values=values,
+        selected_project=selected_project,
+        approval_status=approval_status,
+        form_ref=form_ref or form_reference(form_key),
+        field_choices=FIELD_CHOICES,
+        invalid_fields=invalid_fields or {},
+        required_fields=required_form_fields(form_key),
+    )
+    return response, status_code
+
+
+def render_post_error(form_key, mode, config, message, field=None, form_ref=None, status_code=400):
+    db.session.rollback()
+    flash(message, "danger")
+    selected_project = request.form.get("project_id", "")
+    selected_team = request.form.get("team_id", "") if form_key == "daily-site-report" else ""
+    selected_milestone = request.form.get("milestone_id", "") if form_key == "daily-site-report" else ""
+    approval_status = request.form.get("approval_status", "Draft")
+    invalid_fields = {field: message} if field else {}
+    return render_form_editor(
+        form_key, mode, config, request_to_values(form_key),
+        selected_project=selected_project,
+        selected_team=selected_team,
+        selected_milestone=selected_milestone,
+        approval_status=approval_status,
+        form_ref=form_ref,
+        invalid_fields=invalid_fields,
+        status_code=status_code,
+    )
+
 def build_display_rows(entry, form_key):
     display_rows = []
     if form_key == "daily-site-report":
@@ -284,6 +388,15 @@ def build_display_rows(entry, form_key):
     for field_name, label, field_type in FORM_CONFIG[form_key]["fields"]:
         value = getattr(entry, field_name, "")
         display_rows.append((label, value or ""))
+    if form_key == "site-survey":
+        # The concise editor must not hide measurements recorded by older releases.
+        current_fields = {field[0] for field in FORM_CONFIG[form_key]["fields"]}
+        legacy_fields = [("site_name", "Site Name"), ("recommendation", "Recommendation")]
+        legacy_fields += [(name, label) for name, label, _ in FORM_CONFIG["load-assessment"]["fields"]]
+        for name, label in legacy_fields:
+            value = getattr(entry, name, None)
+            if name not in current_fields and value not in (None, ""):
+                display_rows.append((f"Legacy: {label}", value))
     return display_rows
 
 @form_bp.route("/")
@@ -363,40 +476,49 @@ def create_form(form_key):
     Model = config["model"]
 
     if request.method == "POST":
-        form_data = build_form_data(form_key)
-        form_data["project_id"] = request.form.get("project_id")
+        try:
+            form_data = build_form_data(form_key)
+        except FormValidationError as exc:
+            return render_post_error(form_key, "create", config, exc.message, exc.field)
+        try:
+            form_data["project_id"] = lock_form_project(request.form.get("project_id"))
+        except ValueError:
+            return render_post_error(form_key, "create", config, "Select a valid project.", "project_id")
         form_data["created_by_id"] = current_user.id
         form_data["approval_status"] = request.form.get("approval_status", "Draft")
+        if form_data["approval_status"] not in {"Draft", "Submitted"}:
+            return render_post_error(form_key, "create", config, "New forms must be Draft or Submitted for approval.", "approval_status")
+        if form_key not in {"daily-site-report", "load-assessment"}:
+            existing = Model.query.filter_by(project_id=form_data["project_id"]).first()
+            if existing:
+                flash(f"This project already has a {config['title']}. Open and edit the existing form instead of creating another one.", "warning")
+                return redirect(url_for("forms.view_form", form_key=form_key, form_id=existing.id))
         if form_key == "daily-site-report":
             form_data["team_id"] = request.form.get("team_id") or None
             form_data["milestone_id"] = request.form.get("milestone_id") or None
             if form_data["milestone_id"] and not ProjectMilestone.query.filter_by(id=form_data["milestone_id"], project_id=form_data["project_id"]).first():
-                flash("Selected milestone does not belong to this project.", "danger")
-                return redirect(url_for("forms.create_form", form_key=form_key))
+                return render_post_error(form_key, "create", config, "Selected milestone does not belong to this project.", "milestone_id")
             if daily_report_self_service_mode():
                 form_data["site_supervisor"] = current_user.full_name
             error = validate_daily_report_scope(
                 form_data["project_id"], form_data["team_id"], form_data.get("report_date")
             )
             if error:
-                flash(error, "danger")
-                return redirect(url_for("forms.create_form", form_key=form_key))
+                field = "team_id" if "Team" in error or "team" in error else "report_date"
+                return render_post_error(form_key, "create", config, error, field)
             if not (form_data.get("work_done_today") or "").strip():
-                flash("Work Completed Today is required.", "danger")
-                return redirect(url_for("forms.create_form", form_key=form_key))
+                return render_post_error(form_key, "create", config, "Work Completed Today is required.", "work_done_today")
         entry = Model(**form_data)
         db.session.add(entry)
         db.session.flush()
         if form_key == "daily-site-report":
             mark_milestone_started(entry.milestone_id)
         log_activity("Create", config["title"], entry.id, f"Created {config['title']} #{entry.id}")
-        if form_key == "daily-site-report" and entry.approval_status == "Submitted":
-            notify_roles(
-                ["Admin", "Management", "Operation Manager"],
-                subject=f"Daily report {form_reference(form_key, entry.id)} submitted",
-                message=f"{current_user.full_name} submitted a daily report for {entry.project.project_name} / {entry.team.team_name}.",
-                module="daily-site-report", record_id=entry.id,
-            )
+        if entry.approval_status == "Submitted":
+            notify_approvers(form_key,
+                subject=f"{config['title']} {form_reference(form_key, entry.id)} submitted",
+                message=f"{current_user.full_name} submitted {config['title']} for {entry.project.project_name}. Open Project Forms to review {form_reference(form_key, entry.id)}.",
+                record_id=entry.id, exclude_user_id=entry.created_by_id)
         db.session.commit()
         flash(f"{config['title']} saved successfully.", "success")
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=entry.id))
@@ -408,24 +530,16 @@ def create_form(form_key):
             "site_supervisor": current_user.full_name if daily_report_self_service_mode() else "",
         }
 
-    return render_template(
-        "forms/form_editor.html",
-        mode="create",
-        form_key=form_key,
-        form_title=config["title"],
-        fields=get_render_fields(form_key),
-        projects=get_projects(form_key),
-        daily_teams=get_daily_report_teams() if form_key == "daily-site-report" else [],
-        milestones=get_milestones(form_key),
-        daily_report_mode=form_key == "daily-site-report",
-        team_leader_mode=daily_report_self_service_mode() if form_key == "daily-site-report" else False,
-        values=initial_values,
+    return render_form_editor(
+        form_key,
+        "create",
+        config,
+        initial_values,
         selected_project=request.args.get("project_id", ""),
         selected_team=request.args.get("team_id", ""),
         selected_milestone=request.args.get("milestone_id", ""),
         approval_status="Draft",
         form_ref=form_reference(form_key),
-        field_choices=FIELD_CHOICES,
     )
 
 @form_bp.route("/<form_key>/<int:form_id>")
@@ -441,9 +555,11 @@ def view_form(form_key, form_id):
         flash("You can only view daily reports for a team you lead.", "danger")
         return redirect(url_for("forms.list_forms", form_key=form_key))
 
-    histories = ApprovalHistory.query.filter_by(
-        module=config["title"],
-        record_id=entry.id
+    history_modules = [config["title"]]
+    if form_key == "site-survey":
+        history_modules.extend(["Site Survey & Load Assessment", "Site Survey Form"])
+    histories = ApprovalHistory.query.filter(
+        ApprovalHistory.module.in_(history_modules), ApprovalHistory.record_id == entry.id
     ).order_by(ApprovalHistory.reviewed_at.desc()).all()
 
     return render_template(
@@ -453,7 +569,7 @@ def view_form(form_key, form_id):
         entry=entry,
         display_rows=build_display_rows(entry, form_key),
         can_edit_this_form=(can_access_daily_entry(entry, "edit") if form_key == "daily-site-report" else can_edit_form(current_user, form_key, entry)),
-        can_delete_this_form=can_delete_form(current_user),
+        can_delete_this_form=can_access_module(current_user, form_key, "delete"),
         can_review_this_form=(
             can_access_module(current_user, form_key, "approve")
             and entry.created_by_id != current_user.id
@@ -479,55 +595,62 @@ def edit_form(form_key, form_id):
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
 
     if request.method == "POST":
-        form_data = build_form_data(form_key)
-        new_project_id = request.form.get("project_id")
+        try:
+            form_data = build_form_data(form_key)
+        except FormValidationError as exc:
+            return render_post_error(form_key, "edit", config, exc.message, exc.field, form_ref=form_reference(form_key, entry.id))
+        try:
+            new_project_id = lock_form_project(request.form.get("project_id"))
+        except ValueError:
+            return render_post_error(form_key, "edit", config, "Select a valid project.", "project_id", form_ref=form_reference(form_key, entry.id))
+        if form_key not in {"daily-site-report", "load-assessment"}:
+            duplicate = config["model"].query.filter_by(project_id=new_project_id).filter(config["model"].id != entry.id).first()
+            if duplicate:
+                flash("The selected project already has this form. Edit its existing record.", "danger")
+                return redirect(url_for("forms.edit_form", form_key=form_key, form_id=form_id))
         if form_key == "daily-site-report":
             new_team_id = request.form.get("team_id") or None
             new_milestone_id = request.form.get("milestone_id") or None
             if new_milestone_id and not ProjectMilestone.query.filter_by(id=new_milestone_id, project_id=new_project_id).first():
-                flash("Selected milestone does not belong to this project.", "danger")
-                return redirect(url_for("forms.edit_form", form_key=form_key, form_id=form_id))
+                return render_post_error(form_key, "edit", config, "Selected milestone does not belong to this project.", "milestone_id", form_ref=form_reference(form_key, entry.id))
             if daily_report_self_service_mode():
                 form_data["site_supervisor"] = current_user.full_name
             error = validate_daily_report_scope(
                 new_project_id, new_team_id, form_data.get("report_date"), exclude_id=entry.id
             )
             if error:
-                flash(error, "danger")
-                return redirect(url_for("forms.edit_form", form_key=form_key, form_id=form_id))
+                field = "team_id" if "Team" in error or "team" in error else "report_date"
+                return render_post_error(form_key, "edit", config, error, field, form_ref=form_reference(form_key, entry.id))
             if not (form_data.get("work_done_today") or "").strip():
-                flash("Work Completed Today is required.", "danger")
-                return redirect(url_for("forms.edit_form", form_key=form_key, form_id=form_id))
+                return render_post_error(form_key, "edit", config, "Work Completed Today is required.", "work_done_today", form_ref=form_reference(form_key, entry.id))
             entry.team_id = new_team_id
             entry.milestone_id = new_milestone_id
             mark_milestone_started(entry.milestone_id)
+        invalidate_evidence(entry.project, current_user, form_key=form_key, record_id=entry.id)
         entry.project_id = new_project_id
         for key, value in form_data.items():
             setattr(entry, key, value)
-        if entry.approval_status in ["Rejected", "Need Correction"]:
+        if entry.approval_status != "Draft":
+            log_approval(config["title"], entry.id, entry.approval_status, "Draft", "Content edited; a new review is required.")
             entry.approval_status = "Draft"
+        entry.reviewed_by_id = None
+        entry.reviewed_at = None
+        entry.manager_comments = None
+        log_activity("Edit", config["title"], entry.id, "Updated form; saved as Draft.")
         db.session.commit()
         flash("Form updated successfully.", "success")
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
 
-    return render_template(
-        "forms/form_editor.html",
-        mode="edit",
-        form_key=form_key,
-        form_title=config["title"],
-        fields=get_render_fields(form_key),
-        projects=get_projects(form_key),
-        daily_teams=get_daily_report_teams() if form_key == "daily-site-report" else [],
-        milestones=get_milestones(form_key),
-        daily_report_mode=form_key == "daily-site-report",
-        team_leader_mode=daily_report_self_service_mode() if form_key == "daily-site-report" else False,
+    return render_form_editor(
+        form_key,
+        "edit",
+        config,
+        entry_to_values(entry, form_key),
         selected_team=str(entry.team_id or "") if form_key == "daily-site-report" else "",
         selected_milestone=str(entry.milestone_id or "") if form_key == "daily-site-report" else "",
-        values=entry_to_values(entry, form_key),
         selected_project=str(entry.project_id),
         approval_status=entry.approval_status,
         form_ref=form_reference(form_key, entry.id),
-        field_choices=FIELD_CHOICES,
     )
 
 
@@ -550,14 +673,11 @@ def submit_form(form_key, form_id):
     entry.approval_status = "Submitted"
     log_approval(config["title"], entry.id, previous_status, "Submitted", "Submitted for approval")
     log_activity("Submit", config["title"], entry.id, f"Submitted {config['title']} #{entry.id}")
+    notify_approvers(form_key,
+        subject=f"{config['title']} {form_reference(form_key, entry.id)} submitted",
+        message=f"{current_user.full_name} submitted {config['title']} for {entry.project.project_name}. Open Project Forms to review {form_reference(form_key, entry.id)}.",
+        record_id=entry.id, exclude_user_id=entry.created_by_id)
     db.session.commit()
-    if form_key == "daily-site-report":
-        notify_roles(
-            ["Admin", "Management", "Operation Manager"],
-            subject=f"Daily report {form_reference(form_key, entry.id)} submitted",
-            message=f"{current_user.full_name} submitted a daily report for {entry.project.project_name} / {entry.team.team_name if entry.team else 'Team'}.",
-            module="daily-site-report", record_id=entry.id,
-        )
     flash("Form submitted for approval.", "success")
     return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
 
@@ -587,34 +707,147 @@ def review_form(form_key, form_id):
         entry.reviewed_at = datetime.utcnow()
         log_approval(config["title"], entry.id, previous_status, new_status, entry.manager_comments)
         log_activity("Review", config["title"], entry.id, f"Changed status from {previous_status} to {new_status}")
+        if previous_status != new_status:
+            notify_user(entry.creator,
+                subject=f"{config['title']} {form_reference(form_key, entry.id)}: {new_status}",
+                message=entry.manager_comments or f"Your form is now {new_status}.",
+                module=form_key, record_id=entry.id)
         db.session.commit()
-        if form_key == "daily-site-report":
-            notify_user(
-                entry.creator,
-                subject=f"Daily report {form_reference(form_key, entry.id)}: {new_status}",
-                message=entry.manager_comments or f"Your daily report is now {new_status}.",
-                module="daily-site-report", record_id=entry.id,
-            )
         flash("Form review saved.", "success")
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
     return render_template("forms/review.html", form_key=form_key, form_title=config["title"], entry=entry)
 
-@form_bp.route("/<form_key>/<int:form_id>/delete", methods=["POST"])
+
+
+def _table_columns(table_name):
+    try:
+        inspector = inspect(db.engine)
+        if not inspector.has_table(table_name):
+            return set()
+        return {column["name"] for column in inspector.get_columns(table_name)}
+    except Exception:
+        current_app.logger.exception("Could not inspect table %s during form delete cleanup", table_name)
+        return set()
+
+
+def _safe_execute(statement, params):
+    try:
+        db.session.execute(text(statement), params)
+    except Exception:
+        current_app.logger.exception("Form delete cleanup SQL failed: %s", statement)
+
+
+def _cleanup_form_delete_links(form_key, form_title, record_id):
+    """Remove stale references that can block deleting legacy form records.
+
+    Older local databases may contain workflow or notification rows linked to a
+    form record without SQLAlchemy relationships/cascades.  Cleanup is written
+    against reflected tables and existing columns only, so it remains safe for
+    databases that are between historical phases.
+    """
+    ref = str(record_id)
+    columns = _table_columns("milestone_document_requirement")
+    if {"form_key", "form_record_id"}.issubset(columns):
+        _safe_execute(
+            'UPDATE milestone_document_requirement SET form_record_id = NULL '
+            'WHERE form_key = :form_key AND form_record_id = :record_id',
+            {"form_key": form_key, "record_id": record_id},
+        )
+
+    nullable_record_specs = [
+        ("notification", "module", "record_id"),
+        ("audit_log", "module", "record_id"),
+    ]
+    for table_name, module_col, record_col in nullable_record_specs:
+        columns = _table_columns(table_name)
+        if {module_col, record_col}.issubset(columns):
+            _safe_execute(
+                f'UPDATE {table_name} SET {record_col} = NULL '
+                f'WHERE ({module_col} = :form_key OR {module_col} = :form_title) AND {record_col} = :record_id',
+                {"form_key": form_key, "form_title": form_title, "record_id": record_id},
+            )
+
+    columns = _table_columns("approval_history")
+    if {"module", "record_id"}.issubset(columns):
+        _safe_execute(
+            'DELETE FROM approval_history '
+            'WHERE (module = :form_key OR module = :form_title) AND record_id = :record_id',
+            {"form_key": form_key, "form_title": form_title, "record_id": record_id},
+        )
+
+    related_specs = [
+        ("system_notification", "related_module", "related_ref"),
+        ("notification_log", "related_module", "related_ref"),
+        ("sms_queue", "related_module", "related_ref"),
+        ("ai_interaction_log", "related_module", "related_ref"),
+    ]
+    for table_name, module_col, ref_col in related_specs:
+        columns = _table_columns(table_name)
+        if {module_col, ref_col}.issubset(columns):
+            _safe_execute(
+                f'UPDATE {table_name} SET {module_col} = NULL, {ref_col} = NULL '
+                f'WHERE ({module_col} = :form_key OR {module_col} = :form_title) AND {ref_col} = :ref',
+                {"form_key": form_key, "form_title": form_title, "ref": ref},
+            )
+
+
+@form_bp.route("/<form_key>/<int:form_id>/delete", methods=["GET", "POST"])
 @login_required
 def delete_form(form_key, form_id):
     if form_key not in FORM_CONFIG:
         flash("Invalid form type.", "danger")
         return redirect(url_for("forms.forms_home"))
 
-    if not can_delete_form(current_user):
+    config = FORM_CONFIG[form_key]
+    entry = db.session.get(config["model"], form_id)
+    if entry is None:
+        flash("That form has already been deleted or no longer exists.", "warning")
+        return redirect(url_for("forms.list_forms", form_key=form_key))
+
+    if not can_access_module(current_user, form_key, "delete"):
         flash("Only Admin, Management, or Operation Manager can delete forms.", "danger")
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
 
-    config = FORM_CONFIG[form_key]
-    entry = config["model"].query.get_or_404(form_id)
-    log_activity("Delete", config["title"], entry.id, f"Deleted {config['title']} #{entry.id}")
-    db.session.delete(entry)
-    db.session.commit()
+    if request.method != "POST":
+        flash("Use the Delete Form button to confirm deletion.", "warning")
+        return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
+
+    project = entry.project
+    record_id = entry.id
+    table_name = entry.__tablename__
+    form_title = config["title"]
+    try:
+        if project is not None:
+            try:
+                invalidate_evidence(project, current_user, form_key=form_key, record_id=record_id)
+            except Exception:
+                current_app.logger.exception(
+                    "Milestone invalidation failed while deleting %s form %s; continuing cleanup.",
+                    form_key, record_id,
+                )
+        _cleanup_form_delete_links(form_key, form_title, record_id)
+        log_activity("Delete", form_title, None, f"Deleted {form_title} #{record_id}")
+        db.session.flush()
+        db.session.expunge(entry)
+        delete_result = db.session.execute(
+            text(f'DELETE FROM {table_name} WHERE id = :record_id'),
+            {"record_id": record_id},
+        )
+        if delete_result.rowcount != 1:
+            raise RuntimeError("Form record was not deleted; it may have changed during cleanup.")
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception(
+            "Failed to delete %s form %s: %s", form_key, form_id, exc
+        )
+        flash(
+            "The form could not be deleted because the database rejected the cleanup. "
+            f"Error: {exc}",
+            "danger",
+        )
+        return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
+
     flash("Form deleted successfully.", "success")
     return redirect(url_for("forms.list_forms", form_key=form_key))
 
@@ -637,3 +870,8 @@ def print_form(form_key, form_id):
         entry=entry,
         display_rows=build_display_rows(entry, form_key),
     )
+
+
+
+
+

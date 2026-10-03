@@ -5,6 +5,8 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
 from app import db
+from app.money_utils import parse_money
+from sqlalchemy import update
 from app.models import (
     PaymentRequest, PaymentRequestPayment, Project, MaterialRequest, Branch, Department, Team,
     PAYMENT_REQUEST_STATUSES, PAYMENT_REQUEST_CATEGORIES, PAYMENT_REQUEST_METHODS,
@@ -103,7 +105,7 @@ def update_payment_request_status(pr):
         return
     if pr.total_paid <= 0:
         return
-    if pr.balance <= 0.01:
+    if round(pr.balance, 2) <= 0:
         pr.status = "Paid"
     else:
         pr.status = "Partially Paid"
@@ -175,7 +177,7 @@ def my_requests():
 def create_request():
     leader_mode, available_teams, available_projects = payment_projects_and_teams()
     if request.method == "POST":
-        amount = parse_float(request.form.get("amount"))
+        amount = parse_money(request.form.get("amount"))
         payee_name = (request.form.get("payee_name") or "").strip()
         purpose = (request.form.get("purpose") or "").strip()
         if amount <= 0:
@@ -393,6 +395,10 @@ def cancel_request(request_id):
 @payments_bp.route("/requests/<int:request_id>/payment", methods=["POST"])
 @login_required
 def add_payment(request_id):
+    # Lock before loading the balance so simultaneous payments cannot both
+    # spend the same remaining amount (also works on SQLite).
+    db.session.execute(update(PaymentRequest).where(PaymentRequest.id == request_id).values(id=PaymentRequest.id))
+    db.session.expire_all()
     pr = PaymentRequest.query.get_or_404(request_id)
     if not can_finance_payment_requests():
         flash("Only Admin, Management or Finance Officer can record payments.", "danger")
@@ -400,16 +406,21 @@ def add_payment(request_id):
     if pr.status not in ("Approved", "Partially Paid"):
         flash("This request must be fully approved before recording a payment.", "danger")
         return redirect(url_for("payments.request_detail", request_id=request_id))
-    amount = parse_float(request.form.get("amount"))
+    amount = parse_money(request.form.get("amount"))
     if amount <= 0:
         flash("Payment amount must be greater than zero.", "danger")
         return redirect(url_for("payments.request_detail", request_id=request_id))
-    if amount > pr.balance + 0.01:
+    if amount > round(pr.balance, 2):
         flash(f"Payment amount ({amount:,.2f}) exceeds the remaining balance ({pr.balance:,.2f}).", "danger")
         return redirect(url_for("payments.request_detail", request_id=request_id))
 
+    try:
+        payment_date = parse_date(request.form.get("payment_date")) or date.today()
+    except ValueError:
+        flash("Enter a valid payment date.", "danger")
+        return redirect(url_for("payments.request_detail", request_id=request_id))
     payment = PaymentRequestPayment(
-        payment_date=parse_date(request.form.get("payment_date")) or date.today(),
+        payment_date=payment_date,
         amount=amount,
         currency=pr.currency,
         payment_method=request.form.get("payment_method") or "Cash",

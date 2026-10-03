@@ -25,7 +25,7 @@ def create_app():
     # because the current working directory can sometimes differ from the
     # folder that contains .env.
     project_root = Path(__file__).resolve().parent.parent
-    load_dotenv(project_root / ".env", override=True)
+    load_dotenv(project_root / ".env", override=False)
     load_dotenv(override=False)
     app = Flask(__name__)
 
@@ -84,7 +84,11 @@ def create_app():
 
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(int(user_id))
+        try:
+            user = db.session.get(User, int(user_id))
+        except (TypeError, ValueError):
+            return None
+        return user if user and user.is_active else None
 
     # Phase 17B.2G Admin Account Recovery: disabled unless
     # ADMIN_RECOVERY_PASSWORD is set in environment variables.

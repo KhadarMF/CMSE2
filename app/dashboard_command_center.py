@@ -8,7 +8,7 @@ records rather than a second, manually maintained dashboard table.
 
 from datetime import date, datetime
 
-from flask import url_for
+from flask import current_app, url_for
 
 from app.models import (
     Branch,
@@ -26,6 +26,7 @@ from app.models import (
     ProjectTask,
     PROJECT_STATUSES,
     SiteSurveyForm,
+    SolarPumpSurveyForm,
     Team,
     TestingForm,
     WhatsAppMessage,
@@ -37,6 +38,7 @@ from app.team_leader_access import assigned_projects_for_user, is_team_leader
 
 FORM_MODELS = (
     SiteSurveyForm,
+    SolarPumpSurveyForm,
     LoadAssessmentForm,
     DailySiteReport,
     DeliveryNoteForm,
@@ -72,7 +74,7 @@ def _date_arg(args, name, fallback):
 
 
 def _average(values):
-    values = list(values)
+    values = [value for value in values if value is not None]
     return round(sum(values) / len(values)) if values else 0
 
 
@@ -286,12 +288,52 @@ def build_dashboard_command_center(user, args):
     flags = _permission_flags(user)
     links = _build_links(flags)
     rows = []
+    project_metric_errors = []
     for project in projects:
-        snapshot = build_project_command_center(project, today=as_of)
+        try:
+            snapshot = build_project_command_center(project, today=as_of)
+        except Exception as exc:
+            current_app.logger.exception("Dashboard project metrics failed for project %s", project.id)
+            project_metric_errors.append({"project": project, "error": str(exc)})
+            project_url = (
+                url_for("projects.detail", project_id=project.id)
+                if flags["projects"]
+                else f"{url_for('dashboard.dashboard')}#portfolio"
+            )
+            rows.append(
+                {
+                    "project": project,
+                    "overall": 0,
+                    "physical": 0,
+                    "financial_progress": 0,
+                    "revenue": 0,
+                    "committed_cost": 0,
+                    "paid_cost": 0,
+                    "outstanding": 0,
+                    "profit": 0,
+                    "materials": 0,
+                    "procurement": 0,
+                    "documents": 0,
+                    "risk": "Critical",
+                    "open_issues": 0,
+                    "overdue_tasks": 0,
+                    "is_delayed": True,
+                    "days_remaining": None,
+                    "health_score": 0,
+                    "last_report_date": None,
+                    "url": project_url,
+                    "snapshot": None,
+                    "metric_error": True,
+                }
+            )
+            continue
         financial = snapshot["financials"]
         schedule = snapshot["schedule"]
         financial_progress = _percent(financial["paid_cost"], financial["committed_cost"])
         last_report = snapshot["physical"]["latest_report"]
+        materials_progress = snapshot.get("materials", {}).get("progress")
+        if materials_progress is None:
+            materials_progress = snapshot["procurement"]["progress"]
         rows.append(
             {
                 "project": project,
@@ -303,6 +345,7 @@ def build_dashboard_command_center(user, args):
                 "paid_cost": financial["paid_cost"],
                 "outstanding": financial["outstanding"],
                 "profit": financial["profit"],
+                "materials": materials_progress,
                 "procurement": snapshot["procurement"]["progress"],
                 "documents": snapshot["documents"]["progress"],
                 "risk": snapshot["risks"]["level"],
@@ -315,6 +358,7 @@ def build_dashboard_command_center(user, args):
                         and snapshot["forecast"]["variance"] < -10
                     )
                 ),
+                "metric_error": False,
                 "days_remaining": schedule["days_remaining"],
                 "health_score": snapshot["forecast"]["health_score"],
                 "last_report_date": last_report.report_date if last_report else None,
@@ -444,6 +488,7 @@ def build_dashboard_command_center(user, args):
         "overall_progress": _average(row["overall"] for row in rows),
         "physical_progress": _average(row["physical"] for row in rows),
         "financial_progress": finance["payment_progress"],
+        "materials_progress": _average(row["materials"] for row in rows),
         "procurement_progress": _average(row["procurement"] for row in rows),
         "document_progress": _average(row["documents"] for row in rows),
         "pending_approvals": documents_pending + forms["pending"] + pending_manager + pending_finance,
@@ -477,6 +522,7 @@ def build_dashboard_command_center(user, args):
 
     attention = []
     attention_specs = [
+        (len(project_metric_errors), "danger", "Project metrics need repair", "One or more project progress calculations failed; open the project and refresh its evidence.", f"{url_for('dashboard.dashboard')}#portfolio"),
         (operations["critical_issues"], "danger", "Critical issues", "Resolve or escalate immediately.", links["critical_issues"]),
         (operations["overdue_tasks"], "danger", "Overdue tasks", "Assign recovery owners and revised dates.", links["overdue_tasks"]),
         (kpis["delayed_projects"], "warning", "Delayed projects", "Review schedule variance in the portfolio.", f"{url_for('dashboard.dashboard')}#portfolio"),
@@ -527,6 +573,7 @@ def build_dashboard_command_center(user, args):
         "status_distribution": status_distribution,
         "data_quality": data_quality,
         "attention": attention,
+        "project_metric_errors": project_metric_errors,
         "executive": executive,
         "upcoming_tasks": upcoming_tasks,
         "recent_documents": recent_documents,

@@ -4,6 +4,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 
 from app import db
+from app.money_utils import parse_money
+from sqlalchemy import update, select
 from app.models import (
     Project, Employee, ProjectPayrollBatch, ProjectPayrollEntry, ProjectPayrollPayment,
     PROJECT_PAYROLL_BATCH_STATUSES, PROJECT_PAYROLL_ENTRY_STATUSES, PROJECT_PAYMENT_METHODS
@@ -32,7 +34,7 @@ def employee_previous_balance(employee_id):
 def update_entry_status(entry):
     if entry.total_paid <= 0:
         if entry.status not in ["Cancelled"]: entry.status = "Approved"
-    elif entry.balance <= 0: entry.status = "Paid"
+    elif round(entry.balance, 2) <= 0: entry.status = "Paid"
     else: entry.status = "Partially Paid"
 
 def update_batch_status(batch):
@@ -73,6 +75,9 @@ def create_batch():
     employees = Employee.query.filter_by(status="Active").order_by(Employee.full_name.asc()).all()
     projects = Project.query.order_by(Project.project_name.asc()).all()
     if request.method == "POST":
+        if request.form.get("status", "Submitted") not in {"Draft", "Submitted"}:
+            flash("New payroll batches must be Draft or Submitted for approval.", "danger")
+            return redirect(url_for("payroll.create_batch"))
         selected_employee_ids = request.form.getlist("employee_id")
         if not selected_employee_ids or not any(selected_employee_ids):
             flash("Select at least one employee.", "danger")
@@ -91,7 +96,7 @@ def create_batch():
             db.session.rollback(); flash("No payroll lines were created because amounts are empty.", "danger"); return redirect(url_for("payroll.create_batch"))
         db.session.commit(); flash(f"Project payroll batch created with {created_count} employee lines.", "success")
         return redirect(url_for("payroll.batch_detail", batch_id=batch.id))
-    return render_template("payroll/batch_form.html", employees=employees, projects=projects, statuses=PROJECT_PAYROLL_BATCH_STATUSES)
+    return render_template("payroll/batch_form.html", employees=employees, projects=projects, statuses=["Draft", "Submitted"])
 
 @payroll_bp.route("/batches/<int:batch_id>")
 @login_required
@@ -99,13 +104,16 @@ def batch_detail(batch_id):
     batch = ProjectPayrollBatch.query.get_or_404(batch_id)
     return render_template("payroll/batch_detail.html", batch=batch, payment_methods=PROJECT_PAYMENT_METHODS)
 
-@payroll_bp.route("/batches/<int:batch_id>/approve")
+@payroll_bp.route("/batches/<int:batch_id>/approve", methods=["POST"])
 @login_required
 def approve_batch(batch_id):
     if not can_manage_payroll():
         flash("Only Admin, Management or Operation Manager can approve payroll batches.", "danger")
         return redirect(url_for("payroll.batch_detail", batch_id=batch_id))
     batch = ProjectPayrollBatch.query.get_or_404(batch_id)
+    if batch.status not in {"Draft", "Submitted"}:
+        flash("Only Draft or Submitted batches can be approved.", "danger")
+        return redirect(url_for("payroll.batch_detail", batch_id=batch.id))
     batch.status = "Approved"; batch.approved_by_id = current_user.id; batch.approved_at = datetime.utcnow()
     for entry in batch.entries:
         if entry.status == "Pending": entry.status = "Approved"
@@ -135,11 +143,27 @@ def add_payment(entry_id):
     if not can_pay_payroll():
         flash("Only Admin, Management or Finance Officer can record payments.", "danger")
         return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
-    entry = ProjectPayrollEntry.query.get_or_404(entry_id); amount = parse_float(request.form.get("amount"))
+    batch_id = select(ProjectPayrollEntry.batch_id).where(ProjectPayrollEntry.id == entry_id).scalar_subquery()
+    db.session.execute(update(ProjectPayrollBatch).where(ProjectPayrollBatch.id == batch_id).values(id=ProjectPayrollBatch.id))
+    db.session.execute(update(ProjectPayrollEntry).where(ProjectPayrollEntry.id == entry_id).values(id=ProjectPayrollEntry.id))
+    db.session.expire_all()
+    entry = ProjectPayrollEntry.query.get_or_404(entry_id)
+    if entry.status not in {"Approved", "Partially Paid"} or entry.batch.status not in {"Approved", "Partially Paid"}:
+        flash("Payroll must be approved before recording payment.", "danger")
+        return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
+    amount = parse_money(request.form.get("amount"))
     if amount <= 0:
         flash("Payment amount must be greater than zero.", "danger"); return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
-    payment = ProjectPayrollPayment(payroll_entry_id=entry.id, payment_date=parse_date(request.form.get("payment_date")) or date.today(), amount=amount, payment_method=request.form.get("payment_method") or "Cash", reference_no=request.form.get("reference_no"), paid_by_id=current_user.id, notes=request.form.get("notes"))
-    db.session.add(payment)
+    if amount > round(entry.balance, 2):
+        flash("Payment exceeds the remaining payroll balance.", "danger")
+        return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
+    try:
+        payment_date = parse_date(request.form.get("payment_date")) or date.today()
+    except ValueError:
+        flash("Enter a valid payment date.", "danger")
+        return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
+    payment = ProjectPayrollPayment(payment_date=payment_date, amount=amount, payment_method=request.form.get("payment_method") or "Cash", reference_no=request.form.get("reference_no"), paid_by_id=current_user.id, notes=request.form.get("notes"))
+    entry.payments.append(payment)
     update_entry_status(entry); update_batch_status(entry.batch); db.session.commit(); flash("Payment recorded successfully.", "success")
     # Phase 20B: auto-journal AFTER the payment is committed - a journal
     # failure must never undo the payment itself.

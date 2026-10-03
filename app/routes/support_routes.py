@@ -1,9 +1,11 @@
+from app.pdf_service import pdf_response
 from datetime import datetime, date, timedelta
 import json
 import re
 from flask import Blueprint, render_template, request, redirect, url_for, flash, make_response
 from flask_login import login_required, current_user
 from app import db
+from app.project_context import parse_optional_id, resolve_project_customer
 from app.notification_gateway import create_notification_event
 from app.ai_service import call_ai, make_ai_ref, CADCEED_SYSTEM_PROMPT
 from app.permissions import can_access_module
@@ -27,6 +29,31 @@ def parse_date(v):
 
 def make_ref(prefix):
     return f"{prefix}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+
+
+def _support_create_context(project_id=None, customer_id=None, customer_name=None):
+    selected_project, selected_customer = resolve_project_customer(
+        project_id=project_id, customer_id=customer_id, customer_name=customer_name
+    )
+    return dict(
+        projects=Project.query.order_by(Project.project_name.asc()).all(),
+        customers=Customer.query.order_by(Customer.customer_name.asc()).all(),
+        employees=Employee.query.order_by(Employee.status.asc(), Employee.full_name.asc()).all(),
+        users=User.query.filter_by(is_active=True).order_by(User.full_name.asc()).all(),
+        warranties=WarrantyRegistration.query.order_by(WarrantyRegistration.created_at.desc()).all(),
+        statuses=TICKET_STATUSES,
+        priorities=TICKET_PRIORITIES,
+        categories=TICKET_CATEGORIES,
+        sources=COMPLAINT_SOURCES,
+        selected_project=selected_project,
+        selected_customer=selected_customer,
+        selected_customer_name=(
+            selected_project.customer_name if selected_project
+            else selected_customer.customer_name if selected_customer
+            else (customer_name or '')
+        ),
+        active_project_context=selected_project,
+    )
 
 
 def _get_ai_setting():
@@ -204,11 +231,23 @@ def warranties():
 @login_required
 def create_warranty():
     if request.method == 'POST':
-        customer_id = request.form.get('customer_id') or None
-        customer = Customer.query.get(customer_id) if customer_id else None
+        project_id = parse_optional_id(request.form.get('project_id'))
+        project, customer = resolve_project_customer(
+            project_id=project_id,
+            customer_id=request.form.get('customer_id'),
+            customer_name=request.form.get('customer_name'),
+        )
+        if project_id and not project:
+            flash('The selected project no longer exists.', 'danger')
+            return redirect(url_for('support.create_warranty'))
+        customer_id = customer.id if customer else None
+        customer_name = project.customer_name if project else ((request.form.get('customer_name') or '').strip())
+        if not customer_name:
+            flash('Select a customer before saving the warranty.', 'danger')
+            return redirect(url_for('support.create_warranty', project_id=project_id or None))
         warranty = WarrantyRegistration(
-            ref_no=make_ref('WRN'), project_id=request.form.get('project_id') or None,
-            customer_id=customer_id, customer_name=request.form.get('customer_name') or (customer.customer_name if customer else ''),
+            ref_no=make_ref('WRN'), project_id=project_id,
+            customer_id=customer_id, customer_name=customer_name,
             system_type=request.form.get('system_type'), capacity=request.form.get('capacity'),
             installation_date=parse_date(request.form.get('installation_date')),
             handover_date=parse_date(request.form.get('handover_date')),
@@ -216,7 +255,25 @@ def create_warranty():
             status=request.form.get('status') or 'Active', registered_by_id=current_user.id, notes=request.form.get('notes'))
         db.session.add(warranty); db.session.commit(); flash(f'Warranty {warranty.ref_no} created.', 'success')
         return redirect(url_for('support.warranty_detail', warranty_id=warranty.id))
-    return render_template('support/warranty_form.html', projects=Project.query.order_by(Project.project_name.asc()).all(), customers=Customer.query.order_by(Customer.customer_name.asc()).all(), statuses=WARRANTY_STATUSES)
+    selected_project, selected_customer = resolve_project_customer(
+        project_id=request.args.get('project_id'),
+        customer_id=request.args.get('customer_id'),
+        customer_name=request.args.get('customer_name'),
+    )
+    return render_template(
+        'support/warranty_form.html',
+        projects=Project.query.order_by(Project.project_name.asc()).all(),
+        customers=Customer.query.order_by(Customer.customer_name.asc()).all(),
+        statuses=WARRANTY_STATUSES,
+        selected_project=selected_project,
+        selected_customer=selected_customer,
+        selected_customer_name=(
+            selected_project.customer_name if selected_project
+            else selected_customer.customer_name if selected_customer
+            else (request.args.get('customer_name') or '')
+        ),
+        active_project_context=selected_project,
+    )
 
 @support_bp.route('/warranties/<int:warranty_id>')
 @login_required
@@ -248,19 +305,29 @@ def tickets():
 @login_required
 def create_ticket():
     if request.method == 'POST':
-        customer_id = request.form.get('customer_id') or None
-        customer = Customer.query.get(customer_id) if customer_id else None
+        project_id = parse_optional_id(request.form.get('project_id'))
+        project, customer = resolve_project_customer(
+            project_id=project_id,
+            customer_id=request.form.get('customer_id'),
+            customer_name=request.form.get('new_customer_name') or request.form.get('customer_name'),
+        )
+        if project_id and not project:
+            flash('The selected project no longer exists.', 'danger')
+            return redirect(url_for('support.create_ticket'))
+        customer_id = customer.id if customer else None
         new_customer_name = (request.form.get('new_customer_name') or '').strip()
-        customer_name = (customer.customer_name if customer else new_customer_name or (request.form.get('customer_name') or '').strip())
+        customer_name = (
+            project.customer_name if project else
+            customer.customer_name if customer else
+            new_customer_name or (request.form.get('customer_name') or '').strip()
+        )
         if not customer_name:
             flash('Please select a customer from the Customers table or enter a New Customer Name.', 'warning')
-            return render_template('support/ticket_form.html',
-                projects=Project.query.order_by(Project.project_name.asc()).all(),
-                customers=Customer.query.order_by(Customer.customer_name.asc()).all(),
-                employees=Employee.query.order_by(Employee.status.asc(), Employee.full_name.asc()).all(),
-                users=User.query.filter_by(is_active=True).order_by(User.full_name.asc()).all(),
-                warranties=WarrantyRegistration.query.order_by(WarrantyRegistration.created_at.desc()).all(),
-                statuses=TICKET_STATUSES, priorities=TICKET_PRIORITIES, categories=TICKET_CATEGORIES, sources=COMPLAINT_SOURCES)
+            return render_template('support/ticket_form.html', **_support_create_context(
+                project_id=project_id,
+                customer_id=customer_id,
+                customer_name=new_customer_name,
+            ))
         due_date = parse_date(request.form.get('due_date'))
         if not due_date:
             priority = request.form.get('priority') or 'Medium'
@@ -268,10 +335,10 @@ def create_ticket():
             due_date = date.today() + timedelta(days=days)
         ticket = SupportTicket(
             ref_no=make_ref('TKT'), ticket_date=parse_date(request.form.get('ticket_date')) or date.today(),
-            customer_id=customer_id, project_id=request.form.get('project_id') or None, warranty_id=request.form.get('warranty_id') or None,
+            customer_id=customer_id, project_id=project_id, warranty_id=request.form.get('warranty_id') or None,
             warranty_note=request.form.get('warranty_note'),
             customer_name=customer_name,
-            phone=request.form.get('phone') or (customer.phone if customer else None), location=request.form.get('location') or (customer.address if customer else None), complaint_source=request.form.get('complaint_source'),
+            phone=request.form.get('phone') or (customer.phone if customer else None), location=request.form.get('location') or (project.location if project else None) or (customer.address if customer else None), complaint_source=request.form.get('complaint_source'),
             preferred_visit_date=parse_date(request.form.get('preferred_visit_date')), due_date=due_date,
             issue_category=request.form.get('issue_category'), issue_description=request.form.get('issue_description'),
             priority=request.form.get('priority') or 'Medium', status=request.form.get('status') or 'Open',
@@ -286,12 +353,11 @@ def create_ticket():
             create_notification_event("Service Ticket Assigned to You", msg, target_user=ticket.assigned_employee.user_account, priority=ticket.priority, category="Service Ticket", related_module="Support Ticket", related_ref=ticket.ref_no, send_email_now=False, queue_sms=True, created_by_id=current_user.id)
         db.session.commit(); flash(f'Ticket {ticket.ref_no} created and notifications queued.', 'success')
         return redirect(url_for('support.ticket_detail', ticket_id=ticket.id))
-    return render_template('support/ticket_form.html',
-        projects=Project.query.order_by(Project.project_name.asc()).all(),
-        customers=Customer.query.order_by(Customer.customer_name.asc()).all(),
-        employees=Employee.query.order_by(Employee.status.asc(), Employee.full_name.asc()).all(), users=User.query.filter_by(is_active=True).order_by(User.full_name.asc()).all(),
-        warranties=WarrantyRegistration.query.order_by(WarrantyRegistration.created_at.desc()).all(),
-        statuses=TICKET_STATUSES, priorities=TICKET_PRIORITIES, categories=TICKET_CATEGORIES, sources=COMPLAINT_SOURCES)
+    return render_template('support/ticket_form.html', **_support_create_context(
+        project_id=request.args.get('project_id'),
+        customer_id=request.args.get('customer_id'),
+        customer_name=request.args.get('customer_name'),
+    ))
 
 @support_bp.route('/tickets/<int:ticket_id>')
 @login_required
@@ -393,13 +459,4 @@ def ticket_report(ticket_id):
 def ticket_pdf(ticket_id):
     ticket = SupportTicket.query.get_or_404(ticket_id)
     html = render_template('support/ticket_report.html', ticket=ticket, generated_at=datetime.utcnow(), pdf_mode=True)
-    try:
-        from weasyprint import HTML
-        pdf = HTML(string=html, base_url=request.host_url).write_pdf()
-        response = make_response(pdf)
-        response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'inline; filename={ticket.ref_no}.pdf'
-        return response
-    except Exception:
-        flash('PDF engine is not available. Print view opened instead.', 'warning')
-        return html
+    return pdf_response(html, f"{ticket.ref_no}.pdf")

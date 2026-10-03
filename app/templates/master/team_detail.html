@@ -22,7 +22,7 @@
 <thead><tr><th>Employee</th><th>Job Title</th><th>Role</th><th>Status</th><th></th></tr></thead>
 <tbody>
 {% for m in team.members if m.is_active %}
-<tr><td>{{ m.employee.full_name }}</td><td>{{ m.employee.job_title or "" }}</td><td>{{ m.member_role or "" }}</td><td>{% if m.is_active %}Active{% else %}Inactive{% endif %}</td><td><a class="btn btn-sm btn-outline-danger" href="{{ url_for('master.remove_team_member', team_id=team.id, member_id=m.id) }}">Remove</a></td></tr>
+<tr><td>{{ m.employee.full_name }}</td><td>{{ m.employee.job_title or "" }}</td><td>{{ m.member_role or "" }}</td><td>{% if m.is_active %}Active{% else %}Inactive{% endif %}</td><td><form method="post" action="{{ url_for('master.remove_team_member', team_id=team.id, member_id=m.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger">Remove</button></form></td></tr>
 {% else %}<tr><td colspan="5" class="text-muted">No active members.</td></tr>{% endfor %}
 </tbody>
 </table>

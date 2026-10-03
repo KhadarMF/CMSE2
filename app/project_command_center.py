@@ -9,6 +9,7 @@ import re
 
 from app.models import PROJECT_STATUSES, SalesQuotation
 from app.milestone_service import build_project_milestone_portfolio
+from app.survey_config import survey_group
 
 
 APPROVED_QUOTATION_STATUSES = {"Approved by Customer", "Converted to Project"}
@@ -24,8 +25,6 @@ MATERIAL_STATUS_SCORES = {
     "Closed": 100,
 }
 FORM_GROUPS = (
-    ("Site survey", "site_surveys", "site-survey"),
-    ("Load assessment", "load_assessments", "load-assessment"),
     ("Daily site report", "daily_reports", "daily-site-report"),
     ("Delivery note", "delivery_notes", "delivery-note"),
     ("Testing", "testing_forms", "testing"),
@@ -185,7 +184,7 @@ def _documents(project):
     form_rows = []
     form_records = []
     slot_scores = []
-    for label, relationship, form_key in FORM_GROUPS:
+    for label, relationship, form_key in (survey_group(project),) + FORM_GROUPS:
         records = list(getattr(project, relationship))
         form_records.extend(records)
         approved = sum(1 for item in records if item.approval_status in APPROVED_STATUSES)

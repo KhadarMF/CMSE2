@@ -1,3 +1,4 @@
+{% from "components/icons.html" import icon %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -6,15 +7,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/refresh.css') }}?v=21" rel="stylesheet">
 </head>
-<body class="cmse-body">
+<body class="cmse-body erp-refresh {{ 'erp-authenticated' if current_user.is_authenticated else 'erp-public' }}">
+<a class="erp-skip-link" href="#cmseMainContent">Skip to content</a>
 {% if current_user.is_authenticated %}
+{% set cmse_project_context = active_project_context if active_project_context is defined and active_project_context else none %}
 <div class="cmse-shell">
     <aside id="cmseSidebar" class="cmse-sidebar no-print">
         <div class="cmse-sidebar-header">
             <a class="cmse-brand" href="{{ url_for('dashboard.dashboard') }}">
-                <span class="cmse-brand-mark">☀</span>
-                <span class="cmse-brand-text">{{ company_profile.logo_text or "CMSE" }}</span>
+                <span class="cmse-brand-mark">{{ icon("sun", 24) }}</span>
+                <span class="cmse-brand-text">{{ company_profile.logo_text or "CMSE" }}<small>Solar operations</small></span>
             </a>
             <button class="cmse-sidebar-close" type="button" aria-label="Close menu" onclick="document.body.classList.remove('cmse-sidebar-open')">×</button>
         </div>
@@ -23,18 +27,19 @@
             <input id="cmseMenuSearch" class="form-control form-control-sm" type="search" placeholder="Search menu..." aria-label="Search menu">
         </div>
 
-        <nav class="cmse-nav" id="cmseNav">
-            <a class="cmse-nav-link" href="{{ url_for('dashboard.dashboard') }}" data-nav-title="Dashboard" data-nav-group="Dashboard"><span>🏠</span><strong>Dashboard</strong></a>
+        <nav class="cmse-nav" id="cmseNav" aria-label="Main navigation">
+            <div class="erp-nav-label">WORKSPACE</div>
+            <a class="cmse-nav-link" href="{{ url_for('dashboard.dashboard') }}" data-nav-title="Dashboard" data-nav-group="Dashboard"><span>{{ icon("grid") }}</span><strong>Dashboard</strong></a>
 
             <div id="cmseFavoritesBlock" class="cmse-nav-section cmse-dynamic-block" style="display:none;">
-                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navFavorites" aria-expanded="true"><span>⭐</span><strong>Favorites</strong></button>
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navFavorites" aria-expanded="true"><span>{{ icon("star") }}</span><strong>Favorites</strong></button>
                 <div id="navFavorites" class="collapse show cmse-nav-sub cmse-dynamic-list"></div>
             </div>
 
             {% if can_access_module(current_user, 'customers', 'view') or can_access_module(current_user, 'employees', 'view') or can_access_module(current_user, 'teams', 'view') or can_access_module(current_user, 'material-items', 'view') or current_user.role == "Admin" %}
             <div class="cmse-nav-section" data-section="Master Data">
-                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navMaster" aria-expanded="true"><span>🧾</span><strong>Master Data</strong></button>
-                <div id="navMaster" class="collapse show cmse-nav-sub">
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navMaster" aria-expanded="false"><span>{{ icon("users") }}</span><strong>Master Data</strong></button>
+                <div id="navMaster" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'customers') %}<a href="{{ url_for('master.customers') }}" data-nav-title="Customers" data-nav-group="Master Data">Customers</a>{% endif %}
                     {% if current_user.role == "Admin" %}<a href="{{ url_for('admin.branches') }}" data-nav-title="Branches" data-nav-group="Master Data">Branches</a><a href="{{ url_for('admin.departments') }}" data-nav-title="Departments" data-nav-group="Master Data">Departments</a>{% endif %}
                     {% if can_access_module(current_user, 'employees') %}<a href="{{ url_for('master.employees') }}" data-nav-title="Employees" data-nav-group="Master Data">Employees</a>{% endif %}
@@ -46,7 +51,7 @@
 
             {% if can_access_module(current_user, 'sales-crm', 'view') or can_access_module(current_user, 'customer-inquiry', 'view') or can_access_module(current_user, 'quotation', 'view') or can_access_module(current_user, 'quotation-items', 'view') or can_access_module(current_user, 'whatsapp-integration', 'view') or current_user.role == "Admin" %}
             <div class="cmse-nav-section" data-section="Sales">
-                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navSales" aria-expanded="false"><span>💼</span><strong>Sales</strong></button>
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navSales" aria-expanded="false"><span>{{ icon("briefcase") }}</span><strong>Sales</strong></button>
                 <div id="navSales" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'sales-crm') %}<a href="{{ url_for('sales.dashboard') }}" data-nav-title="Sales Dashboard" data-nav-group="Sales">Sales Dashboard</a>{% endif %}
                     {% if can_access_module(current_user, 'customer-inquiry') %}<a href="{{ url_for('sales.inquiries') }}" data-nav-title="Leads / Inquiries" data-nav-group="Sales">Leads / Inquiries</a><a href="{{ url_for('sales.create_inquiry') }}" data-nav-title="New Inquiry" data-nav-group="Sales">New Inquiry</a>{% endif %}
@@ -59,7 +64,7 @@
 
             {% if can_access_module(current_user, 'projects') or can_access_module(current_user, 'project-tasks') or can_access_module(current_user, 'forms-home') or can_access_module(current_user, 'documents') or can_access_module(current_user, 'issues-risks') or can_access_module(current_user, 'payroll') or is_team_leader(current_user) %}
             <div class="cmse-nav-section" data-section="Projects">
-                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navProjects" aria-expanded="false"><span>🏗</span><strong>Projects</strong></button>
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navProjects" aria-expanded="false"><span>{{ icon("project") }}</span><strong>Projects</strong></button>
                 <div id="navProjects" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'projects') %}<a href="{{ url_for('projects.list_projects') }}" data-nav-title="Projects List" data-nav-group="Projects">Projects List</a>{% endif %}
                     {% if can_access_module(current_user, 'project-tasks') %}<a href="{{ url_for('project_tasks.list_tasks') }}" data-nav-title="Project Tasks" data-nav-group="Projects">Project Tasks</a><a href="{{ url_for('tasks.my_tasks') }}" data-nav-title="My Tasks" data-nav-group="Projects">My Tasks</a>{% endif %}
@@ -74,7 +79,7 @@
 
             {% if can_access_module(current_user, 'materials') or can_access_module(current_user, 'material-items') or can_access_module(current_user, 'material-request') or can_access_module(current_user, 'material-issue') or can_access_module(current_user, 'material-return') or can_access_module(current_user, 'material-reports') or can_access_module(current_user, 'after-sales', 'view') or can_access_module(current_user, 'service-ticket', 'view') or can_access_module(current_user, 'warranty', 'view') %}
             <div class="cmse-nav-section" data-section="Operations">
-                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navOperations" aria-expanded="false"><span>📦</span><strong>Operations</strong></button>
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navOperations" aria-expanded="false"><span>{{ icon("box") }}</span><strong>Operations</strong></button>
                 <div id="navOperations" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'materials') or can_access_module(current_user, 'material-items') or can_access_module(current_user, 'material-request') or can_access_module(current_user, 'material-issue') or can_access_module(current_user, 'material-return') or can_access_module(current_user, 'material-reports') %}<a href="{{ url_for('materials.dashboard') }}" data-nav-title="Inventory Dashboard" data-nav-group="Operations">Inventory Dashboard</a>{% endif %}
                     {% if can_access_module(current_user, 'material-request') %}<a href="{{ url_for('materials.requests_list') }}" data-nav-title="Material Requests" data-nav-group="Operations">Material Requests</a><a href="{{ url_for('materials.create_request') }}" data-nav-title="New Material Request" data-nav-group="Operations">New Material Request</a>{% endif %}
@@ -90,7 +95,7 @@
 
             {% if can_access_module(current_user, 'payment-requests') or can_access_module(current_user, 'accounting') or is_team_leader(current_user) %}
             <div class="cmse-nav-section" data-section="Finance">
-                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navFinance" aria-expanded="false"><span>💵</span><strong>Finance</strong></button>
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navFinance" aria-expanded="false"><span>{{ icon("wallet") }}</span><strong>Finance</strong></button>
                 <div id="navFinance" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'payment-requests') %}
                     <a href="{{ url_for('payments.dashboard') }}" data-nav-title="Payment Requests" data-nav-group="Finance">Payment Requests</a>
@@ -117,7 +122,7 @@
 
             {% if can_access_module(current_user, 'reports') or can_access_module(current_user, 'customer-reports') or can_access_module(current_user, 'material-reports') %}
             <div class="cmse-nav-section" data-section="Reports">
-                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navReports" aria-expanded="false"><span>📊</span><strong>Reports</strong></button>
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navReports" aria-expanded="false"><span>{{ icon("chart") }}</span><strong>Reports</strong></button>
                 <div id="navReports" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'reports') %}<a href="{{ url_for('reports.reports_home') }}" data-nav-title="Project Reports" data-nav-group="Reports">Project Reports</a>{% endif %}
                     {% if can_access_module(current_user, 'customer-reports') %}<a href="{{ url_for('reports.customer_reports') }}" data-nav-title="Customer Reports" data-nav-group="Reports">Customer Reports</a>{% endif %}
@@ -128,7 +133,7 @@
 
             {% if can_access_module(current_user, 'ai-assistant', 'view') or can_access_module(current_user, 'ai-crm-agent', 'view') or can_access_module(current_user, 'ai-project-manager', 'view') or can_access_module(current_user, 'ai-reports', 'view') or can_access_module(current_user, 'ai-logs', 'view') or current_user.role == "Admin" %}
             <div class="cmse-nav-section" data-section="AI Center">
-                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navAI" aria-expanded="false"><span>🤖</span><strong>AI Center</strong></button>
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navAI" aria-expanded="false"><span>{{ icon("spark") }}</span><strong>AI Center</strong></button>
                 <div id="navAI" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'ai-assistant') %}<a href="{{ url_for('ai.dashboard') }}" data-nav-title="AI Dashboard" data-nav-group="AI Center">AI Dashboard</a><a href="{{ url_for('ai.assistant') }}" data-nav-title="Ask AI" data-nav-group="AI Center">Ask AI</a>{% endif %}
                     {% if can_access_module(current_user, 'ai-crm-agent') %}<a href="{{ url_for('ai.crm_agent') }}" data-nav-title="AI CRM Agent" data-nav-group="AI Center">AI CRM Agent</a>{% endif %}
@@ -142,7 +147,7 @@
 
             {% if can_access_module(current_user, 'notifications', 'view') or can_access_module(current_user, 'notification-log', 'view') or can_access_module(current_user, 'sms-queue', 'view') or can_access_module(current_user, 'whatsapp-integration', 'view') or can_access_module(current_user, 'production-readiness', 'view') or current_user.role == "Admin" %}
             <div class="cmse-nav-section" data-section="System">
-                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navSystem" aria-expanded="false"><span>⚙️</span><strong>System</strong></button>
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navSystem" aria-expanded="false"><span>{{ icon("settings") }}</span><strong>System</strong></button>
                 <div id="navSystem" class="collapse cmse-nav-sub">
                     {% if can_access_module(current_user, 'notifications') %}<a href="{{ url_for('notifications.list_notifications') }}" data-nav-title="Notifications" data-nav-group="System">Notifications</a><a href="{{ url_for('notifications.create_notification') }}" data-nav-title="Create Notification" data-nav-group="System">Create Notification</a>{% endif %}
                     {% if can_access_module(current_user, 'notification-log') %}<a href="{{ url_for('notifications.logs') }}" data-nav-title="Notification Log" data-nav-group="System">Notification Log</a>{% endif %}
@@ -156,28 +161,29 @@
             {% endif %}
 
             <div id="cmseRecentBlock" class="cmse-nav-section cmse-dynamic-block" style="display:none;">
-                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navRecent" aria-expanded="true"><span>🕒</span><strong>Recently Opened</strong></button>
+                <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navRecent" aria-expanded="true"><span>{{ icon("clock") }}</span><strong>Recently Opened</strong></button>
                 <div id="navRecent" class="collapse show cmse-nav-sub cmse-dynamic-list"></div>
             </div>
         </nav>
+        <div class="erp-sidebar-footer"><span>{{ icon("sun",18) }}</span><div>Powering better projects<small>Cadceed-Maal Solar Energy</small></div></div>
     </aside>
 
     <div class="cmse-main-wrap">
         <header class="cmse-topbar no-print">
             <div class="d-flex align-items-center gap-2 min-w-0">
-                <button id="cmseSidebarBtn" class="btn btn-light cmse-icon-btn" type="button" aria-label="Open menu">☰</button>
+                <button id="cmseSidebarBtn" class="btn btn-light cmse-icon-btn" type="button" aria-label="Open menu" aria-controls="cmseSidebar" aria-expanded="false">☰</button>
                 <a class="cmse-top-brand" href="{{ url_for('dashboard.dashboard') }}">{{ company_profile.logo_text or "CADCEED-MAAL" }} ERP</a>
             </div>
 
             <div class="cmse-search d-none d-md-flex">
-                <span>⌕</span>
-                <input id="cmseGlobalSearch" type="search" placeholder="Search menu, customers, projects, quotations..." aria-label="Global search">
+                <span>{{ icon("search",18) }}</span>
+                <input id="cmseGlobalSearch" type="search" placeholder="Find a page or workflow…" aria-label="Global search">
                 <span class="cmse-kbd">Ctrl K</span>
             </div>
 
             <div class="cmse-top-actions">
                 <div class="dropdown cmse-window-menu">
-                    <button id="cmseWindowMenuBtn" class="btn btn-outline-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown">🪟 Windows</button>
+                    <button id="cmseWindowMenuBtn" class="btn btn-outline-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown">Open pages</button>
                     <div class="dropdown-menu dropdown-menu-end cmse-window-dropdown">
                         <div class="cmse-window-dropdown-head">Open Forms</div>
                         <div id="cmseWindowList" class="cmse-window-list-small"></div>
@@ -193,16 +199,16 @@
                     <ul class="dropdown-menu dropdown-menu-end">
                         {% if can_access_module(current_user, 'customers') %}<li><a class="dropdown-item" href="{{ url_for('master.create_customer') }}">Customer</a></li>{% endif %}
                         {% if can_access_module(current_user, 'customer-inquiry') %}<li><a class="dropdown-item" href="{{ url_for('sales.create_inquiry') }}">Inquiry / Lead</a></li>{% endif %}
-                        {% if can_access_module(current_user, 'quotation') %}<li><a class="dropdown-item" href="{{ url_for('sales.create_quotation') }}">Quotation</a></li>{% endif %}
+                        {% if can_access_module(current_user, 'quotation') %}<li><a class="dropdown-item" data-cmse-project-context-link href="{{ url_for('sales.create_quotation', project_id=cmse_project_context.id, customer_name=cmse_project_context.customer_name) if cmse_project_context else url_for('sales.create_quotation') }}">Quotation</a></li>{% endif %}
                         {% if can_access_module(current_user, 'projects') %}<li><a class="dropdown-item" href="{{ url_for('projects.create_project') }}">Project</a></li>{% endif %}
-                        {% if can_access_module(current_user, 'material-request') %}<li><a class="dropdown-item" href="{{ url_for('materials.create_request') }}">Material Request</a></li>{% endif %}
-                        {% if can_access_module(current_user, 'service-ticket') %}<li><a class="dropdown-item" href="{{ url_for('support.create_ticket') }}">Service Ticket</a></li>{% endif %}
+                        {% if can_access_module(current_user, 'material-request') %}<li><a class="dropdown-item" data-cmse-project-context-link href="{{ url_for('materials.create_request', project_id=cmse_project_context.id) if cmse_project_context else url_for('materials.create_request') }}">Material Request</a></li>{% endif %}
+                        {% if can_access_module(current_user, 'service-ticket') %}<li><a class="dropdown-item" data-cmse-project-context-link href="{{ url_for('support.create_ticket', project_id=cmse_project_context.id, customer_name=cmse_project_context.customer_name) if cmse_project_context else url_for('support.create_ticket') }}">Service Ticket</a></li>{% endif %}
                     </ul>
                 </div>
-                {% if can_access_module(current_user, 'notifications', 'view') %}<a class="btn btn-warning btn-sm cmse-notification-btn" href="{{ url_for('notifications.list_notifications') }}">🔔 {{ unread_notification_count }}</a>{% endif %}
-                {% if can_access_module(current_user, 'ai-assistant') %}<a class="btn btn-outline-secondary btn-sm d-none d-sm-inline-flex" href="{{ url_for('ai.assistant') }}">🤖 AI</a>{% endif %}
+                {% if can_access_module(current_user, 'notifications', 'view') %}<a class="btn btn-warning btn-sm cmse-notification-btn" href="{{ url_for('notifications.list_notifications') }}" aria-label="Notifications">{{ icon("bell",18) }} <span>{{ unread_notification_count }}</span></a>{% endif %}
+                {% if can_access_module(current_user, 'ai-assistant') %}<a class="btn btn-outline-secondary btn-sm d-none d-sm-inline-flex" href="{{ url_for('ai.assistant') }}">{{ icon("spark",16) }} Assistant</a>{% endif %}
                 <div class="dropdown">
-                    <button class="btn btn-outline-dark btn-sm dropdown-toggle cmse-user-btn" data-bs-toggle="dropdown">{{ current_user.full_name }}</button>
+                    <button class="btn btn-outline-dark btn-sm dropdown-toggle cmse-user-btn" data-bs-toggle="dropdown"><span class="erp-avatar">{{ current_user.full_name[:1] }}</span><span class="erp-user-name">{{ current_user.full_name }}</span></button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><span class="dropdown-item-text small text-muted">{{ current_user.role }}</span></li>
                         <li><hr class="dropdown-divider"></li>
@@ -237,8 +243,8 @@
             {% endwith %}
             {% if current_user.is_authenticated %}
             <div class="cmse-breadcrumb-row no-print">
-                <div class="cmse-breadcrumb"><a href="{{ url_for('dashboard.dashboard') }}">Home</a><span>/</span><span id="cmseBreadcrumbCurrent">{{ request.endpoint.replace('.', ' / ') if request.endpoint else 'Page' }}</span></div>
-                <div class="d-flex gap-2 flex-wrap"><button type="button" id="cmseFavoriteCurrent" class="btn btn-outline-warning btn-sm">☆ Favorite</button><button type="button" onclick="history.back()" class="btn btn-outline-secondary btn-sm">Back</button><a class="btn btn-outline-dark btn-sm" href="{{ url_for('dashboard.dashboard') }}">Home</a></div>
+                <div class="cmse-breadcrumb"><a href="{{ url_for('dashboard.dashboard') }}">Home</a><span>/</span><span id="cmseBreadcrumbCurrent">{{ request.blueprint.replace('_', ' ')|title if request.blueprint else 'Workspace' }}</span></div>
+                <div class="d-flex gap-2 flex-wrap"><button type="button" id="cmseFavoriteCurrent" class="btn btn-outline-warning btn-sm">☆ Favorite</button></div>
             </div>
             {% endif %}
             {% block content %}{% endblock %}
@@ -316,7 +322,7 @@
 
     const favoriteBtn = document.getElementById('cmseFavoriteCurrent');
     function currentPageItem(){
-        const title = activeLink ? (activeLink.dataset.navTitle || activeLink.textContent.trim()) : document.title;
+        const title = activeLink ? (activeLink.dataset.navTitle || activeLink.textContent.trim()) : (document.querySelector('#cmseMainContent h2')?.textContent.trim() || document.title);
         const group = activeLink ? (activeLink.dataset.navGroup || '') : '';
         return {title:title, group:group, url:window.location.href};
     }
@@ -355,6 +361,31 @@
     if (menuSearch) menuSearch.addEventListener('input', function(){ filterMenu(this.value); });
     if (globalSearch) globalSearch.addEventListener('input', function(){ if(menuSearch){ menuSearch.value = this.value; filterMenu(this.value); } });
 
+    // Phase 20J: a project chosen inside any form follows the top + Create
+    // commands. The destination routes resolve the project's customer on the
+    // server, so users cannot accidentally create a record for the wrong one.
+    const projectContextSelect = document.querySelector('#cmseMainContent select[name="project_id"]');
+    const projectContextLinks = Array.from(document.querySelectorAll('[data-cmse-project-context-link]'));
+    projectContextLinks.forEach(function(link){ link.dataset.cmseBaseHref = link.href; });
+    function refreshProjectContextLinks(){
+        if (!projectContextSelect) return;
+        const projectId = projectContextSelect.value || '';
+        projectContextLinks.forEach(function(link){
+            const target = new URL(link.dataset.cmseBaseHref || link.href, window.location.origin);
+            if (projectId) {
+                target.searchParams.set('project_id', projectId);
+                target.searchParams.delete('customer_id');
+                target.searchParams.delete('customer_name');
+            }
+            else target.searchParams.delete('project_id');
+            link.href = target.toString();
+        });
+    }
+    if (projectContextSelect) {
+        projectContextSelect.addEventListener('change', refreshProjectContextLinks);
+        refreshProjectContextLinks();
+    }
+
 
 
     // Phase 17A.3B: Smart Workspace - pinned tabs, dirty-state warning, reopen closed, shortcuts.
@@ -380,7 +411,7 @@
     }
     function currentKey(){ return normalizeUrl(window.location.href); }
     function currentWorkspaceItem(){
-        const title = activeLink ? (activeLink.dataset.navTitle || activeLink.textContent.trim()) : (document.title || 'Current Page');
+        const title = activeLink ? (activeLink.dataset.navTitle || activeLink.textContent.trim()) : (document.querySelector('#cmseMainContent h2')?.textContent.trim() || document.title || 'Current Page');
         const group = activeLink ? (activeLink.dataset.navGroup || '') : '';
         return {title:title, group:group, url:window.location.href, key:currentKey()};
     }
@@ -596,5 +627,6 @@
     });
 })();
 </script>
+<script src="{{ url_for('static', filename='js/refresh.js') }}?v=21"></script>
 </body>
 </html>

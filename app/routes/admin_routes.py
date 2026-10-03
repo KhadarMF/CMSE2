@@ -193,7 +193,7 @@ def branches():
         flash("Branch created successfully.", "success"); return redirect(url_for("admin.branches"))
     return render_template("admin/branches.html", branches=Branch.query.order_by(Branch.branch_name.asc()).all())
 
-@admin_bp.route("/branches/<int:branch_id>/toggle")
+@admin_bp.route("/branches/<int:branch_id>/toggle", methods=["POST"])
 @login_required
 def toggle_branch(branch_id):
     if not require_admin(): return redirect(url_for("dashboard.dashboard"))
@@ -209,7 +209,7 @@ def departments():
         flash("Department created successfully.", "success"); return redirect(url_for("admin.departments"))
     return render_template("admin/departments.html", departments=Department.query.order_by(Department.department_name.asc()).all())
 
-@admin_bp.route("/departments/<int:department_id>/toggle")
+@admin_bp.route("/departments/<int:department_id>/toggle", methods=["POST"])
 @login_required
 def toggle_department(department_id):
     if not require_admin(): return redirect(url_for("dashboard.dashboard"))

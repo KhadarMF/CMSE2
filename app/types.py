@@ -44,8 +44,10 @@ class _ExactNumeric(TypeDecorator):
             return None
         try:
             dec = Decimal(str(value))
-        except Exception:
-            return None
+        except Exception as exc:
+            raise ValueError("Invalid numeric value.") from exc
+        if not dec.is_finite():
+            raise ValueError("Numeric values must be finite.")
         return dec.quantize(self._quantum, rounding=ROUND_HALF_UP)
 
     def process_result_value(self, value, dialect):
@@ -58,15 +60,18 @@ class Money(_ExactNumeric):
     """Currency amounts. NUMERIC(14,2) - up to 999,999,999,999.99."""
     precision = 14
     scale = 2
+    cache_ok = True
 
 
 class Quantity(_ExactNumeric):
     """Physical quantities and work days. NUMERIC(14,3)."""
     precision = 14
     scale = 3
+    cache_ok = True
 
 
 class Rate(_ExactNumeric):
     """Exchange rates. NUMERIC(18,6) - SLSH per USD needs the headroom."""
     precision = 18
     scale = 6
+    cache_ok = True

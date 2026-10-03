@@ -26,7 +26,7 @@
 
       <div class='col-md-4'>
         <label class='form-label'>Customer</label>
-        {% set selected_customer = quotation.customer_name if is_edit else (inquiry.customer_name if inquiry else '') %}
+        {% set selected_customer = quotation.customer_name if is_edit else (selected_customer_name or (inquiry.customer_name if inquiry else '')) %}
         <select class='form-select' name='customer_name' id='quotationCustomerSelect' required>
           <option value=''>-- Select customer --</option>
           {% if selected_customer and (selected_customer not in customers|map(attribute='customer_name')|list) %}
@@ -42,25 +42,25 @@
 
       <div class='col-md-3'>
         <label class='form-label'>Project</label>
-        <select class='form-select' name='project_id'>
+        <select class='form-select' name='project_id' id='quotationProjectSelect'>
           <option value=''>-- optional --</option>
           {% for p in projects %}
-            <option value='{{ p.id }}' {% if is_edit and quotation.project_id==p.id %}selected{% endif %}>{{ p.project_name }} - {{ p.customer_name }}</option>
+            <option value='{{ p.id }}' data-customer='{{ p.customer_name }}' data-capacity='{{ p.capacity or "" }}' data-project-type='{{ p.project_type or "" }}' {% if (is_edit and quotation.project_id==p.id) or (not is_edit and selected_project and selected_project.id==p.id) %}selected{% endif %}>{{ p.project_name }} - {{ p.customer_name }}</option>
           {% endfor %}
         </select>
       </div>
 
       <div class='col-md-2'>
         <label class='form-label'>Capacity</label>
-        <input class='form-control' name='capacity' value='{% if is_edit %}{{ quotation.capacity or "" }}{% elif inquiry %}{{ inquiry.estimated_capacity or "" }}{% endif %}'>
+        <input class='form-control' id='quotationCapacity' name='capacity' value='{% if is_edit %}{{ quotation.capacity or "" }}{% elif selected_project %}{{ selected_project.capacity or "" }}{% elif inquiry %}{{ inquiry.estimated_capacity or "" }}{% endif %}'>
       </div>
 
       <div class='col-md-3'>
         <label class='form-label'>Project Type</label>
-        <select class='form-select' name='project_type'>
+        <select class='form-select' name='project_type' id='quotationProjectType'>
           <option value=''>-- select --</option>
           {% for t in project_types %}
-            <option value='{{ t.type_name }}' {% if (is_edit and quotation.project_type==t.type_name) or (not is_edit and inquiry and inquiry.project_type==t.type_name) %}selected{% endif %}>{{ t.type_name }}</option>
+            <option value='{{ t.type_name }}' {% if (is_edit and quotation.project_type==t.type_name) or (not is_edit and selected_project and selected_project.project_type==t.type_name) or (not is_edit and not selected_project and inquiry and inquiry.project_type==t.type_name) %}selected{% endif %}>{{ t.type_name }}</option>
           {% endfor %}
         </select>
       </div>
@@ -144,6 +144,9 @@ document.querySelectorAll('.quote-item-select').forEach(function(sel){
 
 (function(){
   const sel = document.getElementById('quotationCustomerSelect');
+  const projectSel = document.getElementById('quotationProjectSelect');
+  const capacity = document.getElementById('quotationCapacity');
+  const projectType = document.getElementById('quotationProjectType');
   const preview = document.getElementById('quotationCustomerPhonePreview');
   function updateCustomerPhonePreview(){
     if(!sel || !preview) return;
@@ -155,6 +158,18 @@ document.querySelectorAll('.quote-item-select').forEach(function(sel){
   if(sel){
     sel.addEventListener('change', updateCustomerPhonePreview);
     updateCustomerPhonePreview();
+  }
+  if(projectSel){
+    projectSel.addEventListener('change', function(){
+      const opt = projectSel.options[projectSel.selectedIndex];
+      if(!opt || !opt.value) return;
+      if(sel && opt.dataset.customer){
+        sel.value = opt.dataset.customer;
+        sel.dispatchEvent(new Event('change'));
+      }
+      if(capacity && !capacity.value) capacity.value = opt.dataset.capacity || '';
+      if(projectType && !projectType.value) projectType.value = opt.dataset.projectType || '';
+    });
   }
 })();
 </script>

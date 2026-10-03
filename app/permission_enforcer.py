@@ -240,6 +240,17 @@ PUBLIC_PREFIXES = (
 
 
 def action_for_endpoint(endpoint, method):
+    explicit_actions = {
+        "payments.reject_request": "approve",
+        "payments.cancel_request": "edit",
+        "accounting.post_journal": "approve",
+        "accounting.reverse_journal": "approve",
+        "documents.new_version": "edit",
+        "notifications.send_email_log": "edit",
+        "notifications.mark_sms_sent": "edit",
+    }
+    if endpoint in explicit_actions:
+        return explicit_actions[endpoint]
     if method == "POST":
         if any(w in endpoint for w in ["delete", "remove"]): return "delete"
         if any(w in endpoint for w in ["review", "approve"]): return "approve"
@@ -314,6 +325,9 @@ def register_permission_enforcer(app):
                     action = "edit"
                 else:
                     action = "view"
+        elif endpoint == "reports.form_pdf":
+            key = request.view_args.get("form_key")
+            action = "print_export"
         else:
             key = ADMIN_ENDPOINT_KEYS.get(endpoint) or ENDPOINT_KEYS.get(endpoint) or BLUEPRINT_FALLBACK_KEYS.get(blueprint)
             action = action_for_endpoint(endpoint, request.method)

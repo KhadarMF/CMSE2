@@ -55,6 +55,10 @@ def create_project():
         return redirect(url_for("projects.list_projects"))
 
     if request.method == "POST":
+        requested_status = request.form.get("status", "New")
+        if requested_status not in PROJECT_STATUSES or requested_status == "Completed":
+            flash("Create the project in an active phase; completion requires approved milestones.", "danger")
+            return redirect(url_for("projects.create_project"))
         project = Project(
             project_name=request.form.get("project_name"),
             customer_name=request.form.get("customer_name"),
@@ -63,7 +67,7 @@ def create_project():
             capacity=request.form.get("capacity"),
             start_date=parse_date(request.form.get("start_date")),
             expected_completion_date=parse_date(request.form.get("expected_completion_date")),
-            status=request.form.get("status", "New"),
+            status=requested_status,
             assigned_team=request.form.get("assigned_team"),
             description=request.form.get("description"),
             created_by_id=current_user.id,
@@ -75,7 +79,7 @@ def create_project():
         flash("Project created successfully.", "success")
         return redirect(url_for("projects.detail", project_id=project.id))
 
-    return render_template("projects/create.html", statuses=PROJECT_STATUSES, customers=Customer.query.filter_by(is_active=True).order_by(Customer.customer_name.asc()).all(), project_types=ProjectType.query.filter_by(is_active=True).order_by(ProjectType.type_name.asc()).all(), teams=Team.query.filter_by(status="Active").order_by(Team.team_name.asc()).all())
+    return render_template("projects/create.html", statuses=[status for status in PROJECT_STATUSES if status != "Completed"], customers=Customer.query.filter_by(is_active=True).order_by(Customer.customer_name.asc()).all(), project_types=ProjectType.query.filter_by(is_active=True).order_by(ProjectType.type_name.asc()).all(), teams=Team.query.filter_by(status="Active").order_by(Team.team_name.asc()).all())
 
 @project_bp.route("/<int:project_id>")
 @login_required
@@ -86,6 +90,7 @@ def detail(project_id):
         return redirect(url_for("projects.list_projects"))
     allowed_forms = {
         "site-survey": can_create_form(current_user, "site-survey"),
+        "solar-pump-survey": can_create_form(current_user, "solar-pump-survey"),
         "load-assessment": can_create_form(current_user, "load-assessment"),
         "daily-site-report": can_create_form(current_user, "daily-site-report"),
         "delivery-note": can_create_form(current_user, "delivery-note"),
@@ -99,6 +104,7 @@ def detail(project_id):
         project=project,
         allowed_forms=allowed_forms,
         command_center=command_center,
+        active_project_context=project,
     )
 
 @project_bp.route("/<int:project_id>/edit", methods=["GET", "POST"])
@@ -106,7 +112,7 @@ def detail(project_id):
 def edit_project(project_id):
     project = Project.query.get_or_404(project_id)
 
-    if not can_create_project(current_user):
+    if not can_access_module(current_user, "projects", "edit"):
         flash("Only Admin or Operation Manager can edit projects.", "danger")
         return redirect(url_for("projects.detail", project_id=project.id))
 

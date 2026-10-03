@@ -1,10 +1,10 @@
 from flask import Blueprint, render_template
 from flask_login import login_required, current_user
-from app.models import Project, Document, SiteSurveyForm, LoadAssessmentForm, DailySiteReport, DeliveryNoteForm, TestingForm, CommissioningForm, HandoverForm, ProjectTask, ProjectIssue
+from app.models import Project, Document, SiteSurveyForm, SolarPumpSurveyForm, LoadAssessmentForm, DailySiteReport, DeliveryNoteForm, TestingForm, CommissioningForm, HandoverForm, ProjectTask, ProjectIssue
 from app.permissions import can_review_document
 
 task_bp=Blueprint('tasks',__name__,url_prefix='/tasks')
-FORM_ITEMS=[('site-survey','Site Survey Form',SiteSurveyForm),('load-assessment','Load Assessment Form',LoadAssessmentForm),('daily-site-report','Daily Site Report',DailySiteReport),('delivery-note','Delivery Note',DeliveryNoteForm),('testing','Testing Form',TestingForm),('commissioning','Commissioning Form',CommissioningForm),('handover','Handover Form',HandoverForm)]
+FORM_ITEMS=[('site-survey','Solar Off-Grid Survey',SiteSurveyForm),('solar-pump-survey','Solar Pumping Survey',SolarPumpSurveyForm),('load-assessment','Load Assessment Form',LoadAssessmentForm),('daily-site-report','Daily Site Report',DailySiteReport),('delivery-note','Delivery Note',DeliveryNoteForm),('testing','Testing Form',TestingForm),('commissioning','Commissioning Form',CommissioningForm),('handover','Handover Form',HandoverForm)]
 @task_bp.route('/')
 @login_required
 def my_tasks():

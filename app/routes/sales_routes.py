@@ -1,3 +1,4 @@
+from app.pdf_service import pdf_response
 from datetime import datetime, date
 import os
 from io import BytesIO
@@ -7,6 +8,7 @@ from itsdangerous import URLSafeSerializer, BadSignature
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, make_response, current_app, abort
 from flask_login import login_required, current_user
 from app import db
+from app.project_context import parse_optional_id, resolve_project_customer
 from app.whatsapp_service import send_whatsapp_text, send_whatsapp_template, build_quotation_message, normalize_whatsapp_number, extract_whatsapp_message_id, whatsapp_config
 from app.models import Customer, Project, ProjectType, User, SalesInquiry, SalesQuotation, SalesQuotationLine, QuotationItem, NotificationLog, WhatsAppMessage, INQUIRY_STATUSES, INQUIRY_SOURCES, QUOTATION_STATUSES
 
@@ -313,14 +315,38 @@ def create_quotation():
     inquiry_id=request.args.get('inquiry_id') or request.form.get('inquiry_id') or None
     inquiry=SalesInquiry.query.get(inquiry_id) if inquiry_id else None
     if request.method=='POST':
-        quotation=SalesQuotation(ref_no=make_ref('QTN'), inquiry_id=inquiry_id, project_id=request.form.get('project_id') or None, quotation_date=parse_date(request.form.get('quotation_date')) or date.today(), customer_name=request.form.get('customer_name'), project_type=request.form.get('project_type'), capacity=request.form.get('capacity'), scope_of_work=request.form.get('scope_of_work'), validity_days=int(request.form.get('validity_days') or 15), status=request.form.get('status') or 'Draft', prepared_by_id=current_user.id, notes=request.form.get('notes'))
+        project_id = parse_optional_id(request.form.get('project_id'))
+        selected_project, _ = resolve_project_customer(project_id=project_id)
+        if project_id and not selected_project:
+            flash('The selected project no longer exists.', 'danger')
+            return redirect(url_for('sales.create_quotation'))
+        customer_name = selected_project.customer_name if selected_project else (request.form.get('customer_name') or '').strip()
+        if not customer_name:
+            flash('Select a customer before saving the quotation.', 'danger')
+            return redirect(url_for('sales.create_quotation', project_id=project_id or None))
+        quotation=SalesQuotation(ref_no=make_ref('QTN'), inquiry_id=inquiry_id, project_id=project_id, quotation_date=parse_date(request.form.get('quotation_date')) or date.today(), customer_name=customer_name, project_type=request.form.get('project_type'), capacity=request.form.get('capacity'), scope_of_work=request.form.get('scope_of_work'), validity_days=int(request.form.get('validity_days') or 15), status=request.form.get('status') or 'Draft', prepared_by_id=current_user.id, notes=request.form.get('notes'))
         db.session.add(quotation); db.session.flush()
         _save_quotation_lines(quotation)
         if inquiry:
             inquiry.status='Quoted'
         db.session.commit(); flash(f'Quotation {quotation.ref_no} created.', 'success')
         return redirect(url_for('sales.edit_quotation', quotation_id=quotation.id))
-    return render_template('sales/quotation_form.html', **_quotation_form_context(inquiry=inquiry, quotation=None, mode='create', max_rows=15))
+    selected_project, selected_customer = resolve_project_customer(
+        project_id=request.args.get('project_id'),
+        customer_id=request.args.get('customer_id'),
+        customer_name=request.args.get('customer_name'),
+    )
+    selected_customer_name = (
+        selected_project.customer_name if selected_project
+        else selected_customer.customer_name if selected_customer
+        else (inquiry.customer_name if inquiry else '')
+    )
+    return render_template('sales/quotation_form.html', **_quotation_form_context(
+        inquiry=inquiry, quotation=None, mode='create', max_rows=15,
+        selected_project=selected_project,
+        selected_customer_name=selected_customer_name,
+        active_project_context=selected_project,
+    ))
 
 @sales_bp.route('/quotations/<int:quotation_id>')
 @login_required
@@ -481,15 +507,7 @@ def public_quotation_short_pdf(token):
     if data.get('ref') != quotation.ref_no:
         abort(404)
     html = render_template('sales/quotation_pdf.html', quotation=quotation, generated_at=datetime.utcnow())
-    try:
-        from weasyprint import HTML
-        pdf = HTML(string=html, base_url=request.host_url).write_pdf()
-        response = make_response(pdf)
-        response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'inline; filename={quotation.ref_no}.pdf'
-        return response
-    except Exception:
-        return render_template('sales/public_quotation.html', quotation=quotation, generated_at=datetime.utcnow(), pdf_error=True)
+    return pdf_response(html, f"{quotation.ref_no}.pdf")
 
 
 @sales_bp.route('/public/quotations/<int:quotation_id>/<token>')
@@ -505,13 +523,4 @@ def public_quotation(quotation_id, token):
 def quotation_pdf(quotation_id):
     quotation=SalesQuotation.query.get_or_404(quotation_id)
     html=render_template('sales/quotation_pdf.html', quotation=quotation, generated_at=datetime.utcnow())
-    try:
-        from weasyprint import HTML
-        pdf=HTML(string=html, base_url=request.host_url).write_pdf()
-        response=make_response(pdf)
-        response.headers['Content-Type']='application/pdf'
-        response.headers['Content-Disposition']=f'inline; filename={quotation.ref_no}.pdf'
-        return response
-    except Exception as e:
-        flash(f'PDF generation failed: {e}', 'danger')
-        return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
+    return pdf_response(html, f"{quotation.ref_no}.pdf")

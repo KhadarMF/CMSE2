@@ -106,10 +106,10 @@ def test_command_center_uses_operational_records_and_renders(app, client):
     snapshot = build_project_command_center(project, today=today)
     assert snapshot["physical"]["progress"] == 56
     assert snapshot["procurement"]["progress"] == 55
-    # The approved survey and approved daily report complete two of the seven
-    # required form gates: 2 / 7 = 29% readiness.
-    assert snapshot["documents"]["progress"] == 29
-    assert snapshot["overall"] == 49
+    # Survey and daily report complete two of six current required forms;
+    # the historical separate load assessment no longer lowers readiness.
+    assert snapshot["documents"]["progress"] == 33  # Two of six current forms; legacy load assessment is optional.
+    assert snapshot["overall"] == 50
     assert snapshot["financials"]["revenue"] == 10000
     assert snapshot["financials"]["committed_cost"] == 2000
     assert snapshot["financials"]["profit"] == 8000

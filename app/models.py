@@ -76,6 +76,7 @@ class Project(db.Model):
 
     documents = db.relationship("Document", backref="project", lazy=True, cascade="all, delete-orphan")
     site_surveys = db.relationship("SiteSurveyForm", backref="project", lazy=True, cascade="all, delete-orphan")
+    solar_pump_surveys = db.relationship("SolarPumpSurveyForm", backref="project", lazy=True, cascade="all, delete-orphan")
     load_assessments = db.relationship("LoadAssessmentForm", backref="project", lazy=True, cascade="all, delete-orphan")
     daily_reports = db.relationship("DailySiteReport", backref="project", lazy=True, cascade="all, delete-orphan")
     delivery_notes = db.relationship("DeliveryNoteForm", backref="project", lazy=True, cascade="all, delete-orphan")
@@ -138,6 +139,47 @@ class SiteSurveyForm(db.Model):
     backup_hours_required = db.Column(db.String(80))
     recommended_system_size = db.Column(db.String(120))
     recommendation = db.Column(db.Text)
+    remarks = db.Column(db.Text)
+    # Phase 20K: concise off-grid load summary
+    monthly_consumption_kwh = db.Column(db.String(80), nullable=True)
+    monthly_electricity_bill = db.Column(db.String(80), nullable=True)
+    power_supply = db.Column(db.String(80), nullable=True)
+    connected_load_kw = db.Column(db.String(80), nullable=True)
+    estimated_peak_load_kw = db.Column(db.String(80), nullable=True)
+    day_consumption_kwh = db.Column(db.String(80), nullable=True)
+    night_consumption_kwh = db.Column(db.String(80), nullable=True)
+    critical_load_kw = db.Column(db.String(80), nullable=True)
+    critical_energy_kwh = db.Column(db.String(80), nullable=True)
+    inverter_battery_location = db.Column(db.String(200), nullable=True)
+    creator = db.relationship("User", foreign_keys=[created_by_id])
+
+class SolarPumpSurveyForm(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False, unique=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    approval_status = db.Column(db.String(80), default="Draft")
+    manager_comments = db.Column(db.Text)
+    reviewed_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    reviewer = db.relationship("User", foreign_keys=[reviewed_by_id])
+    survey_date = db.Column(db.Date)
+    surveyed_by = db.Column(db.String(150))
+    gps_coordinates = db.Column(db.String(150))
+    water_source = db.Column(db.String(100))
+    total_depth_m = db.Column(db.String(80))
+    static_water_level_m = db.Column(db.String(80))
+    dynamic_water_level_m = db.Column(db.String(80))
+    required_flow_m3h = db.Column(db.String(80))
+    required_water_m3day = db.Column(db.String(80))
+    vertical_delivery_height_m = db.Column(db.String(80))
+    horizontal_pipe_distance_m = db.Column(db.String(80))
+    pipe_diameter = db.Column(db.String(80))
+    existing_pump = db.Column(db.String(200))
+    tank_details = db.Column(db.String(200))
+    solar_area = db.Column(db.String(150))
+    shading_status = db.Column(db.String(120))
+    access_road = db.Column(db.String(150))
     remarks = db.Column(db.Text)
     creator = db.relationship("User", foreign_keys=[created_by_id])
 
@@ -1146,7 +1188,8 @@ FORM_PERMISSION_KEYS = [
 
     # Online Forms
     ("forms-home", "Online Forms Home", "Online Forms"),
-    ("site-survey", "Site Survey & Load Assessment", "Online Forms"),
+    ("site-survey", "Solar Off-Grid Survey & Load Assessment", "Online Forms"),
+    ("solar-pump-survey", "Solar Pumping Site Survey", "Online Forms"),
     ("load-assessment", "Load Assessment Legacy", "Online Forms"),
     ("daily-site-report", "Daily Site Report", "Online Forms"),
     ("delivery-note", "Delivery Note", "Online Forms"),
