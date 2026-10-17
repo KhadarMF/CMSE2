@@ -24,6 +24,23 @@ DEFAULT_MILESTONES = (
 )
 
 
+def _requirement_values(milestone_id, title, form_key, document_type, critical):
+    """Use SQL boolean expressions that work on PostgreSQL and SQLite.
+
+    Some legacy reflected schemas cause Python ``True`` to be compiled as the
+    integer literal ``1``. PostgreSQL rejects that value for a BOOLEAN column,
+    so the data migration must emit explicit SQL TRUE/FALSE expressions.
+    """
+    return {
+        "milestone_id": milestone_id,
+        "title": title,
+        "form_key": form_key,
+        "document_type": document_type,
+        "is_required": sa.true(),
+        "is_critical": sa.true() if critical else sa.false(),
+    }
+
+
 def _seed_existing_projects():
     """Make the engine immediately available to projects that predate 20I."""
     bind = op.get_bind()
@@ -54,10 +71,9 @@ def _seed_existing_projects():
             ))
             milestone_id = result.inserted_primary_key[0]
             for title, form_key, document_type, critical in requirements:
-                bind.execute(requirement_table.insert().values(
-                    milestone_id=milestone_id, title=title, form_key=form_key,
-                    document_type=document_type, is_required=True, is_critical=critical,
-                ))
+                bind.execute(requirement_table.insert().values(**_requirement_values(
+                    milestone_id, title, form_key, document_type, critical
+                )))
 
 
 def upgrade():

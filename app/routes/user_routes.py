@@ -24,8 +24,7 @@ def create_user():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         if User.query.filter_by(email=email).first(): flash("This email already exists.", "danger"); return redirect(request.url)
-        password = request.form.get("new_user_password") or request.form.get("password")
-        user = User(full_name=request.form.get("full_name"), email=email, password_hash=generate_password_hash(password), role=request.form.get("role"), is_active=True if request.form.get("is_active") == "on" else False, branch_id=request.form.get("branch_id") or None, department_id=request.form.get("department_id") or None)
+        user = User(full_name=request.form.get("full_name"), email=email, password_hash=generate_password_hash(request.form.get("password")), role=request.form.get("role"), is_active=True if request.form.get("is_active") == "on" else False, branch_id=request.form.get("branch_id") or None, department_id=request.form.get("department_id") or None)
         db.session.add(user); db.session.commit(); flash("User created successfully.", "success"); return redirect(url_for("users.list_users"))
     return render_template("users/create.html", roles=ROLES, branches=active_branches(), departments=active_departments())
 
@@ -50,8 +49,7 @@ def change_password(user_id):
     if not can_manage_users(current_user): flash("Only Admin can change user passwords.", "danger"); return redirect(url_for("dashboard.dashboard"))
     user = User.query.get_or_404(user_id)
     if request.method == "POST":
-        password = request.form.get("new_user_password") or request.form.get("password")
-        confirm = request.form.get("confirm_user_password") or request.form.get("confirm_password")
+        password = request.form.get("password"); confirm = request.form.get("confirm_password")
         if not password or password != confirm: flash("Passwords do not match.", "danger"); return redirect(request.url)
         user.password_hash = generate_password_hash(password); db.session.commit(); flash("Password changed successfully.", "success"); return redirect(url_for("users.list_users"))
     return render_template("users/change_password.html", user=user)

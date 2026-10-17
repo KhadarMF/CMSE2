@@ -249,42 +249,6 @@ def _procurement(project):
     }
 
 
-def _materials_readiness(project, milestone_engine):
-    milestone_snapshot = None
-    if milestone_engine.get("configured"):
-        milestone_snapshot = next(
-            (
-                item for item in milestone_engine["milestones"]
-                if item["model"].code in {"MATERIALS", "PROCUREMENT"}
-            ),
-            None,
-        )
-    if milestone_snapshot:
-        requirements = milestone_snapshot["requirements"]
-        approved = sum(1 for item in requirements if item["approved"])
-        return {
-            "progress": milestone_snapshot["progress"],
-            "applicable": True,
-            "requirements": requirements,
-            "approved": approved,
-            "total": len(requirements),
-            "source": "Approved materials readiness document",
-        }
-    material_docs = [
-        item for item in project.documents
-        if item.document_type in {"Materials Ready", "Delivery Note"}
-        and item.approval_status in APPROVED_STATUSES
-    ]
-    return {
-        "progress": 100 if material_docs else 0,
-        "applicable": True,
-        "requirements": [],
-        "approved": len(material_docs),
-        "total": 1,
-        "source": "Materials Ready or approved Delivery Note document",
-    }
-
-
 def _financials(project, procurement):
     quotations = SalesQuotation.query.filter_by(project_id=project.id).all()
     revenue = sum(
@@ -329,7 +293,7 @@ def _financials(project, procurement):
     }
 
 
-def _risks(project, schedule, physical, materials, documents):
+def _risks(project, schedule, physical, procurement, documents):
     severity_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
     open_issues = [item for item in project.issues if item.status not in {"Resolved", "Closed"}]
     open_issues.sort(key=lambda item: (severity_order.get(item.severity, 9), not item.is_overdue, item.target_resolution_date or date.max))
@@ -341,7 +305,7 @@ def _risks(project, schedule, physical, materials, documents):
         level = "Critical"
     elif high or overdue or physical["overdue_tasks"]:
         level = "High"
-    elif open_issues or materials["progress"] < 40 or documents["attention"]:
+    elif open_issues or procurement["progress"] < 40 or documents["attention"]:
         level = "Medium"
     else:
         level = "Low"
@@ -355,7 +319,7 @@ def _risks(project, schedule, physical, materials, documents):
     }
 
 
-def _forecast(project, overall, schedule, physical, materials, documents, risks, financials):
+def _forecast(project, overall, schedule, physical, procurement, documents, risks, financials):
     if schedule["elapsed_percent"] is None:
         schedule_message = "Add valid project start and completion dates to enable schedule forecasting."
         variance = None
@@ -373,8 +337,8 @@ def _forecast(project, overall, schedule, physical, materials, documents, risks,
         actions.append(f"Recover {physical['overdue_tasks']} overdue task(s) and confirm new owners/dates.")
     if risks["critical_count"] or risks["high_count"]:
         actions.append("Resolve critical/high risks before the next site milestone.")
-    if materials["progress"] < physical["progress"] - 10:
-        actions.append("Materials readiness is trailing site progress; attach and approve the readiness document.")
+    if procurement["progress"] < physical["progress"] - 10:
+        actions.append("Procurement is trailing site progress; expedite outstanding material requests.")
     if documents["attention"]:
         actions.append(f"Correct or resubmit {documents['attention']} rejected document/form record(s).")
     if documents["progress"] < physical["progress"] - 15:
@@ -382,7 +346,7 @@ def _forecast(project, overall, schedule, physical, materials, documents, risks,
     if financials["has_revenue"] and financials["margin"] is not None and financials["margin"] < 10:
         actions.append("Review committed costs; forecast margin is below 10%.")
     if not actions:
-        actions.append("Maintain weekly updates to tasks, approvals, materials readiness, and risk owners.")
+        actions.append("Maintain weekly updates to tasks, approvals, procurement, and risk owners.")
 
     summary = project.ai_project_summary or (
         f"Project is {overall}% complete with {physical['progress']}% physical progress. "
@@ -422,12 +386,12 @@ def build_project_command_center(project, today=None):
     schedule = _schedule(project, today)
     documents = _documents(project)
     procurement = _procurement(project)
-    materials = _materials_readiness(project, milestone_engine)
     financials = _financials(project, procurement)
-    risks = _risks(project, schedule, physical, materials, documents)
+    risks = _risks(project, schedule, physical, procurement, documents)
     if milestone_engine["configured"]:
         for key, target in (
             ("physical", physical),
+            ("procurement", procurement),
             ("documents", documents),
         ):
             dimension = milestone_engine["dimensions"][key]
@@ -436,14 +400,15 @@ def build_project_command_center(project, today=None):
                 target["progress"] = dimension["progress"]
         overall = milestone_engine["overall"]
     else:
-        physical["applicable"] = documents["applicable"] = True
+        physical["applicable"] = procurement["applicable"] = documents["applicable"] = True
         overall = _clamp(
-            (milestone_progress * 0.30)
+            (milestone_progress * 0.25)
             + (physical["progress"] * 0.35)
-            + (documents["progress"] * 0.35)
+            + (procurement["progress"] * 0.20)
+            + (documents["progress"] * 0.20)
         )
     forecast = _forecast(
-        project, overall, schedule, physical, materials, documents, risks, financials
+        project, overall, schedule, physical, procurement, documents, risks, financials
     )
     return {
         "today": today,
@@ -455,7 +420,6 @@ def build_project_command_center(project, today=None):
         "schedule": schedule,
         "gantt": _gantt(project, today),
         "procurement": procurement,
-        "materials": materials,
         "documents": documents,
         "financials": financials,
         "risks": risks,

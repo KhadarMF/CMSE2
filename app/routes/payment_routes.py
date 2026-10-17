@@ -238,12 +238,13 @@ def create_request():
         db.session.add(pr)
         db.session.flush()  # assigns pr.id, used to build a collision-proof request_no
         pr.request_no = f"PR-{datetime.utcnow().strftime('%Y%m%d')}-{pr.id:05d}"
+        db.session.commit()
+
         notify_roles(
             MANAGER_ROLES, subject=f"Payment Request {pr.request_no} awaiting approval",
             message=f"{current_user.full_name} requested {pr.currency} {pr.amount:,.2f} for {pr.payee_name} — {pr.purpose}",
             module="payment-requests", record_id=pr.id,
         )
-        db.session.commit()
         flash(f"Payment request {pr.request_no} submitted for approval.", "success")
         return redirect(url_for("payments.request_detail", request_id=pr.id))
 
@@ -304,6 +305,7 @@ def approve_manager(request_id):
     pr.status = "Pending Finance Approval"
     pr.manager_approved_by_id = current_user.id
     pr.manager_approved_at = datetime.utcnow()
+    db.session.commit()
     notify_roles(
         FINANCE_ROLES, subject=f"Payment Request {pr.request_no} needs finance approval",
         message=f"Manager-approved by {current_user.full_name}. {pr.currency} {pr.amount:,.2f} for {pr.payee_name}.",
@@ -313,7 +315,6 @@ def approve_manager(request_id):
         pr.requested_by, subject=f"Your payment request {pr.request_no} was approved by manager",
         message="Now awaiting finance approval.", module="payment-requests", record_id=pr.id,
     )
-    db.session.commit()
     flash("Request approved and sent to Finance.", "success")
     return redirect(url_for("payments.request_detail", request_id=request_id))
 
@@ -334,11 +335,11 @@ def approve_finance(request_id):
     pr.status = "Approved"
     pr.finance_approved_by_id = current_user.id
     pr.finance_approved_at = datetime.utcnow()
+    db.session.commit()
     notify_user(
         pr.requested_by, subject=f"Your payment request {pr.request_no} is approved",
         message="Finance approved this request. Payment will follow.", module="payment-requests", record_id=pr.id,
     )
-    db.session.commit()
     flash("Request approved by Finance. Ready for payment.", "success")
     return redirect(url_for("payments.request_detail", request_id=request_id))
 
@@ -362,11 +363,11 @@ def reject_request(request_id):
     pr.rejected_at = datetime.utcnow()
     pr.rejection_reason = reason
     pr.rejected_at_stage = stage
+    db.session.commit()
     notify_user(
         pr.requested_by, subject=f"Your payment request {pr.request_no} was rejected",
         message=f"Reason: {reason}", module="payment-requests", record_id=pr.id,
     )
-    db.session.commit()
     flash("Request rejected.", "success")
     return redirect(url_for("payments.request_detail", request_id=request_id))
 
@@ -458,7 +459,6 @@ def add_payment(request_id):
         message=f"{payment.currency} {payment.amount:,.2f} paid via {payment.payment_method}. Status: {pr.status}.",
         module="payment-requests", record_id=pr.id,
     )
-    db.session.commit()
     flash("Payment recorded.", "success")
     return redirect(url_for("payments.request_detail", request_id=request_id))
 

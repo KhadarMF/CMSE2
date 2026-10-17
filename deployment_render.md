@@ -44,6 +44,7 @@ SECRET_KEY=long-random-secret-key
 DATABASE_URL=postgresql://...
 FLASK_ENV=production
 MAX_UPLOAD_MB=20
+UPLOAD_FOLDER=/var/data/uploads
 MAIL_SERVER=smtp.gmail.com
 MAIL_PORT=587
 MAIL_USE_TLS=true
@@ -51,6 +52,12 @@ MAIL_USERNAME=your_email@gmail.com
 MAIL_PASSWORD=your_gmail_app_password
 MAIL_DEFAULT_SENDER=your_email@gmail.com
 ```
+
+For uploaded documents to survive deployments, attach a Render persistent
+disk to the web service with mount path `/var/data/uploads`. The disk and
+`UPLOAD_FOLDER` environment variable must use the same absolute path. Existing
+files that disappeared before the disk was attached must be uploaded again;
+their database rows cannot recreate the file contents.
 
 ## 7. Apply database migrations
 

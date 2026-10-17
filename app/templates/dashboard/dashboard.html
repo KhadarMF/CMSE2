@@ -146,24 +146,24 @@
 
   <section id="portfolio" class="card border-0 shadow-sm cc-panel mb-4">
     <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div><h5 class="mb-0">Project Portfolio 360</h5><small class="text-muted">Physical, financial, schedule, materials readiness, documents, and risk in one table.</small></div>
+      <div><h5 class="mb-0">Project Portfolio 360</h5><small class="text-muted">Physical, financial, schedule, procurement, documents, and risk in one table.</small></div>
       <span class="badge text-bg-light">{{ cc.portfolio|length }} project(s)</span>
     </div>
     <div class="card-body pt-2">
       {% if cc.portfolio %}
       <div class="table-responsive">
         <table class="table table-hover align-middle cc-portfolio-table">
-          <thead><tr><th>Project</th><th>Status</th><th>Overall</th><th>Physical</th>{% if cc.flags.finance %}<th>Financial</th>{% endif %}<th>Schedule</th><th>Materials</th><th>Documents</th><th>Risk</th><th></th></tr></thead>
+          <thead><tr><th>Project</th><th>Status</th><th>Overall</th><th>Physical</th>{% if cc.flags.finance %}<th>Financial</th>{% endif %}<th>Schedule</th><th>Procurement</th><th>Documents</th><th>Risk</th><th></th></tr></thead>
           <tbody>
           {% for row in cc.portfolio %}
             <tr class="{% if row.risk == 'Critical' %}cc-row-critical{% elif row.is_delayed %}cc-row-delayed{% endif %}">
-              <td><strong>{{ row.project.project_name }}</strong><small class="d-block text-muted">{{ row.project.customer_name }} · {{ row.project.location }}</small>{% if row.metric_error %}<small class="d-block text-danger">Progress metrics need repair</small>{% endif %}</td>
+              <td><strong>{{ row.project.project_name }}</strong><small class="d-block text-muted">{{ row.project.customer_name }} · {{ row.project.location }}</small></td>
               <td><span class="badge text-bg-secondary">{{ row.project.status }}</span></td>
               <td>{{ progress_value(row.overall, 'primary') }}</td>
               <td>{{ progress_value(row.physical, 'success') }}</td>
               {% if cc.flags.finance %}<td>{{ progress_value(row.financial_progress, 'info') }}<small class="text-muted d-block mt-1">USD {{ "{:,.0f}".format(row.outstanding) }} due</small></td>{% endif %}
               <td>{% if row.is_delayed %}<span class="badge text-bg-danger">Delayed</span>{% elif row.days_remaining is not none %}<span class="badge text-bg-success">{{ row.days_remaining }} days left</span>{% else %}<span class="badge text-bg-light">Dates missing</span>{% endif %}</td>
-              <td>{{ progress_value(row.materials, 'warning') }}</td>
+              <td>{{ progress_value(row.procurement, 'warning') }}</td>
               <td>{{ progress_value(row.documents, 'secondary') }}</td>
               <td>{% if row.risk == 'Critical' %}<span class="badge text-bg-danger">Critical</span>{% elif row.risk == 'High' %}<span class="badge text-bg-warning">High</span>{% elif row.risk == 'Medium' %}<span class="badge text-bg-info">Medium</span>{% else %}<span class="badge text-bg-success">Low</span>{% endif %}<small class="d-block mt-1">Health {{ row.health_score }}%</small></td>
               <td><a class="btn btn-sm btn-outline-primary" href="{{ row.url }}">Open</a></td>
@@ -206,7 +206,7 @@
 
     <div class="col-xl-4" id="operations">
       <div class="card border-0 shadow-sm h-100 cc-panel">
-        <div class="card-header bg-white border-0"><h5 class="mb-0">Operations & Materials</h5><small class="text-muted">Site execution and resource readiness</small></div>
+        <div class="card-header bg-white border-0"><h5 class="mb-0">Operations & Procurement</h5><small class="text-muted">Site execution and resource readiness</small></div>
         <div class="card-body pt-2 cc-metric-list">
           <a href="{{ cc.links.tasks }}"><span>Open tasks</span><strong>{{ cc.operations.open_tasks }}</strong></a>
           <a href="{{ cc.links.overdue_tasks }}"><span>Overdue tasks</span><strong class="text-danger">{{ cc.operations.overdue_tasks }}</strong></a>

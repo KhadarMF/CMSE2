@@ -78,9 +78,9 @@ def initialize_project(project_id):
         flash("This project already has milestones.", "warning")
     else:
         ensure_default_milestones(project, current_user.id)
-        log_activity("Initialize", "Project Milestones", project.id, "Created the standard workflow milestone template.")
+        log_activity("Initialize", "Project Milestones", project.id, "Created the standard six-milestone template.")
         db.session.commit()
-        flash("Workflow milestones were added to the project.", "success")
+        flash("Six evidence-based milestones were added to the project.", "success")
     return redirect(url_for("projects.detail", project_id=project.id) + "#milestones")
 
 
@@ -124,15 +124,15 @@ def edit(milestone_id):
     weights = {
         "project_weight": _int(request.form.get("project_weight")),
         "physical_weight": _int(request.form.get("physical_weight")),
-        "procurement_weight": 0,
+        "procurement_weight": _int(request.form.get("procurement_weight")),
         "document_weight": _int(request.form.get("document_weight")),
     }
     if any(value < 0 or value > 100 for value in weights.values()):
         flash("Every weight must be between 0 and 100.", "danger")
         return redirect(url_for("milestones.detail", milestone_id=milestone.id))
-    dimension_total = weights["physical_weight"] + weights["document_weight"]
+    dimension_total = weights["physical_weight"] + weights["procurement_weight"] + weights["document_weight"]
     if dimension_total != 100:
-        flash("Physical + Documents must total 100%. Use 0% for N/A.", "danger")
+        flash("Physical + Procurement + Documents must total 100%. Use 0% for N/A.", "danger")
         return redirect(url_for("milestones.detail", milestone_id=milestone.id))
     milestone.name = (request.form.get("name") or milestone.name).strip()
     milestone.description = request.form.get("description")

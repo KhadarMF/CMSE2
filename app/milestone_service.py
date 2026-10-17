@@ -52,41 +52,32 @@ FORM_RELATIONSHIPS = {
 DEFAULT_MILESTONES = (
     {
         "code": "SURVEY", "name": "Survey & Assessment", "project_weight": 10,
-        "physical_weight": 0, "procurement_weight": 0, "document_weight": 100,
+        "physical_weight": 20, "procurement_weight": 0, "document_weight": 80,
         "requirements": (("Approved site survey & load assessment", "site-survey", None, True),),
     },
     {
-        "code": "QUOTATION", "name": "Quotation Approval", "project_weight": 10,
-        "physical_weight": 0, "procurement_weight": 0, "document_weight": 100,
-        "requirements": (("Approved quotation", None, "Quotation", True),),
-    },
-    {
-        "code": "CONTRACT", "name": "Contract Signed", "project_weight": 10,
-        "physical_weight": 0, "procurement_weight": 0, "document_weight": 100,
-        "requirements": (("Signed contract", None, "Contract", True),),
-    },
-    {
-        "code": "DESIGN", "name": "Design & BOM Approval", "project_weight": 15,
-        "physical_weight": 0, "procurement_weight": 0, "document_weight": 100,
+        "code": "DESIGN", "name": "Design & Approval", "project_weight": 15,
+        "physical_weight": 10, "procurement_weight": 10, "document_weight": 80,
         "requirements": (
             ("Approved technical design", None, "Technical Design", True),
             ("Approved bill of quantities", None, "BOQ", True),
         ),
     },
     {
-        "code": "MATERIALS", "name": "Materials Ready", "project_weight": 15,
-        "physical_weight": 0, "procurement_weight": 0, "document_weight": 100,
-        "requirements": (("Approved materials readiness document", None, "Materials Ready", True),),
+        "code": "PROCUREMENT", "name": "Procurement", "project_weight": 20,
+        "physical_weight": 0, "procurement_weight": 80, "document_weight": 20,
+        "requirements": (("Approved delivery note", "delivery-note", None, True),),
     },
     {
-        "code": "INSTALLATION", "name": "Installation", "project_weight": 25,
-        "physical_weight": 100, "procurement_weight": 0, "document_weight": 0,
+        "code": "INSTALLATION", "name": "Installation", "project_weight": 35,
+        "physical_weight": 75, "procurement_weight": 20, "document_weight": 5,
         "requires_daily_report": True,
-        "requirements": (),
+        "requirements": (("Approved installation daily report", "daily-site-report", None, True),),
     },
     {
-        "code": "TESTING", "name": "Testing & Commissioning", "project_weight": 10,
-        "physical_weight": 0, "procurement_weight": 0, "document_weight": 100,
+        "code": "TESTING", "name": "Testing & Commissioning", "project_weight": 15,
+        "physical_weight": 60, "procurement_weight": 10, "document_weight": 30,
+        "requires_daily_report": True,
         "requirements": (
             ("Approved testing form", "testing", None, True),
             ("Approved commissioning form", "commissioning", None, True),
@@ -94,7 +85,7 @@ DEFAULT_MILESTONES = (
     },
     {
         "code": "HANDOVER", "name": "Handover", "project_weight": 5,
-        "physical_weight": 0, "procurement_weight": 0, "document_weight": 100,
+        "physical_weight": 20, "procurement_weight": 0, "document_weight": 80,
         "requirements": (
             ("Approved handover form", "handover", None, True),
             ("Approved warranty document", None, "Warranty Document", True),
@@ -189,7 +180,7 @@ def ensure_default_milestones(project, actor_id=None):
                 from_status=None,
                 to_status="Not Started",
                 user_id=actor_id,
-                notes="Created from the standard workflow milestone template.",
+                notes="Created from the standard six-milestone template.",
             ))
         created.append(milestone)
     return created
@@ -212,25 +203,14 @@ def _resolve_requirement(milestone, requirement):
             record = max(records, key=_record_sort_key)
             source = f"{requirement.form_key} #{record.id}"
     elif requirement.document_type:
-        accepted_types = {requirement.document_type}
-        if requirement.document_type == "Materials Ready":
-            accepted_types.add("Delivery Note")
         records = [
             item for item in milestone.project.documents
-            if item.document_type in accepted_types
+            if item.document_type == requirement.document_type
             and item.milestone_id in (None, milestone.id)
         ]
         if records:
             record = max(records, key=_record_sort_key)
             source = f"Document #{record.id}"
-        elif requirement.document_type == "Materials Ready":
-            delivery_notes = [
-                item for item in milestone.project.delivery_notes
-                if item.milestone_id in (None, milestone.id)
-            ]
-            if delivery_notes:
-                record = max(delivery_notes, key=_record_sort_key)
-                source = f"delivery-note #{record.id}"
 
     status = getattr(record, "approval_status", None) if record else "Missing"
     return {
@@ -303,15 +283,14 @@ def build_milestone_snapshot(milestone):
         if scored_documents else 0
     )
 
-    procurement_weight = 0
     components = {
         "physical": _component(
             "Physical", milestone.physical_weight, physical_progress,
             physical_source, len(tasks),
         ),
         "procurement": _component(
-            "Procurement", procurement_weight, procurement_progress,
-            "Procurement module is not used for progress scoring", len(material_requests),
+            "Procurement", milestone.procurement_weight, procurement_progress,
+            "Status of material requests linked to this milestone", len(material_requests),
         ),
         "documents": _component(
             "Documents", milestone.document_weight, document_progress,
@@ -347,11 +326,11 @@ def build_milestone_snapshot(milestone):
         f"Configured total: {project_weight_total}%.",
     )
     if milestone.physical_weight:
-        gate("physical_evidence", "Physical progress evidence exists", bool(tasks) or latest_report is not None, f"{len(tasks)} linked task(s); latest approved report: #{latest_report.id if latest_report else 'none'}.")
+        gate("task_plan", "Physical work plan exists", bool(tasks), f"{len(tasks)} linked task(s).")
         incomplete_tasks = [item for item in required_tasks if item.status != "Completed" or _clamp(item.progress_percent) < 100]
         gate(
-            "required_tasks", "All configured required tasks are completed",
-            not incomplete_tasks,
+            "required_tasks", "All required tasks are completed",
+            bool(required_tasks) and not incomplete_tasks,
             f"{len(required_tasks) - len(incomplete_tasks)}/{len(required_tasks)} required task(s) complete.",
         )
     if milestone.requires_daily_report:
@@ -360,7 +339,7 @@ def build_milestone_snapshot(milestone):
             latest_report is not None,
             f"Latest approved report: #{latest_report.id}." if latest_report else "No approved report linked to this milestone.",
         )
-    if procurement_weight:
+    if milestone.procurement_weight:
         gate("material_plan", "Procurement records exist", bool(material_requests), f"{len(material_requests)} linked request(s).")
         incomplete_materials = [item for item in required_materials if item.status not in MATERIAL_COMPLETE_STATUSES]
         gate(
@@ -384,7 +363,7 @@ def build_milestone_snapshot(milestone):
     gate("score", "Calculated milestone progress is 100%", raw_progress == 100, f"Current calculated score: {raw_progress}%.")
 
     blockers = [item for item in gates if not item["passed"]]
-    effective_progress = 100 if milestone.status == "Completed" else raw_progress
+    effective_progress = 100 if milestone.status in COMPLETED_MILESTONE_STATUSES else raw_progress
     return {
         "model": milestone,
         "name": milestone.name,

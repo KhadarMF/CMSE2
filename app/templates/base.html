@@ -149,7 +149,7 @@
             <div class="cmse-nav-section" data-section="System">
                 <button class="cmse-nav-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#navSystem" aria-expanded="false"><span>{{ icon("settings") }}</span><strong>System</strong></button>
                 <div id="navSystem" class="collapse cmse-nav-sub">
-                    {% if can_access_module(current_user, 'notifications') %}<a href="{{ url_for('notifications.list_notifications') }}" data-nav-title="Notifications" data-nav-group="System">Notifications</a>{% if can_access_module(current_user, 'notifications', 'create') %}<a href="{{ url_for('notifications.create_notification') }}" data-nav-title="Create Notification" data-nav-group="System">Create Notification</a>{% endif %}{% endif %}
+                    {% if can_access_module(current_user, 'notifications') %}<a href="{{ url_for('notifications.list_notifications') }}" data-nav-title="Notifications" data-nav-group="System">Notifications</a><a href="{{ url_for('notifications.create_notification') }}" data-nav-title="Create Notification" data-nav-group="System">Create Notification</a>{% endif %}
                     {% if can_access_module(current_user, 'notification-log') %}<a href="{{ url_for('notifications.logs') }}" data-nav-title="Notification Log" data-nav-group="System">Notification Log</a>{% endif %}
                     {% if can_access_module(current_user, 'sms-queue') %}<a href="{{ url_for('notifications.sms_queue') }}" data-nav-title="SMS Queue" data-nav-group="System">SMS Queue</a>{% endif %}
                     {% if can_access_module(current_user, 'whatsapp-integration') %}<a href="{{ url_for('notifications.whatsapp_settings') }}" data-nav-title="WhatsApp API Setup" data-nav-group="System">WhatsApp API Setup</a>{% endif %}
@@ -205,7 +205,7 @@
                         {% if can_access_module(current_user, 'service-ticket') %}<li><a class="dropdown-item" data-cmse-project-context-link href="{{ url_for('support.create_ticket', project_id=cmse_project_context.id, customer_name=cmse_project_context.customer_name) if cmse_project_context else url_for('support.create_ticket') }}">Service Ticket</a></li>{% endif %}
                     </ul>
                 </div>
-                {% if can_access_module(current_user, 'notifications', 'view') %}<a class="btn btn-warning btn-sm cmse-notification-btn" href="{{ url_for('notifications.list_notifications') }}" aria-label="Notifications">{{ icon("bell",18) }} <span id="notificationUnreadBadge" data-count-url="{{ url_for('notifications.unread_count') }}">{{ unread_notification_count }}</span></a>{% endif %}
+                {% if can_access_module(current_user, 'notifications', 'view') %}<a class="btn btn-warning btn-sm cmse-notification-btn" href="{{ url_for('notifications.list_notifications') }}" aria-label="Notifications">{{ icon("bell",18) }} <span>{{ unread_notification_count }}</span></a>{% endif %}
                 {% if can_access_module(current_user, 'ai-assistant') %}<a class="btn btn-outline-secondary btn-sm d-none d-sm-inline-flex" href="{{ url_for('ai.assistant') }}">{{ icon("spark",16) }} Assistant</a>{% endif %}
                 <div class="dropdown">
                     <button class="btn btn-outline-dark btn-sm dropdown-toggle cmse-user-btn" data-bs-toggle="dropdown"><span class="erp-avatar">{{ current_user.full_name[:1] }}</span><span class="erp-user-name">{{ current_user.full_name }}</span></button>
@@ -628,6 +628,5 @@
 })();
 </script>
 <script src="{{ url_for('static', filename='js/refresh.js') }}?v=21"></script>
-{% if current_user.is_authenticated %}<script src="{{ url_for('static', filename='js/notifications.js') }}?v=1" defer></script>{% endif %}
 </body>
 </html>

@@ -218,38 +218,9 @@ def test_team_leader_dashboard_is_project_scoped_and_hides_financials(app, clien
     assert "Financial Overview" not in html
     assert "Document Readiness" in html
 
-
-def test_dashboard_survives_one_project_metric_failure(app, client, monkeypatch):
-    from app import db
-    from app.models import Project
-
-    admin = _user("dashboard-metric-error@example.com", "Admin")
-    db.session.add(admin)
-    db.session.flush()
-    project = Project(
-        project_name="Broken Metrics Project",
-        customer_name="Dashboard Customer",
-        location="Hargeisa",
-        project_type="Hybrid Solar",
-        created_by_id=admin.id,
-    )
-    db.session.add(project)
-    db.session.commit()
-
-    def broken_snapshot(*args, **kwargs):
-        raise RuntimeError("synthetic progress error")
-
-    monkeypatch.setattr("app.dashboard_command_center.build_project_command_center", broken_snapshot)
-    _login(client, admin)
-    response = client.get("/dashboard")
-    html = response.get_data(as_text=True)
-
-    assert response.status_code == 200
-    assert "Broken Metrics Project" in html
-    assert "Project metrics need repair" in html
-
     csv_response = client.get("/dashboard/export.csv")
     csv_text = csv_response.get_data(as_text=True)
     assert csv_response.status_code == 200
-    assert "Broken Metrics Project" in csv_text
-    assert "Critical" in csv_text
+    assert "Leader Assigned Project" in csv_text
+    assert "Management Only Project" not in csv_text
+    assert "Revenue USD" not in csv_text

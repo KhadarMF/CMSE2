@@ -1,11 +1,5 @@
 # Solar ERP — reviewed Phase 20K with refreshed interface
 
-**Notifications fix — 14 September 2026:** this release includes private recipient
-inboxes, live unread counts, workflow/form alerts, and email delivery after commit.
-Run `python -m flask --app wsgi db upgrade` before restarting an existing deployment.
-The new migration is `b20k0000a003`. Read `NOTIFICATIONS_FIX.md` for the Somali
-installation guide, delivery behavior, and verification results.
-
 This edition includes the green-and-orange dashboard, redesigned navigation and
 login, grouped survey editors, and responsive layouts. See `UI_REFRESH_NOTES.md`
 for the visual changes and browser verification. No additional database migration

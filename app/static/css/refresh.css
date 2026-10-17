@@ -33,3 +33,80 @@
 @media print{.erp-refresh{background:white!important}.erp-refresh .cmse-main-wrap{margin:0!important}.erp-refresh .cmse-content{max-width:none;padding:0!important}.erp-refresh .erp-welcome{background:#fff!important;color:#173f35;border:1px solid #ddd;padding:15px;min-height:0}.erp-welcome p{color:#555!important}.erp-welcome-actions,.erp-orbit,.erp-form-outline,.erp-form-actions{display:none!important}.erp-form-layout{display:block}.erp-form-section{break-inside:avoid;border-color:#ddd}.erp-refresh .cc-kpi{min-height:115px}.erp-refresh .cc-ai-panel{background:#f4f6ef!important;color:#173f35!important}.erp-refresh .table thead th{background:#eee!important}.erp-refresh .cc-portfolio-table{min-width:0;font-size:8px}.erp-refresh .cc-portfolio-table td{padding:5px}}
 
 .erp-login-form>small{font-size:11px;color:#6d7c75;margin-top:24px;line-height:1.7}.erp-login-story .erp-eyebrow{color:#b8cbb9}.erp-refresh .cmse-sidebar{scrollbar-width:thin;scrollbar-color:#ffffff25 transparent}.erp-refresh [id]{scroll-margin-top:140px}
+
+/* Phase 20 UI palette correction: remove the green theme and return to a dark navy/orange ERP look. */
+:root{
+  --erp-forest:#111827;
+  --erp-green:#3f51b5;
+  --erp-orange:#f97316;
+  --erp-ink:#111827;
+  --erp-muted:#64748b;
+  --erp-line:#e5e7eb;
+  --erp-canvas:#f8fafc;
+  --cmse-primary:#3f51b5;
+  --cmse-orange:#f97316;
+  --cmse-accent:#f97316;
+  --cc-ink:#111827;
+  --cc-muted:#64748b;
+  --cc-border:#e5e7eb;
+  --bs-primary:#3f51b5;
+  --bs-primary-rgb:63,81,181;
+  --bs-success-rgb:63,81,181;
+}
+.erp-refresh body,.erp-refresh{background:#f8fafc;color:#111827}
+.erp-refresh #cmseMainContent a:not(.btn):not([class]){color:#3f51b5}
+.erp-refresh .btn-primary,.erp-refresh .btn-cmse{background:#f97316;border-color:#f97316;color:#fff}
+.erp-refresh .btn-primary:hover,.erp-refresh .btn-cmse:hover{background:#ea580c;border-color:#ea580c;color:#fff}
+.erp-refresh .btn-success{background:#3f51b5;border-color:#3f51b5;color:#fff}
+.erp-refresh .btn-dark{background:#111827;border-color:#111827;color:#fff}
+.erp-refresh .btn-light{background:#f1f5f9;border-color:#e2e8f0;color:#334155}
+.erp-refresh .btn-outline-primary,.erp-refresh .btn-outline-dark,.erp-refresh .btn-outline-secondary{color:#334155;border-color:#cbd5e1;background:#fff}
+.erp-refresh .btn-outline-primary:hover,.erp-refresh .btn-outline-dark:hover,.erp-refresh .btn-outline-secondary:hover{background:#eef2ff;border-color:#a5b4fc;color:#1e293b}
+.erp-refresh .form-control,.erp-refresh .form-select{border-color:#d7dde8;color:#111827;background:#fff}
+.erp-refresh .form-label{color:#475569}
+.erp-refresh .form-control:focus,.erp-refresh .form-select:focus{border-color:#818cf8;box-shadow:0 0 0 3px #4f46e522}
+.erp-refresh .form-check-input:checked{background-color:#3f51b5;border-color:#3f51b5}
+.erp-refresh .table thead th{background:#f1f5f9!important;color:#64748b!important;border-bottom-color:#e2e8f0!important}
+.erp-refresh .table tbody td>a:not(.btn){color:#1e293b}
+.erp-refresh .badge.bg-secondary,.erp-refresh .badge.text-bg-secondary{background:#f1f5f9!important;color:#475569!important}
+.erp-refresh .badge.text-bg-success,.erp-refresh .badge.bg-success,.erp-refresh .erp-status-good{background:#eef2ff!important;color:#3730a3!important}
+.erp-refresh .alert-info{background:#eef2ff;border-color:#c7d2fe;color:#3730a3}
+.erp-refresh .alert-success{background:#eef2ff;color:#3730a3}
+.erp-refresh .dropdown-item:active{background:#3f51b5}
+.erp-refresh .cmse-sidebar{background:#111827;border-right:1px solid #ffffff12}
+.erp-refresh .cmse-brand-mark{background:#f97316;color:#111827}
+.erp-refresh .cmse-brand-text small{color:#cbd5e1}
+.erp-refresh .cmse-sidebar-tools input{background:#1f2937;border-color:#334155;color:#fff}
+.erp-refresh .cmse-sidebar-tools input::placeholder{color:#94a3b8}
+.erp-nav-label{color:#94a3b8}
+.erp-refresh .cmse-nav-link,.erp-refresh .cmse-nav-toggle{color:#cbd5e1}
+.erp-refresh .cmse-nav-link.active{background:#1f2937;color:#fff;box-shadow:inset 3px 0 #f97316}
+.erp-refresh .cmse-nav-link:hover,.erp-refresh .cmse-nav-toggle:hover{background:#1f2937;color:#fff}
+.erp-refresh .cmse-nav-toggle::after{color:#94a3b8}
+.erp-refresh .cmse-nav-sub a{color:#a5b4fc}
+.erp-refresh .cmse-nav-sub a.active{background:#1f2937;color:#fff}
+.erp-sidebar-footer{border-top-color:#ffffff14;color:#cbd5e1}
+.erp-sidebar-footer>span{color:#f97316}
+.erp-sidebar-footer small{color:#94a3b8}
+.erp-refresh .cmse-topbar,.erp-refresh .cmse-workspace-tabs{background:#fff;border-bottom-color:#e5e7eb}
+.erp-refresh .cmse-top-brand{color:#475569}
+.erp-refresh .cmse-search{background:#f1f5f9}
+.erp-avatar{background:#eef2ff;color:#3730a3}
+.erp-refresh .cmse-notification-btn{background:#fff;border-color:#e2e8f0;color:#334155}
+.erp-refresh .cmse-workspace-tab.active{background:#fff7ed;border-color:#fed7aa}
+.erp-refresh .cmse-workspace-tab.active a{color:#9a3412}
+.erp-refresh .erp-dashboard-nav>a.active{color:#3f51b5;border-bottom-color:#3f51b5}
+.erp-refresh .progress{background:#e2e8f0}
+.erp-refresh .progress-bar,.erp-refresh .progress-bar.bg-primary,.erp-refresh .cc-distribution-row .progress-bar{background-color:#3f51b5!important}
+.erp-refresh .cc-kpi-icon,.erp-form-symbol,.erp-section-title>span,.erp-form-card-icon{background:#eef2ff;color:#3f51b5}
+.erp-refresh .cc-kpi:hover{border-color:#c7d2fe;box-shadow:0 6px 18px #1e293b10}
+.erp-refresh .cc-ai-panel{background:#f1f5f9;color:#1e293b}
+.erp-refresh .cc-ai-panel h5{color:#111827}
+.erp-refresh .cc-ai-summary{color:#475569}
+.erp-refresh .cc-ai-badge{color:#3730a3;background:#eef2ff;border-color:#c7d2fe}
+.erp-form-outline{background:#f8fafc;border-color:#e5e7eb}
+.erp-form-outline>a{color:#475569}
+.erp-form-outline>a:hover,.erp-form-outline>a.active{background:#eef2ff;color:#3730a3}
+.erp-form-meter{border-top-color:#e2e8f0;color:#475569}
+.erp-form-section,.erp-form-actions,.erp-form-card,.erp-refresh .brand-card{border-color:#e5e7eb}
+.erp-form-card-icon.water{background:#eef2ff;color:#3f51b5}

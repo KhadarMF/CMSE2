@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from uuid import uuid4
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, send_from_directory
@@ -16,6 +17,36 @@ ALLOWED_EXTENSIONS={'pdf','doc','docx','xls','xlsx','jpg','jpeg','png'}
 def allowed_file(fn): return '.' in fn and fn.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS
 def save_file(file):
     orig=secure_filename(file.filename); stored=f"{uuid4().hex}_{orig}"; file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], stored)); return orig,stored
+
+def stored_file_exists(stored_file_name):
+    """Return whether an uploaded file is present in the configured storage."""
+    if not stored_file_name:
+        return False
+    upload_folder = Path(current_app.config['UPLOAD_FOLDER']).resolve()
+    candidate = (upload_folder / Path(stored_file_name).name).resolve()
+    return candidate.parent == upload_folder and candidate.is_file()
+
+def send_uploaded_file_or_back(stored_file_name, download_name, document_id):
+    """Download an upload, or return to its document with a useful message."""
+    if stored_file_exists(stored_file_name):
+        return send_from_directory(
+            current_app.config['UPLOAD_FOLDER'],
+            Path(stored_file_name).name,
+            as_attachment=True,
+            download_name=download_name,
+        )
+    current_app.logger.warning(
+        "Uploaded document file is missing: document_id=%s stored_file_name=%s upload_folder=%s",
+        document_id,
+        stored_file_name,
+        current_app.config['UPLOAD_FOLDER'],
+    )
+    flash(
+        "The document record exists, but its uploaded file is missing from server storage. "
+        "Upload the original file again as a new version. Configure persistent storage before the next deployment.",
+        "warning",
+    )
+    return redirect(url_for('documents.detail', document_id=document_id))
 @document_bp.route('/')
 @login_required
 def list_documents():
@@ -53,7 +84,15 @@ def upload_document():
 @document_bp.route('/<int:document_id>')
 @login_required
 def detail(document_id):
-    doc=Document.query.get_or_404(document_id); versions=DocumentVersion.query.filter_by(document_id=doc.id).order_by(DocumentVersion.version_number.desc()).all(); return render_template('documents/detail.html', document=doc, versions=versions)
+    doc=Document.query.get_or_404(document_id)
+    versions=DocumentVersion.query.filter_by(document_id=doc.id).order_by(DocumentVersion.version_number.desc()).all()
+    return render_template(
+        'documents/detail.html',
+        document=doc,
+        versions=versions,
+        current_file_available=stored_file_exists(doc.stored_file_name),
+        version_file_available={v.id: stored_file_exists(v.stored_file_name) for v in versions},
+    )
 @document_bp.route('/<int:document_id>/new-version', methods=['GET','POST'])
 @login_required
 def new_version(document_id):
@@ -90,8 +129,10 @@ def review_document(document_id):
 @document_bp.route('/download/<int:document_id>')
 @login_required
 def download_document(document_id):
-    doc=Document.query.get_or_404(document_id); return send_from_directory(current_app.config['UPLOAD_FOLDER'], doc.stored_file_name, as_attachment=True, download_name=doc.file_name)
+    doc=Document.query.get_or_404(document_id)
+    return send_uploaded_file_or_back(doc.stored_file_name, doc.file_name, doc.id)
 @document_bp.route('/version/<int:version_id>/download')
 @login_required
 def download_version(version_id):
-    v=DocumentVersion.query.get_or_404(version_id); return send_from_directory(current_app.config['UPLOAD_FOLDER'], v.stored_file_name, as_attachment=True, download_name=v.file_name)
+    v=DocumentVersion.query.get_or_404(version_id)
+    return send_uploaded_file_or_back(v.stored_file_name, v.file_name, v.document_id)

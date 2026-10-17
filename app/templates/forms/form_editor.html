@@ -1,22 +1,17 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
 {% macro field_input(name, label, field_type) %}
-{% set field_error = invalid_fields.get(name) if invalid_fields else none %}
-{% set is_required = name in required_fields %}
 <div class="{{ 'col-12' if field_type == 'textarea' else 'col-md-6' }}">
-  <label class="form-label" for="field-{{ name }}">{{ label }}{% if is_required %} <span class="erp-required">*</span>{% endif %}</label>
+  <label class="form-label" for="field-{{ name }}">{{ label }}</label>
   {% if field_type.startswith('select:') %}
-  <select class="form-select {{ 'is-invalid' if field_error else '' }}" id="field-{{ name }}" name="{{ name }}" data-completion-field {% if is_required %}required{% endif %}>
+  <select class="form-select" id="field-{{ name }}" name="{{ name }}" data-completion-field>
     <option value="">Select an option</option>
     {% for value, text in field_choices.get(field_type.replace('select:', ''), []) %}<option value="{{ value }}" {% if values.get(name, '') == value %}selected{% endif %}>{{ text }}</option>{% endfor %}
   </select>
-  {% if field_error %}<div class="invalid-feedback">{{ field_error }}</div>{% endif %}
   {% elif field_type == 'textarea' %}
-  <textarea class="form-control {{ 'is-invalid' if field_error else '' }}" id="field-{{ name }}" name="{{ name }}" rows="3" data-completion-field {% if is_required %}required{% endif %}>{{ values.get(name, '') }}</textarea>
-  {% if field_error %}<div class="invalid-feedback">{{ field_error }}</div>{% endif %}
+  <textarea class="form-control" id="field-{{ name }}" name="{{ name }}" rows="3" data-completion-field>{{ values.get(name, '') }}</textarea>
   {% else %}
-  <input type="{{ field_type }}" class="form-control {{ 'is-invalid' if field_error else '' }}" id="field-{{ name }}" name="{{ name }}" value="{{ values.get(name, '') }}" data-completion-field {% if field_type == 'number' %}step="any"{% endif %} {% if is_required %}required{% endif %} {% if daily_report_mode and team_leader_mode and name == 'site_supervisor' %}readonly{% endif %}>
-  {% if field_error %}<div class="invalid-feedback">{{ field_error }}</div>{% endif %}
+  <input type="{{ field_type }}" class="form-control" id="field-{{ name }}" name="{{ name }}" value="{{ values.get(name, '') }}" data-completion-field {% if field_type == 'number' %}step="any"{% endif %} {% if daily_report_mode and team_leader_mode and name == 'site_supervisor' %}readonly{% endif %}>
   {% endif %}
 </div>
 {% endmacro %}
@@ -39,12 +34,12 @@
       <section class="erp-form-section" id="project-context">
         <div class="erp-section-title"><span>01</span><div><h3>Project & status</h3><p>Choose the project this record belongs to.</p></div></div>
         <div class="row g-4">
-          <div class="col-md-{{ '6' if daily_report_mode else '8' }}"><label class="form-label" for="field-project">Project <span class="erp-required">*</span></label><select class="form-select {{ 'is-invalid' if invalid_fields.get('project_id') else '' }}" name="project_id" id="field-project" required><option value="">Select Project</option>{% for project in projects %}<option value="{{ project.id }}" data-customer="{{ project.customer_name }}" {% if selected_project|string == project.id|string %}selected{% endif %}>{{ project.project_name }} - {{ project.customer_name }}</option>{% endfor %}</select>{% if invalid_fields.get('project_id') %}<div class="invalid-feedback">{{ invalid_fields.get('project_id') }}</div>{% endif %}<small class="erp-field-help" id="erpProjectCustomer">Choose a project to link its customer.</small></div>
+          <div class="col-md-{{ '6' if daily_report_mode else '8' }}"><label class="form-label" for="field-project">Project <span class="erp-required">*</span></label><select class="form-select" name="project_id" id="field-project" required><option value="">Select Project</option>{% for project in projects %}<option value="{{ project.id }}" data-customer="{{ project.customer_name }}" {% if selected_project|string == project.id|string %}selected{% endif %}>{{ project.project_name }} - {{ project.customer_name }}</option>{% endfor %}</select><small class="erp-field-help" id="erpProjectCustomer">Choose a project to link its customer.</small></div>
           {% if daily_report_mode %}
-          <div class="col-md-6"><label class="form-label" for="field-team">Team <span class="erp-required">*</span></label><select class="form-select {{ 'is-invalid' if invalid_fields.get('team_id') else '' }}" name="team_id" id="field-team" required><option value="">Select Team</option>{% for team in daily_teams %}<option value="{{ team.id }}" {% if selected_team|string == team.id|string %}selected{% endif %}>{{ team.team_name }}</option>{% endfor %}</select>{% if invalid_fields.get('team_id') %}<div class="invalid-feedback">{{ invalid_fields.get('team_id') }}</div>{% endif %}</div>
-          <div class="col-md-8"><label class="form-label" for="field-milestone">Milestone</label><select class="form-select {{ 'is-invalid' if invalid_fields.get('milestone_id') else '' }}" name="milestone_id" id="field-milestone"><option value="">Not linked</option>{% for milestone in milestones %}<option value="{{ milestone.id }}" {% if selected_milestone|string == milestone.id|string %}selected{% endif %}>{{ milestone.project.project_name }} — {{ milestone.name }}</option>{% endfor %}</select>{% if invalid_fields.get('milestone_id') %}<div class="invalid-feedback">{{ invalid_fields.get('milestone_id') }}</div>{% endif %}<small class="erp-field-help">Approved reports provide evidence for the selected milestone.</small></div>
+          <div class="col-md-6"><label class="form-label" for="field-team">Team <span class="erp-required">*</span></label><select class="form-select" name="team_id" id="field-team" required><option value="">Select Team</option>{% for team in daily_teams %}<option value="{{ team.id }}" {% if selected_team|string == team.id|string %}selected{% endif %}>{{ team.team_name }}</option>{% endfor %}</select></div>
+          <div class="col-md-8"><label class="form-label" for="field-milestone">Milestone</label><select class="form-select" name="milestone_id" id="field-milestone"><option value="">Not linked</option>{% for milestone in milestones %}<option value="{{ milestone.id }}" {% if selected_milestone|string == milestone.id|string %}selected{% endif %}>{{ milestone.project.project_name }} — {{ milestone.name }}</option>{% endfor %}</select><small class="erp-field-help">Approved reports provide evidence for the selected milestone.</small></div>
           {% endif %}
-          <div class="col-md-4"><label class="form-label" for="field-status">{{ 'Initial status' if mode == 'create' else 'Current status' }}</label>{% if mode == 'create' %}<select class="form-select {{ 'is-invalid' if invalid_fields.get('approval_status') else '' }}" name="approval_status" id="field-status"><option value="Draft" {% if approval_status == 'Draft' %}selected{% endif %}>Draft</option><option value="Submitted" {% if approval_status == 'Submitted' %}selected{% endif %}>Submit for Approval</option></select>{% if invalid_fields.get('approval_status') %}<div class="invalid-feedback">{{ invalid_fields.get('approval_status') }}</div>{% endif %}{% else %}<input class="form-control" id="field-status" value="{{ approval_status }}" readonly><small class="erp-field-help">Saved changes return this form to Draft for a new review.</small>{% endif %}</div>
+          <div class="col-md-4"><label class="form-label" for="field-status">{{ 'Initial status' if mode == 'create' else 'Current status' }}</label>{% if mode == 'create' %}<select class="form-select" name="approval_status" id="field-status"><option value="Draft">Draft</option><option value="Submitted">Submit for Approval</option></select>{% else %}<input class="form-control" id="field-status" value="{{ approval_status }}" readonly><small class="erp-field-help">Saved changes return this form to Draft for a new review.</small>{% endif %}</div>
         </div>
       </section>
       {% for section in sections %}
@@ -57,57 +52,4 @@
     </div>
   </div>
 </form>
-<div class="modal fade" id="erpSaveConfirmModal" tabindex="-1" aria-labelledby="erpSaveConfirmTitle" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header"><h5 class="modal-title" id="erpSaveConfirmTitle">Save this form?</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cancel"></button></div>
-      <div class="modal-body">Confirm before saving. Yes saves the form, No keeps you on this page, and Cancel closes this message.</div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" id="erpConfirmSaveYes">Yes</button>
-        <button type="button" class="btn btn-outline-secondary" id="erpConfirmSaveNo">No</button>
-        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-      </div>
-    </div>
-  </div>
-</div>
-<script>
-document.addEventListener('DOMContentLoaded', function(){
-  const form = document.getElementById('erpRecordForm');
-  const modalElement = document.getElementById('erpSaveConfirmModal');
-  const yesButton = document.getElementById('erpConfirmSaveYes');
-  const noButton = document.getElementById('erpConfirmSaveNo');
-  const firstInvalid = form ? form.querySelector('.is-invalid, :invalid') : null;
-  if (firstInvalid) {
-    firstInvalid.focus({preventScroll: true});
-    firstInvalid.scrollIntoView({block: 'center', behavior: 'smooth'});
-  }
-  if (!form || !modalElement || !window.bootstrap) return;
-  const modal = new bootstrap.Modal(modalElement);
-  let confirmed = false;
-  form.addEventListener('submit', function(event){
-    if (confirmed) return;
-    event.preventDefault();
-    event.stopPropagation();
-    form.classList.add('was-validated');
-    if (!form.checkValidity()) {
-      const invalid = form.querySelector(':invalid');
-      if (invalid) {
-        invalid.focus({preventScroll: true});
-        invalid.scrollIntoView({block: 'center', behavior: 'smooth'});
-      }
-      return;
-    }
-    modal.show();
-  });
-  yesButton.addEventListener('click', function(){
-    confirmed = true;
-    modal.hide();
-    form.requestSubmit();
-  });
-  noButton.addEventListener('click', function(){
-    modal.hide();
-    form.classList.remove('was-validated');
-  });
-});
-</script>
 {% endblock %}

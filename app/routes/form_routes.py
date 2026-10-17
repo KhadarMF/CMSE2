@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from sqlalchemy import update
+from sqlalchemy import inspect, text, update
 from sqlalchemy.exc import SQLAlchemyError
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
@@ -717,6 +717,80 @@ def review_form(form_key, form_id):
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
     return render_template("forms/review.html", form_key=form_key, form_title=config["title"], entry=entry)
 
+
+
+def _table_columns(table_name):
+    try:
+        inspector = inspect(db.engine)
+        if not inspector.has_table(table_name):
+            return set()
+        return {column["name"] for column in inspector.get_columns(table_name)}
+    except Exception:
+        current_app.logger.exception("Could not inspect table %s during form delete cleanup", table_name)
+        return set()
+
+
+def _safe_execute(statement, params):
+    try:
+        db.session.execute(text(statement), params)
+    except Exception:
+        current_app.logger.exception("Form delete cleanup SQL failed: %s", statement)
+
+
+def _cleanup_form_delete_links(form_key, form_title, record_id):
+    """Remove stale references that can block deleting legacy form records.
+
+    Older local databases may contain workflow or notification rows linked to a
+    form record without SQLAlchemy relationships/cascades.  Cleanup is written
+    against reflected tables and existing columns only, so it remains safe for
+    databases that are between historical phases.
+    """
+    ref = str(record_id)
+    columns = _table_columns("milestone_document_requirement")
+    if {"form_key", "form_record_id"}.issubset(columns):
+        _safe_execute(
+            'UPDATE milestone_document_requirement SET form_record_id = NULL '
+            'WHERE form_key = :form_key AND form_record_id = :record_id',
+            {"form_key": form_key, "record_id": record_id},
+        )
+
+    nullable_record_specs = [
+        ("notification", "module", "record_id"),
+        ("audit_log", "module", "record_id"),
+    ]
+    for table_name, module_col, record_col in nullable_record_specs:
+        columns = _table_columns(table_name)
+        if {module_col, record_col}.issubset(columns):
+            _safe_execute(
+                f'UPDATE {table_name} SET {record_col} = NULL '
+                f'WHERE ({module_col} = :form_key OR {module_col} = :form_title) AND {record_col} = :record_id',
+                {"form_key": form_key, "form_title": form_title, "record_id": record_id},
+            )
+
+    columns = _table_columns("approval_history")
+    if {"module", "record_id"}.issubset(columns):
+        _safe_execute(
+            'DELETE FROM approval_history '
+            'WHERE (module = :form_key OR module = :form_title) AND record_id = :record_id',
+            {"form_key": form_key, "form_title": form_title, "record_id": record_id},
+        )
+
+    related_specs = [
+        ("system_notification", "related_module", "related_ref"),
+        ("notification_log", "related_module", "related_ref"),
+        ("sms_queue", "related_module", "related_ref"),
+        ("ai_interaction_log", "related_module", "related_ref"),
+    ]
+    for table_name, module_col, ref_col in related_specs:
+        columns = _table_columns(table_name)
+        if {module_col, ref_col}.issubset(columns):
+            _safe_execute(
+                f'UPDATE {table_name} SET {module_col} = NULL, {ref_col} = NULL '
+                f'WHERE ({module_col} = :form_key OR {module_col} = :form_title) AND {ref_col} = :ref',
+                {"form_key": form_key, "form_title": form_title, "ref": ref},
+            )
+
+
 @form_bp.route("/<form_key>/<int:form_id>/delete", methods=["GET", "POST"])
 @login_required
 def delete_form(form_key, form_id):
@@ -740,15 +814,27 @@ def delete_form(form_key, form_id):
 
     project = entry.project
     record_id = entry.id
+    table_name = entry.__tablename__
+    form_title = config["title"]
     try:
         if project is not None:
-            invalidate_evidence(project, current_user, form_key=form_key, record_id=record_id)
-            for milestone in list(project.milestones or []):
-                for requirement in list(milestone.document_requirements or []):
-                    if requirement.form_key == form_key and requirement.form_record_id == record_id:
-                        requirement.form_record_id = None
-        log_activity("Delete", config["title"], record_id, f"Deleted {config['title']} #{record_id}")
-        db.session.delete(entry)
+            try:
+                invalidate_evidence(project, current_user, form_key=form_key, record_id=record_id)
+            except Exception:
+                current_app.logger.exception(
+                    "Milestone invalidation failed while deleting %s form %s; continuing cleanup.",
+                    form_key, record_id,
+                )
+        _cleanup_form_delete_links(form_key, form_title, record_id)
+        log_activity("Delete", form_title, None, f"Deleted {form_title} #{record_id}")
+        db.session.flush()
+        db.session.expunge(entry)
+        delete_result = db.session.execute(
+            text(f'DELETE FROM {table_name} WHERE id = :record_id'),
+            {"record_id": record_id},
+        )
+        if delete_result.rowcount != 1:
+            raise RuntimeError("Form record was not deleted; it may have changed during cleanup.")
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
@@ -756,8 +842,8 @@ def delete_form(form_key, form_id):
             "Failed to delete %s form %s: %s", form_key, form_id, exc
         )
         flash(
-            "The form could not be deleted because linked workflow history still needs cleanup. "
-            "Please try again; if it repeats, contact the system administrator.",
+            "The form could not be deleted because the database rejected the cleanup. "
+            f"Error: {exc}",
             "danger",
         )
         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
@@ -784,4 +870,8 @@ def print_form(form_key, form_id):
         entry=entry,
         display_rows=build_display_rows(entry, form_key),
     )
+
+
+
+
 

@@ -199,7 +199,7 @@ def can_access_module(user, key, action="view"):
     if user.role == "Admin":
         return True
     # Dashboard is allowed for authenticated users, but dashboard content is filtered by permissions.
-    if key in ("dashboard", "notifications") and action == "view":
+    if key == "dashboard" and action == "view":
         return True
     perm = _dynamic_form_permission(user, key)
     return _permission_allows(perm, action)
@@ -310,7 +310,7 @@ def can_access_module(user, key, action="view"):
         return False
     if user.role == "Admin":
         return True
-    if key in ("dashboard", "notifications") and action == "view":
+    if key == "dashboard" and action == "view":
         return True
 
     perm = _get_perm(user, key)
@@ -376,7 +376,7 @@ def can_access_module(user, key, action="view"):
         return False
     if _is_admin_user(user):
         return True
-    if key in ("dashboard", "notifications") and action == "view":
+    if key == "dashboard" and action == "view":
         return True
     perm = _get_perm(user, key)
     if _permission_allows(perm, action):
