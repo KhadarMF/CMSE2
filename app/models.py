@@ -16,7 +16,7 @@ PROJECT_STATUSES = [
 
 DOCUMENT_TYPES = [
     "Site Survey Form", "Load Assessment", "Technical Design", "BOQ",
-    "Quotation", "Contract", "Delivery Note", "Daily Site Report",
+    "Quotation", "Contract", "Materials Ready", "Delivery Note", "Daily Site Report",
     "Testing Report", "Commissioning Form", "Handover Certificate",
     "Warranty Document",
 ]
@@ -1157,6 +1157,7 @@ class ServiceVisit(db.Model):
     technician = db.relationship("Employee")
 
 class SystemNotification(db.Model):
+    __table_args__ = (db.Index("ix_notification_inbox", "target_user_id", "status", "id"),)
     id = db.Column(db.Integer, primary_key=True)
     ref_no = db.Column(db.String(120), unique=True, nullable=False)
     title = db.Column(db.String(180), nullable=False)
@@ -1175,7 +1176,7 @@ class SystemNotification(db.Model):
 
 # Phase 15E Models: Notification Channels, Logs, SMS Queue, WhatsApp Future Settings, User Form Permissions
 NOTIFICATION_CHANNELS = ["In-App", "Email", "SMS", "WhatsApp"]
-NOTIFICATION_DELIVERY_STATUSES = ["Pending", "Queued", "Sent", "Failed", "Skipped"]
+NOTIFICATION_DELIVERY_STATUSES = ["Pending", "Queued", "Sending", "Sent", "Failed", "Skipped"]
 FORM_PERMISSION_KEYS = [
     # Core / Project
     ("dashboard", "Dashboard", "Core"),

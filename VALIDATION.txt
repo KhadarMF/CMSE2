@@ -1,0 +1,6 @@
+Full regression suite: 65 passed, 1 skipped (PostgreSQL URL not configured).
+Final PDF worker follow-up: 2 passed.
+Compilation: passed.
+Isolated first-run HTTP smoke test: passed.
+Native PDF runtime: unavailable on this Windows host; printable HTML fallback verified.
+Source archive SHA256: 9fd3397159f44599eb1c011de9e9de0955923d00dd1b80bc106504f84cecd08d

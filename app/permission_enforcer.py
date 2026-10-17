@@ -300,7 +300,7 @@ def register_permission_enforcer(app):
         except Exception:
             # Fail closed: the normal explicit permission matrix below applies.
             pass
-        if endpoint in READ_ONLY_ENDPOINTS:
+        if endpoint in READ_ONLY_ENDPOINTS or endpoint in {"notifications.list_notifications", "notifications.unread_count", "notifications.mark_read"}:
             return None
 
         # Forms are controlled by form_key in URL.

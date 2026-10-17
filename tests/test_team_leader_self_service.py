@@ -179,8 +179,10 @@ def test_team_leader_daily_report_is_project_scoped_and_unique(app, client):
     duplicate_response = client.post(
         "/forms/daily-site-report/new", data=payload, follow_redirects=True
     )
-    assert duplicate_response.status_code == 200
-    assert "already exists for this team, project, and date" in duplicate_response.get_data(as_text=True)
+    assert duplicate_response.status_code == 400
+    duplicate_html = duplicate_response.get_data(as_text=True)
+    assert "already exists for this team, project, and date" in duplicate_html
+    assert "Mounted 18 panels and completed string one." in duplicate_html
     assert DailySiteReport.query.filter_by(created_by_id=leader.id).count() == 1
 
     submit_response = client.post(

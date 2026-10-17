@@ -69,7 +69,7 @@
         <div class="pcc-card-kicker">Overall progress</div>
         <div class="pcc-score-row"><strong>{{ cc.overall }}%</strong><span class="pcc-trend pcc-trend-neutral">Weighted</span></div>
         <div class="pcc-progress" aria-hidden="true"><span style="width:{{ cc.overall }}%"></span></div>
-        <p>{% if cc.milestone_engine.configured %}Weighted from the six evidence-based milestone gates.{% else %}Legacy estimate: 25% phase + 35% physical + 20% procurement + 20% documents.{% endif %}</p>
+        <p>{% if cc.milestone_engine.configured %}Weighted from clear workflow milestones and approved evidence.{% else %}Legacy estimate: 30% phase + 35% physical + 35% documents.{% endif %}</p>
     </article>
     <article class="pcc-score-card">
         <div class="pcc-card-kicker">Physical progress</div>
@@ -92,10 +92,10 @@
         {% endif %}
     </article>
     <article class="pcc-score-card">
-        <div class="pcc-card-kicker">Procurement progress</div>
-        <div class="pcc-score-row"><strong>{{ cc.procurement.progress|string + '%' if cc.procurement.applicable else 'N/A' }}</strong><span>{{ cc.procurement.issued_count }} issues</span></div>
-        {% if cc.procurement.applicable %}<div class="pcc-progress pcc-progress-orange" aria-hidden="true"><span style="width:{{ cc.procurement.progress }}%"></span></div>{% endif %}
-        <p>{{ cc.procurement.approved_count }} of {{ cc.procurement.request_count }} requests approved or fulfilled.</p>
+        <div class="pcc-card-kicker">Materials readiness</div>
+        <div class="pcc-score-row"><strong>{{ cc.materials.progress }}%</strong><span>{{ cc.materials.approved }}/{{ cc.materials.total }} approved</span></div>
+        <div class="pcc-progress pcc-progress-orange" aria-hidden="true"><span style="width:{{ cc.materials.progress }}%"></span></div>
+        <p>{{ cc.materials.source }}.</p>
     </article>
     <article class="pcc-score-card">
         <div class="pcc-card-kicker">Document readiness</div>
@@ -117,7 +117,7 @@
 
 <section id="milestones" class="pcc-section pcc-panel">
     <div class="pcc-panel-head">
-        <div><span class="pcc-section-index">01</span><h2>Milestone engine</h2><p>Weighted physical, procurement, and document evidence with automatic completion gates.</p></div>
+        <div><span class="pcc-section-index">01</span><h2>Milestone engine</h2><p>Simple workflow weights backed by approved documents and site progress.</p></div>
         <span class="pcc-head-metric">{{ cc.milestone_progress }}% weighted progress</span>
     </div>
     {% if cc.milestone_engine.configured %}
@@ -127,14 +127,14 @@
             <div class="pcc-gate-card-head"><span>{{ '%02d'|format(milestone.model.sequence) }}</span><div><strong>{{ milestone.name }}</strong><small>{{ milestone.status }} / {{ milestone.model.project_weight }}% project weight</small></div><em>{{ milestone.progress }}%</em></div>
             <div class="pcc-progress"><span style="width:{{ milestone.progress }}%"></span></div>
             <div class="pcc-gate-dimensions">
-                {% for key in ['physical','procurement','documents'] %}{% set component=milestone.components[key] %}<span><b>{{ component.name }}</b>{{ component.progress|string + '%' if component.applicable else 'N/A' }}</span>{% endfor %}
+                {% for key in ['physical','documents'] %}{% set component=milestone.components[key] %}<span><b>{{ component.name }}</b>{{ component.progress|string + '%' if component.applicable else 'N/A' }}</span>{% endfor %}
             </div>
             <div class="pcc-gate-footer"><span class="{{ 'ready' if milestone.ready else 'blocked' }}">{{ 'All gates pass' if milestone.ready else milestone.blockers|length|string + ' blocker(s)' }}</span><a href="{{ url_for('milestones.detail', milestone_id=milestone.model.id) }}">Open gate →</a></div>
         </article>
         {% endfor %}
     </div>
     {% else %}
-    <div class="pcc-empty"><strong>Milestone engine is not initialized</strong><p>Add the standard six milestones to calculate physical, procurement, and document progress from evidence.</p>{% if current_user.role in ['Admin','Management','Operation Manager'] %}<form method="post" action="{{ url_for('milestones.initialize_project', project_id=project.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary btn-sm">Initialize six milestones</button></form>{% endif %}</div>
+    <div class="pcc-empty"><strong>Milestone engine is not initialized</strong><p>Add the standard workflow milestones to calculate progress from approved evidence.</p>{% if current_user.role in ['Admin','Management','Operation Manager'] %}<form method="post" action="{{ url_for('milestones.initialize_project', project_id=project.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary btn-sm">Initialize milestones</button></form>{% endif %}</div>
     {% endif %}
 </section>
 
@@ -202,13 +202,13 @@
 
     <article class="pcc-panel">
         <div class="pcc-panel-head compact">
-            <div><span class="pcc-section-index">04</span><h2>Procurement progress</h2><p>Requests, approvals, issues, and material value.</p></div>
-            <span class="pcc-big-percent">{{ cc.procurement.progress }}%</span>
+            <div><span class="pcc-section-index">04</span><h2>Materials readiness</h2><p>Approved readiness evidence for materials before site work continues.</p></div>
+            <span class="pcc-big-percent">{{ cc.materials.progress }}%</span>
         </div>
         <div class="pcc-stat-strip">
-            <div><strong>{{ cc.procurement.request_count }}</strong><span>Requests</span></div>
-            <div><strong>{{ cc.procurement.approved_count }}</strong><span>Approved</span></div>
-            <div><strong>{{ cc.procurement.issued_count }}</strong><span>Issued</span></div>
+            <div><strong>{{ cc.materials.approved }}</strong><span>Approved docs</span></div>
+            <div><strong>{{ cc.materials.total }}</strong><span>Required docs</span></div>
+            <div><strong>{{ cc.procurement.issued_count }}</strong><span>Legacy issues</span></div>
         </div>
         {% if procurement_allowed %}
         <div class="pcc-money-row">
@@ -217,16 +217,16 @@
         </div>
         {% endif %}
         <div class="pcc-list">
-            {% for item in cc.procurement.requests[:4] %}
-            <a href="{{ url_for('materials.request_detail', request_id=item.id) }}">
-                <span><strong>{{ item.ref_no }}</strong><small>{{ item.purpose or 'No purpose entered' }}</small></span>
+            {% for item in cc.materials.requirements %}
+            <a href="{{ url_for('milestones.detail', milestone_id=item.requirement.milestone_id) }}">
+                <span><strong>{{ item.requirement.title }}</strong><small>{{ item.source }}</small></span>
                 <em class="pcc-status pcc-status-{{ item.status|lower|replace(' ', '-') }}">{{ item.status }}</em>
             </a>
             {% else %}
-            <div class="pcc-empty compact"><strong>No material requests</strong><p>Procurement is not yet recorded for this project.</p></div>
+            <div class="pcc-empty compact"><strong>No readiness requirement</strong><p>Add or approve a Materials Ready document on the project.</p></div>
             {% endfor %}
         </div>
-        {% if can_access_module(current_user, 'material-request', 'create') %}<a class="pcc-text-link" href="{{ url_for('materials.create_request', project_id=project.id) }}">Create material request →</a>{% endif %}
+        <a class="pcc-text-link" href="{{ url_for('documents.upload_document') }}">Upload readiness document →</a>
     </article>
 </section>
 

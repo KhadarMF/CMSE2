@@ -1,9 +1,9 @@
-{% extends "base.html" %}{% block content %}<div class="mt-4 mb-3"><h2 class="fw-bold">Create User</h2></div><div class="card shadow-sm"><div class="card-body"><form method="POST">
+{% extends "base.html" %}{% block content %}<div class="mt-4 mb-3"><h2 class="fw-bold">Create User</h2></div><div class="card shadow-sm"><div class="card-body"><form method="POST" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% set user = None %}
 <div class="row g-3">
 <div class="col-md-6"><label class="form-label">Full Name</label><input class="form-control" name="full_name" value="{{ user.full_name if user else '' }}" required></div>
-<div class="col-md-6"><label class="form-label">Email</label><input type="email" class="form-control" name="email" value="{{ user.email if user else '' }}" required></div>
-{% if not user %}<div class="col-md-6"><label class="form-label">Password</label><input type="password" class="form-control" name="password" required></div>{% endif %}
+<div class="col-md-6"><label class="form-label">Email</label><input type="email" class="form-control" name="email" value="{{ user.email if user else '' }}" autocomplete="off" required></div>
+{% if not user %}<div class="col-md-6"><label class="form-label">Initial ERP Password</label><input type="password" class="form-control" name="new_user_password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore required></div>{% endif %}
 <div class="col-md-6"><label class="form-label">Role</label><select class="form-select" name="role" required>{% for role in roles %}<option value="{{ role }}" {% if user and user.role == role %}selected{% endif %}>{{ role }}</option>{% endfor %}</select></div>
 <div class="col-md-6"><label class="form-label">Branch</label><select class="form-select" name="branch_id"><option value="">No Branch</option>{% for branch in branches %}<option value="{{ branch.id }}" {% if user and user.branch_id == branch.id %}selected{% endif %}>{{ branch.branch_name }}</option>{% endfor %}</select></div>
 <div class="col-md-6"><label class="form-label">Department</label><select class="form-select" name="department_id"><option value="">No Department</option>{% for dept in departments %}<option value="{{ dept.id }}" {% if user and user.department_id == dept.id %}selected{% endif %}>{{ dept.department_name }}</option>{% endfor %}</select></div>

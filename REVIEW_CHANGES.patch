@@ -1,0 +1,2708 @@
+--- a/.env.example
++++ b/.env.example
+@@ -60,3 +60,11 @@
+ # disk, or move backups to object storage. A backup on an ephemeral disk
+ # is not a backup.
+ CMSE_BACKUP_DIR=
++
++# Optional first-time administrator bootstrap (never resets an existing admin)
++# INITIAL_ADMIN_EMAIL=admin@example.com
++# INITIAL_ADMIN_PASSWORD=choose-at-least-12-characters
++
++# Local development server defaults
++HOST=127.0.0.1
++FLASK_DEBUG=0
+--- a/app/__init__.py
++++ b/app/__init__.py
+@@ -25,7 +25,7 @@
+     # because the current working directory can sometimes differ from the
+     # folder that contains .env.
+     project_root = Path(__file__).resolve().parent.parent
+-    load_dotenv(project_root / ".env", override=True)
++    load_dotenv(project_root / ".env", override=False)
+     load_dotenv(override=False)
+     app = Flask(__name__)
+ 
+@@ -84,7 +84,11 @@
+ 
+     @login_manager.user_loader
+     def load_user(user_id):
+-        return User.query.get(int(user_id))
++        try:
++            user = db.session.get(User, int(user_id))
++        except (TypeError, ValueError):
++            return None
++        return user if user and user.is_active else None
+ 
+     # Phase 17B.2G Admin Account Recovery: disabled unless
+     # ADMIN_RECOVERY_PASSWORD is set in environment variables.
+--- a/app/dashboard_command_center.py
++++ b/app/dashboard_command_center.py
+@@ -26,6 +26,7 @@
+     ProjectTask,
+     PROJECT_STATUSES,
+     SiteSurveyForm,
++    SolarPumpSurveyForm,
+     Team,
+     TestingForm,
+     WhatsAppMessage,
+@@ -37,6 +38,7 @@
+ 
+ FORM_MODELS = (
+     SiteSurveyForm,
++    SolarPumpSurveyForm,
+     LoadAssessmentForm,
+     DailySiteReport,
+     DeliveryNoteForm,
+--- /dev/null
++++ b/app/local_setup.py
+@@ -0,0 +1,55 @@
++"""Local development environment setup shared by entry points."""
++import os
++from pathlib import Path
++import re
++import secrets
++
++PROJECT_ROOT = Path(__file__).resolve().parent.parent
++
++
++def _set_env_value(content, key, value):
++    pattern = re.compile(rf"^{re.escape(key)}=.*$", re.MULTILINE)
++    replacement = f"{key}={value}"
++    if pattern.search(content):
++        return pattern.sub(replacement, content, count=1)
++    return content.rstrip() + f"\n{replacement}\n"
++
++
++def prepare_local_environment():
++    """Create/repair only the local, git-ignored environment file."""
++    process_env = (os.environ.get("FLASK_ENV") or "").strip().lower()
++    if process_env == "production" or os.environ.get("RENDER"):
++        return
++
++    env_path = PROJECT_ROOT / ".env"
++    env_example_path = PROJECT_ROOT / ".env.example"
++    created = not env_path.exists()
++    content = (
++        env_example_path.read_text(encoding="utf-8")
++        if created and env_example_path.exists()
++        else env_path.read_text(encoding="utf-8") if env_path.exists() else ""
++    )
++
++    match = re.search(r"^SECRET_KEY=(.*)$", content, re.MULTILINE)
++    current_secret = match.group(1).strip() if match else ""
++    unsafe = {
++        "", "secret", "dev", "development", "change-this-secret-key",
++        "change-this-to-a-long-random-secret-key",
++    }
++    changed = created
++    if current_secret.lower() in unsafe or len(current_secret) < 32:
++        content = _set_env_value(content, "SECRET_KEY", secrets.token_hex(32))
++        changed = True
++    # `run.py` is the local launcher. Keep local HTTP login cookies usable even
++    # when `.env` was previously copied verbatim from the production example.
++    if not re.search(r"^FLASK_ENV=development$", content, re.MULTILINE):
++        content = _set_env_value(content, "FLASK_ENV", "development")
++        changed = True
++    if not re.search(r"^SESSION_COOKIE_SECURE=0$", content, re.MULTILINE):
++        content = _set_env_value(content, "SESSION_COOKIE_SECURE", "0")
++        changed = True
++
++    if changed:
++        env_path.write_text(content, encoding="utf-8")
++        print("LOCAL SETUP: .env is ready with a private generated SECRET_KEY.")
++
+--- a/app/milestone_service.py
++++ b/app/milestone_service.py
+@@ -9,8 +9,9 @@
+     CommissioningForm, DailySiteReport, DeliveryNoteForm, Document,
+     HandoverForm, LoadAssessmentForm, MilestoneAuditLog,
+     MilestoneDocumentRequirement, ProjectIssue, ProjectMilestone,
+-    SiteSurveyForm, TestingForm,
++    SiteSurveyForm, SolarPumpSurveyForm, TestingForm,
+ )
++from app.survey_config import survey_group
+ 
+ 
+ COMPLETED_MILESTONE_STATUSES = {"Completed", "Completed with Exception"}
+@@ -28,6 +29,7 @@
+ }
+ FORM_MODELS = {
+     "site-survey": SiteSurveyForm,
++    "solar-pump-survey": SolarPumpSurveyForm,
+     "load-assessment": LoadAssessmentForm,
+     "daily-site-report": DailySiteReport,
+     "delivery-note": DeliveryNoteForm,
+@@ -37,6 +39,7 @@
+ }
+ FORM_RELATIONSHIPS = {
+     "site-survey": "site_surveys",
++    "solar-pump-survey": "solar_pump_surveys",
+     "load-assessment": "load_assessments",
+     "daily-site-report": "daily_reports",
+     "delivery-note": "delivery_notes",
+@@ -159,6 +162,9 @@
+         db.session.add(milestone)
+         db.session.flush()
+         for title, form_key, document_type, critical in spec.get("requirements", ()):
++            if spec["code"] == "SURVEY":
++                label, _, form_key = survey_group(project)
++                title = f"Approved {label}"
+             db.session.add(MilestoneDocumentRequirement(
+                 milestone_id=milestone.id,
+                 title=title,
+@@ -511,6 +517,23 @@
+     return True, "Milestone reopened."
+ 
+ 
++def invalidate_evidence(project, user, *, form_key=None, record_id=None, document_id=None):
++    """Reopen approvals whose supporting form/document content was changed."""
++    for milestone in project.milestones:
++        if milestone.status not in COMPLETED_MILESTONE_STATUSES | {"Ready for Approval"}:
++            continue
++        affected = False
++        for requirement in milestone.document_requirements:
++            row = _resolve_requirement(milestone, requirement)
++            record = row["record"]
++            if form_key and requirement.form_key == form_key and record and record.id == record_id:
++                affected = True
++            if document_id and isinstance(record, Document) and record.id == document_id:
++                affected = True
++        if affected:
++            reopen_milestone(milestone, user, "Supporting evidence changed; a new review is required.")
++
++
+ def project_completion_ready(project):
+     portfolio = build_project_milestone_portfolio(project)
+     return bool(
+--- a/app/models.py
++++ b/app/models.py
+@@ -1188,7 +1188,8 @@
+ 
+     # Online Forms
+     ("forms-home", "Online Forms Home", "Online Forms"),
+-    ("site-survey", "Site Survey & Load Assessment", "Online Forms"),
++    ("site-survey", "Solar Off-Grid Survey & Load Assessment", "Online Forms"),
++    ("solar-pump-survey", "Solar Pumping Site Survey", "Online Forms"),
+     ("load-assessment", "Load Assessment Legacy", "Online Forms"),
+     ("daily-site-report", "Daily Site Report", "Online Forms"),
+     ("delivery-note", "Delivery Note", "Online Forms"),
+--- /dev/null
++++ b/app/money_utils.py
+@@ -0,0 +1,15 @@
++"""Validate currency input before comparing it with stored balances."""
++from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
++
++
++def parse_money(value):
++    try:
++        amount = Decimal(str(value or 0))
++        if not amount.is_finite() or abs(amount) >= Decimal('1000000000000'):
++            return 0.0
++        rounded = amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
++        if abs(rounded) >= Decimal('1000000000000'):
++            return 0.0
++        return float(rounded)
++    except (InvalidOperation, ValueError, TypeError):
++        return 0.0
+--- /dev/null
++++ b/app/pdf_service.py
+@@ -0,0 +1,49 @@
++"""Contain native PDF engine failures and preserve access to printable reports."""
++import json
++import os
++from pathlib import Path
++import re
++import subprocess
++import sys
++
++from flask import current_app, make_response, request
++from werkzeug.utils import secure_filename
++
++
++class PDFRenderError(RuntimeError):
++    pass
++
++
++def render_pdf(html, base_url):
++    try:
++        result = subprocess.run(
++            [sys.executable, "-m", "app.pdf_worker"],
++            cwd=str(Path(__file__).resolve().parent.parent),
++            input=json.dumps({"html": html, "base_url": base_url}).encode("utf-8"),
++            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
++            timeout=45,
++            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
++        )
++    except (OSError, subprocess.TimeoutExpired) as exc:
++        raise PDFRenderError("PDF renderer could not finish.") from exc
++    if result.returncode or not result.stdout.startswith(b"%PDF-"):
++        raise PDFRenderError(f"PDF renderer exited without a PDF (code {result.returncode}).")
++    return result.stdout
++
++
++def pdf_response(html, filename):
++    try:
++        pdf = render_pdf(html, request.host_url)
++    except PDFRenderError as exc:
++        current_app.logger.error("%s", exc)
++        banner = '<div class="pdf-print-notice" style="padding:16px;background:#fff3cd;color:#332701">PDF download is unavailable. Use your browser to print or save this report as PDF. <button type="button" onclick="window.print()">Print / Save as PDF</button></div><style>@media print{.pdf-print-notice{display:none!important}}</style>'
++        printable, count = re.subn(r"(<body\b[^>]*>)", lambda match: match.group(1) + banner, html, count=1, flags=re.IGNORECASE)
++        response = make_response(printable if count else banner + html)
++        response.headers["X-PDF-Fallback"] = "printable-html"
++        response.headers["Cache-Control"] = "no-store"
++        return response
++    response = make_response(pdf)
++    response.headers["Content-Type"] = "application/pdf"
++    response.headers["Content-Disposition"] = f'inline; filename="{secure_filename(filename) or "report.pdf"}"'
++    response.headers["Cache-Control"] = "no-store"
++    return response
+--- /dev/null
++++ b/app/pdf_worker.py
+@@ -0,0 +1,19 @@
++"""Render one PDF in an isolated process without creating an ERP application."""
++import json
++import os
++import sys
++
++
++def main():
++    if os.name == "nt":
++        import ctypes
++        # A broken native DLL must exit rather than open a Windows crash dialog.
++        ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002)
++    from weasyprint import HTML
++    payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
++    pdf = HTML(string=payload["html"], base_url=payload["base_url"]).write_pdf()
++    sys.stdout.buffer.write(pdf)
++
++
++if __name__ == "__main__":
++    main()
+--- a/app/permission_enforcer.py
++++ b/app/permission_enforcer.py
+@@ -240,6 +240,17 @@
+ 
+ 
+ def action_for_endpoint(endpoint, method):
++    explicit_actions = {
++        "payments.reject_request": "approve",
++        "payments.cancel_request": "edit",
++        "accounting.post_journal": "approve",
++        "accounting.reverse_journal": "approve",
++        "documents.new_version": "edit",
++        "notifications.send_email_log": "edit",
++        "notifications.mark_sms_sent": "edit",
++    }
++    if endpoint in explicit_actions:
++        return explicit_actions[endpoint]
+     if method == "POST":
+         if any(w in endpoint for w in ["delete", "remove"]): return "delete"
+         if any(w in endpoint for w in ["review", "approve"]): return "approve"
+@@ -314,6 +325,9 @@
+                     action = "edit"
+                 else:
+                     action = "view"
++        elif endpoint == "reports.form_pdf":
++            key = request.view_args.get("form_key")
++            action = "print_export"
+         else:
+             key = ADMIN_ENDPOINT_KEYS.get(endpoint) or ENDPOINT_KEYS.get(endpoint) or BLUEPRINT_FALLBACK_KEYS.get(blueprint)
+             action = action_for_endpoint(endpoint, request.method)
+--- a/app/project_command_center.py
++++ b/app/project_command_center.py
+@@ -9,6 +9,7 @@
+ 
+ from app.models import PROJECT_STATUSES, SalesQuotation
+ from app.milestone_service import build_project_milestone_portfolio
++from app.survey_config import survey_group
+ 
+ 
+ APPROVED_QUOTATION_STATUSES = {"Approved by Customer", "Converted to Project"}
+@@ -24,8 +25,6 @@
+     "Closed": 100,
+ }
+ FORM_GROUPS = (
+-    ("Site survey", "site_surveys", "site-survey"),
+-    ("Load assessment", "load_assessments", "load-assessment"),
+     ("Daily site report", "daily_reports", "daily-site-report"),
+     ("Delivery note", "delivery_notes", "delivery-note"),
+     ("Testing", "testing_forms", "testing"),
+@@ -185,7 +184,7 @@
+     form_rows = []
+     form_records = []
+     slot_scores = []
+-    for label, relationship, form_key in FORM_GROUPS:
++    for label, relationship, form_key in (survey_group(project),) + FORM_GROUPS:
+         records = list(getattr(project, relationship))
+         form_records.extend(records)
+         approved = sum(1 for item in records if item.approval_status in APPROVED_STATUSES)
+--- a/app/routes/admin_routes.py
++++ b/app/routes/admin_routes.py
+@@ -193,7 +193,7 @@
+         flash("Branch created successfully.", "success"); return redirect(url_for("admin.branches"))
+     return render_template("admin/branches.html", branches=Branch.query.order_by(Branch.branch_name.asc()).all())
+ 
+-@admin_bp.route("/branches/<int:branch_id>/toggle")
++@admin_bp.route("/branches/<int:branch_id>/toggle", methods=["POST"])
+ @login_required
+ def toggle_branch(branch_id):
+     if not require_admin(): return redirect(url_for("dashboard.dashboard"))
+@@ -209,7 +209,7 @@
+         flash("Department created successfully.", "success"); return redirect(url_for("admin.departments"))
+     return render_template("admin/departments.html", departments=Department.query.order_by(Department.department_name.asc()).all())
+ 
+-@admin_bp.route("/departments/<int:department_id>/toggle")
++@admin_bp.route("/departments/<int:department_id>/toggle", methods=["POST"])
+ @login_required
+ def toggle_department(department_id):
+     if not require_admin(): return redirect(url_for("dashboard.dashboard"))
+--- a/app/routes/document_routes.py
++++ b/app/routes/document_routes.py
+@@ -1,4 +1,5 @@
+ import os
++from uuid import uuid4
+ from datetime import datetime
+ from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, send_from_directory
+ from flask_login import login_required, current_user
+@@ -8,13 +9,13 @@
+ from app.permissions import can_upload_document, can_review_document
+ from app.activity import log_activity, log_approval
+ from app.notifications import notify_roles, notify_user
+-from app.milestone_service import mark_milestone_started
++from app.milestone_service import mark_milestone_started, invalidate_evidence
+ 
+ document_bp = Blueprint('documents', __name__, url_prefix='/documents')
+ ALLOWED_EXTENSIONS={'pdf','doc','docx','xls','xlsx','jpg','jpeg','png'}
+ def allowed_file(fn): return '.' in fn and fn.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS
+ def save_file(file):
+-    orig=secure_filename(file.filename); stored=f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{orig}"; file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], stored)); return orig,stored
++    orig=secure_filename(file.filename); stored=f"{uuid4().hex}_{orig}"; file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], stored)); return orig,stored
+ @document_bp.route('/')
+ @login_required
+ def list_documents():
+@@ -30,10 +31,16 @@
+     if not can_upload_document(current_user): flash('You do not have permission to upload documents.','danger'); return redirect(url_for('documents.list_documents'))
+     projects=Project.query.order_by(Project.project_name.asc()).all(); milestones=ProjectMilestone.query.order_by(ProjectMilestone.project_id, ProjectMilestone.sequence).all()
+     if request.method=='POST':
++        if request.form.get('approval_status', 'Draft') not in {'Draft', 'Submitted'}:
++            flash('New documents must be Draft or Submitted for approval.', 'danger')
++            return redirect(request.url)
+         file=request.files.get('file')
+         if not file or file.filename=='': flash('Please select a file.','danger'); return redirect(request.url)
+         if not allowed_file(file.filename): flash('File type not allowed.','danger'); return redirect(request.url)
+         project_id=request.form.get('project_id'); milestone_id=request.form.get('milestone_id') or None
++        if not project_id or not project_id.isdigit() or not db.session.get(Project, int(project_id)):
++            flash('Select a valid project.', 'danger')
++            return redirect(request.url)
+         if milestone_id and not ProjectMilestone.query.filter_by(id=milestone_id, project_id=project_id).first(): flash('Selected milestone does not belong to this project.','danger'); return redirect(request.url)
+         orig,stored=save_file(file)
+         doc=Document(project_id=project_id, milestone_id=milestone_id, document_title=request.form.get('document_title'), document_type=request.form.get('document_type'), uploaded_by_id=current_user.id, file_name=orig, stored_file_name=stored, remarks=request.form.get('remarks'), approval_status=request.form.get('approval_status','Draft'))
+@@ -42,7 +49,7 @@
+         log_activity('Upload','Document',doc.id,f'Uploaded document: {doc.document_title}')
+         if doc.approval_status=='Submitted': notify_roles(['Admin','Management','Operation Manager'], 'Document submitted for approval', f"{current_user.full_name} submitted document '{doc.document_title}' for approval.", 'Document', doc.id)
+         db.session.commit(); flash('Document uploaded successfully.','success'); return redirect(url_for('documents.list_documents'))
+-    return render_template('documents/upload.html', projects=projects, milestones=milestones, document_types=DOCUMENT_TYPES, statuses=APPROVAL_STATUSES, selected_project=request.args.get('project_id', ''), selected_milestone=request.args.get('milestone_id', ''))
++    return render_template('documents/upload.html', projects=projects, milestones=milestones, document_types=DOCUMENT_TYPES, statuses=['Draft', 'Submitted'], selected_project=request.args.get('project_id', ''), selected_milestone=request.args.get('milestone_id', ''))
+ @document_bp.route('/<int:document_id>')
+ @login_required
+ def detail(document_id):
+@@ -56,8 +63,10 @@
+         if not file or file.filename=='': flash('Please select a file.','danger'); return redirect(request.url)
+         if not allowed_file(file.filename): flash('File type not allowed.','danger'); return redirect(request.url)
+         orig,stored=save_file(file); latest=DocumentVersion.query.filter_by(document_id=doc.id).order_by(DocumentVersion.version_number.desc()).first(); nxt=(latest.version_number+1) if latest else 1
++        invalidate_evidence(doc.project, current_user, document_id=doc.id)
+         db.session.add(DocumentVersion(document_id=doc.id, version_number=nxt, file_name=orig, stored_file_name=stored, uploaded_by_id=current_user.id, remarks=request.form.get('remarks')))
+         doc.file_name=orig; doc.stored_file_name=stored; doc.approval_status='Draft'; doc.manager_comments=None
++        doc.reviewed_by_id=None; doc.reviewed_at=None
+         log_activity('New Version','Document',doc.id,f'Uploaded version {nxt} for document: {doc.document_title}')
+         db.session.commit(); flash('New document version uploaded successfully.','success'); return redirect(url_for('documents.detail', document_id=doc.id))
+     return render_template('documents/new_version.html', document=doc)
+@@ -66,6 +75,10 @@
+ def review_document(document_id):
+     doc=Document.query.get_or_404(document_id)
+     if not can_review_document(current_user): flash('Only Admin, Management, or Operation Manager can review documents.','danger'); return redirect(url_for('documents.detail', document_id=doc.id))
++    latest = DocumentVersion.query.filter_by(document_id=doc.id).order_by(DocumentVersion.version_number.desc()).first()
++    if (latest.uploaded_by_id if latest else doc.uploaded_by_id) == current_user.id:
++        flash('The uploader cannot review their own document version.', 'danger')
++        return redirect(url_for('documents.detail', document_id=doc.id))
+     if request.method=='POST':
+         new_status=request.form.get('approval_status')
+         if new_status not in ['Under Review','Approved','Rejected','Need Correction']: flash('Invalid review status.','danger'); return redirect(request.url)
+--- a/app/routes/form_routes.py
++++ b/app/routes/form_routes.py
+@@ -1,4 +1,5 @@
+ from datetime import datetime, date
++from sqlalchemy import update
+ from flask import Blueprint, render_template, request, redirect, url_for, flash
+ from flask_login import login_required, current_user
+ from app import db
+@@ -10,7 +11,7 @@
+ from app.permissions import can_create_form, can_edit_form, can_delete_form, can_access_module
+ from app.activity import log_activity, log_approval
+ from app.notifications import notify_roles, notify_user
+-from app.milestone_service import mark_milestone_started
++from app.milestone_service import mark_milestone_started, invalidate_evidence
+ from app.team_leader_access import (
+     assigned_projects_for_user, is_team_leader, led_teams_for_user,
+     team_is_assigned_to_project, team_leader_can_access_daily_report,
+@@ -173,7 +174,7 @@
+ 
+ def form_reference(form_key, form_id=None):
+     prefixes = {
+-        "site-survey": "SSLA", "load-assessment": "LAF", "daily-site-report": "DSR",
++        "site-survey": "SSLA", "solar-pump-survey": "SPS", "load-assessment": "LAF", "daily-site-report": "DSR",
+         "delivery-note": "DNF", "testing": "TST", "commissioning": "COM", "handover": "HOF",
+     }
+     prefix = prefixes.get(form_key, "FRM")
+@@ -282,6 +283,20 @@
+             form_data[field_name] = value
+     return form_data
+ 
++
++def lock_form_project(project_id):
++    """Serialize duplicate checks, including on SQLite where FOR UPDATE is ignored."""
++    try:
++        project_id = int(project_id)
++    except (TypeError, ValueError):
++        raise ValueError("Select a valid project.")
++    result = db.session.execute(
++        update(Project).where(Project.id == project_id).values(id=Project.id)
++    )
++    if result.rowcount != 1:
++        raise ValueError("Select a valid project.")
++    return project_id
++
+ def entry_to_values(entry, form_key):
+     values = {}
+     for field_name, label, field_type in FORM_CONFIG[form_key]["fields"]:
+@@ -299,6 +314,15 @@
+     for field_name, label, field_type in FORM_CONFIG[form_key]["fields"]:
+         value = getattr(entry, field_name, "")
+         display_rows.append((label, value or ""))
++    if form_key == "site-survey":
++        # The concise editor must not hide measurements recorded by older releases.
++        current_fields = {field[0] for field in FORM_CONFIG[form_key]["fields"]}
++        legacy_fields = [("site_name", "Site Name"), ("recommendation", "Recommendation")]
++        legacy_fields += [(name, label) for name, label, _ in FORM_CONFIG["load-assessment"]["fields"]]
++        for name, label in legacy_fields:
++            value = getattr(entry, name, None)
++            if name not in current_fields and value not in (None, ""):
++                display_rows.append((f"Legacy: {label}", value))
+     return display_rows
+ 
+ @form_bp.route("/")
+@@ -378,10 +402,18 @@
+     Model = config["model"]
+ 
+     if request.method == "POST":
+-        form_data = build_form_data(form_key)
+-        form_data["project_id"] = request.form.get("project_id")
++        try:
++            form_data = build_form_data(form_key)
++            form_data["project_id"] = lock_form_project(request.form.get("project_id"))
++        except ValueError:
++            db.session.rollback()
++            flash("Select a valid project and enter dates in YYYY-MM-DD format.", "danger")
++            return redirect(url_for("forms.create_form", form_key=form_key))
+         form_data["created_by_id"] = current_user.id
+         form_data["approval_status"] = request.form.get("approval_status", "Draft")
++        if form_data["approval_status"] not in {"Draft", "Submitted"}:
++            flash("New forms must be Draft or Submitted for approval.", "danger")
++            return redirect(url_for("forms.create_form", form_key=form_key))
+         if form_key not in {"daily-site-report", "load-assessment"}:
+             existing = Model.query.filter_by(project_id=form_data["project_id"]).first()
+             if existing:
+@@ -461,9 +493,11 @@
+         flash("You can only view daily reports for a team you lead.", "danger")
+         return redirect(url_for("forms.list_forms", form_key=form_key))
+ 
+-    histories = ApprovalHistory.query.filter_by(
+-        module=config["title"],
+-        record_id=entry.id
++    history_modules = [config["title"]]
++    if form_key == "site-survey":
++        history_modules.extend(["Site Survey & Load Assessment", "Site Survey Form"])
++    histories = ApprovalHistory.query.filter(
++        ApprovalHistory.module.in_(history_modules), ApprovalHistory.record_id == entry.id
+     ).order_by(ApprovalHistory.reviewed_at.desc()).all()
+ 
+     return render_template(
+@@ -473,7 +507,7 @@
+         entry=entry,
+         display_rows=build_display_rows(entry, form_key),
+         can_edit_this_form=(can_access_daily_entry(entry, "edit") if form_key == "daily-site-report" else can_edit_form(current_user, form_key, entry)),
+-        can_delete_this_form=can_delete_form(current_user),
++        can_delete_this_form=can_access_module(current_user, form_key, "delete"),
+         can_review_this_form=(
+             can_access_module(current_user, form_key, "approve")
+             and entry.created_by_id != current_user.id
+@@ -499,8 +533,18 @@
+         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
+ 
+     if request.method == "POST":
+-        form_data = build_form_data(form_key)
+-        new_project_id = request.form.get("project_id")
++        try:
++            form_data = build_form_data(form_key)
++            new_project_id = lock_form_project(request.form.get("project_id"))
++        except ValueError:
++            db.session.rollback()
++            flash("Select a valid project and enter dates in YYYY-MM-DD format.", "danger")
++            return redirect(url_for("forms.edit_form", form_key=form_key, form_id=form_id))
++        if form_key not in {"daily-site-report", "load-assessment"}:
++            duplicate = config["model"].query.filter_by(project_id=new_project_id).filter(config["model"].id != entry.id).first()
++            if duplicate:
++                flash("The selected project already has this form. Edit its existing record.", "danger")
++                return redirect(url_for("forms.edit_form", form_key=form_key, form_id=form_id))
+         if form_key == "daily-site-report":
+             new_team_id = request.form.get("team_id") or None
+             new_milestone_id = request.form.get("milestone_id") or None
+@@ -521,11 +565,17 @@
+             entry.team_id = new_team_id
+             entry.milestone_id = new_milestone_id
+             mark_milestone_started(entry.milestone_id)
++        invalidate_evidence(entry.project, current_user, form_key=form_key, record_id=entry.id)
+         entry.project_id = new_project_id
+         for key, value in form_data.items():
+             setattr(entry, key, value)
+-        if entry.approval_status in ["Rejected", "Need Correction"]:
++        if entry.approval_status != "Draft":
++            log_approval(config["title"], entry.id, entry.approval_status, "Draft", "Content edited; a new review is required.")
+             entry.approval_status = "Draft"
++        entry.reviewed_by_id = None
++        entry.reviewed_at = None
++        entry.manager_comments = None
++        log_activity("Edit", config["title"], entry.id, "Updated form; saved as Draft.")
+         db.session.commit()
+         flash("Form updated successfully.", "success")
+         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
+@@ -626,12 +676,13 @@
+         flash("Invalid form type.", "danger")
+         return redirect(url_for("forms.forms_home"))
+ 
+-    if not can_delete_form(current_user):
++    if not can_access_module(current_user, form_key, "delete"):
+         flash("Only Admin, Management, or Operation Manager can delete forms.", "danger")
+         return redirect(url_for("forms.view_form", form_key=form_key, form_id=form_id))
+ 
+     config = FORM_CONFIG[form_key]
+     entry = config["model"].query.get_or_404(form_id)
++    invalidate_evidence(entry.project, current_user, form_key=form_key, record_id=entry.id)
+     log_activity("Delete", config["title"], entry.id, f"Deleted {config['title']} #{entry.id}")
+     db.session.delete(entry)
+     db.session.commit()
+--- a/app/routes/master_routes.py
++++ b/app/routes/master_routes.py
+@@ -432,11 +432,11 @@
+         flash("Team member added.", "success")
+     return redirect(url_for("master.team_detail", team_id=team_id))
+ 
+-@master_bp.route("/teams/<int:team_id>/members/<int:member_id>/remove")
++@master_bp.route("/teams/<int:team_id>/members/<int:member_id>/remove", methods=["POST"])
+ @login_required
+ def remove_team_member(team_id, member_id):
+     if not require_manager(): return redirect(url_for("master.team_detail", team_id=team_id))
+-    member = TeamMember.query.get_or_404(member_id)
++    member = TeamMember.query.filter_by(id=member_id, team_id=team_id).first_or_404()
+     member.is_active = False
+     db.session.commit()
+     flash("Team member removed from active list.", "success")
+@@ -485,21 +485,21 @@
+ 
+     return render_template("master/project_workforce.html", project=project, teams=teams, employees=employees, work_statuses=PROJECT_WORK_STATUSES)
+ 
+-@master_bp.route("/projects/<int:project_id>/workforce/team/<int:assignment_id>/remove")
++@master_bp.route("/projects/<int:project_id>/workforce/team/<int:assignment_id>/remove", methods=["POST"])
+ @login_required
+ def remove_project_team(project_id, assignment_id):
+     if not require_manager(): return redirect(url_for("projects.detail", project_id=project_id))
+-    assignment = ProjectTeamAssignment.query.get_or_404(assignment_id)
++    assignment = ProjectTeamAssignment.query.filter_by(id=assignment_id, project_id=project_id).first_or_404()
+     assignment.status = "Removed"
+     db.session.commit()
+     flash("Project team assignment removed.", "success")
+     return redirect(url_for("master.project_workforce", project_id=project_id))
+ 
+-@master_bp.route("/projects/<int:project_id>/workforce/employee/<int:assignment_id>/remove")
++@master_bp.route("/projects/<int:project_id>/workforce/employee/<int:assignment_id>/remove", methods=["POST"])
+ @login_required
+ def remove_project_employee(project_id, assignment_id):
+     if not require_manager(): return redirect(url_for("projects.detail", project_id=project_id))
+-    assignment = ProjectEmployeeAssignment.query.get_or_404(assignment_id)
++    assignment = ProjectEmployeeAssignment.query.filter_by(id=assignment_id, project_id=project_id).first_or_404()
+     assignment.status = "Removed"
+     db.session.commit()
+     flash("Project employee assignment removed.", "success")
+--- a/app/routes/milestone_routes.py
++++ b/app/routes/milestone_routes.py
+@@ -26,6 +26,7 @@
+ FORM_REQUIREMENT_CHOICES = (
+     ("", "Uploaded document"),
+     ("site-survey", "Site Survey & Load Assessment"),
++    ("solar-pump-survey", "Solar Pumping Site Survey"),
+     ("load-assessment", "Load Assessment"),
+     ("daily-site-report", "Daily Site Report"),
+     ("delivery-note", "Delivery Note"),
+--- a/app/routes/notifications_routes.py
++++ b/app/routes/notifications_routes.py
+@@ -48,7 +48,7 @@
+         return redirect(url_for('notifications.list_notifications'))
+     return render_template('notifications/form.html', users=User.query.filter_by(is_active=True).all(), priorities=TICKET_PRIORITIES)
+ 
+-@notifications_bp.route('/<int:notification_id>/read')
++@notifications_bp.route('/<int:notification_id>/read', methods=["POST"])
+ @login_required
+ def mark_read(notification_id):
+     n=SystemNotification.query.get_or_404(notification_id)
+@@ -66,7 +66,7 @@
+     logs=query.order_by(NotificationLog.created_at.desc()).limit(500).all()
+     return render_template('notifications/logs.html', logs=logs, channels=NOTIFICATION_CHANNELS, statuses=NOTIFICATION_DELIVERY_STATUSES, filters=request.args)
+ 
+-@notifications_bp.route('/email/send/<int:log_id>')
++@notifications_bp.route('/email/send/<int:log_id>', methods=["POST"])
+ @login_required
+ def send_email_log(log_id):
+     log=NotificationLog.query.get_or_404(log_id)
+@@ -98,7 +98,7 @@
+     db.session.commit(); flash('SMS added to manual queue. API is not connected yet.', 'success')
+     return redirect(url_for('notifications.sms_queue'))
+ 
+-@notifications_bp.route('/sms-queue/<int:sms_id>/sent')
++@notifications_bp.route('/sms-queue/<int:sms_id>/sent', methods=["POST"])
+ @login_required
+ def mark_sms_sent(sms_id):
+     sms=SMSQueue.query.get_or_404(sms_id)
+--- a/app/routes/payment_routes.py
++++ b/app/routes/payment_routes.py
+@@ -5,6 +5,8 @@
+ from werkzeug.utils import secure_filename
+ 
+ from app import db
++from app.money_utils import parse_money
++from sqlalchemy import update
+ from app.models import (
+     PaymentRequest, PaymentRequestPayment, Project, MaterialRequest, Branch, Department, Team,
+     PAYMENT_REQUEST_STATUSES, PAYMENT_REQUEST_CATEGORIES, PAYMENT_REQUEST_METHODS,
+@@ -103,7 +105,7 @@
+         return
+     if pr.total_paid <= 0:
+         return
+-    if pr.balance <= 0.01:
++    if round(pr.balance, 2) <= 0:
+         pr.status = "Paid"
+     else:
+         pr.status = "Partially Paid"
+@@ -175,7 +177,7 @@
+ def create_request():
+     leader_mode, available_teams, available_projects = payment_projects_and_teams()
+     if request.method == "POST":
+-        amount = parse_float(request.form.get("amount"))
++        amount = parse_money(request.form.get("amount"))
+         payee_name = (request.form.get("payee_name") or "").strip()
+         purpose = (request.form.get("purpose") or "").strip()
+         if amount <= 0:
+@@ -393,6 +395,10 @@
+ @payments_bp.route("/requests/<int:request_id>/payment", methods=["POST"])
+ @login_required
+ def add_payment(request_id):
++    # Lock before loading the balance so simultaneous payments cannot both
++    # spend the same remaining amount (also works on SQLite).
++    db.session.execute(update(PaymentRequest).where(PaymentRequest.id == request_id).values(id=PaymentRequest.id))
++    db.session.expire_all()
+     pr = PaymentRequest.query.get_or_404(request_id)
+     if not can_finance_payment_requests():
+         flash("Only Admin, Management or Finance Officer can record payments.", "danger")
+@@ -400,16 +406,21 @@
+     if pr.status not in ("Approved", "Partially Paid"):
+         flash("This request must be fully approved before recording a payment.", "danger")
+         return redirect(url_for("payments.request_detail", request_id=request_id))
+-    amount = parse_float(request.form.get("amount"))
++    amount = parse_money(request.form.get("amount"))
+     if amount <= 0:
+         flash("Payment amount must be greater than zero.", "danger")
+         return redirect(url_for("payments.request_detail", request_id=request_id))
+-    if amount > pr.balance + 0.01:
++    if amount > round(pr.balance, 2):
+         flash(f"Payment amount ({amount:,.2f}) exceeds the remaining balance ({pr.balance:,.2f}).", "danger")
+         return redirect(url_for("payments.request_detail", request_id=request_id))
+ 
++    try:
++        payment_date = parse_date(request.form.get("payment_date")) or date.today()
++    except ValueError:
++        flash("Enter a valid payment date.", "danger")
++        return redirect(url_for("payments.request_detail", request_id=request_id))
+     payment = PaymentRequestPayment(
+-        payment_date=parse_date(request.form.get("payment_date")) or date.today(),
++        payment_date=payment_date,
+         amount=amount,
+         currency=pr.currency,
+         payment_method=request.form.get("payment_method") or "Cash",
+--- a/app/routes/payroll_routes.py
++++ b/app/routes/payroll_routes.py
+@@ -4,6 +4,8 @@
+ from flask_login import login_required, current_user
+ 
+ from app import db
++from app.money_utils import parse_money
++from sqlalchemy import update, select
+ from app.models import (
+     Project, Employee, ProjectPayrollBatch, ProjectPayrollEntry, ProjectPayrollPayment,
+     PROJECT_PAYROLL_BATCH_STATUSES, PROJECT_PAYROLL_ENTRY_STATUSES, PROJECT_PAYMENT_METHODS
+@@ -32,7 +34,7 @@
+ def update_entry_status(entry):
+     if entry.total_paid <= 0:
+         if entry.status not in ["Cancelled"]: entry.status = "Approved"
+-    elif entry.balance <= 0: entry.status = "Paid"
++    elif round(entry.balance, 2) <= 0: entry.status = "Paid"
+     else: entry.status = "Partially Paid"
+ 
+ def update_batch_status(batch):
+@@ -73,6 +75,9 @@
+     employees = Employee.query.filter_by(status="Active").order_by(Employee.full_name.asc()).all()
+     projects = Project.query.order_by(Project.project_name.asc()).all()
+     if request.method == "POST":
++        if request.form.get("status", "Submitted") not in {"Draft", "Submitted"}:
++            flash("New payroll batches must be Draft or Submitted for approval.", "danger")
++            return redirect(url_for("payroll.create_batch"))
+         selected_employee_ids = request.form.getlist("employee_id")
+         if not selected_employee_ids or not any(selected_employee_ids):
+             flash("Select at least one employee.", "danger")
+@@ -91,7 +96,7 @@
+             db.session.rollback(); flash("No payroll lines were created because amounts are empty.", "danger"); return redirect(url_for("payroll.create_batch"))
+         db.session.commit(); flash(f"Project payroll batch created with {created_count} employee lines.", "success")
+         return redirect(url_for("payroll.batch_detail", batch_id=batch.id))
+-    return render_template("payroll/batch_form.html", employees=employees, projects=projects, statuses=PROJECT_PAYROLL_BATCH_STATUSES)
++    return render_template("payroll/batch_form.html", employees=employees, projects=projects, statuses=["Draft", "Submitted"])
+ 
+ @payroll_bp.route("/batches/<int:batch_id>")
+ @login_required
+@@ -99,13 +104,16 @@
+     batch = ProjectPayrollBatch.query.get_or_404(batch_id)
+     return render_template("payroll/batch_detail.html", batch=batch, payment_methods=PROJECT_PAYMENT_METHODS)
+ 
+-@payroll_bp.route("/batches/<int:batch_id>/approve")
++@payroll_bp.route("/batches/<int:batch_id>/approve", methods=["POST"])
+ @login_required
+ def approve_batch(batch_id):
+     if not can_manage_payroll():
+         flash("Only Admin, Management or Operation Manager can approve payroll batches.", "danger")
+         return redirect(url_for("payroll.batch_detail", batch_id=batch_id))
+     batch = ProjectPayrollBatch.query.get_or_404(batch_id)
++    if batch.status not in {"Draft", "Submitted"}:
++        flash("Only Draft or Submitted batches can be approved.", "danger")
++        return redirect(url_for("payroll.batch_detail", batch_id=batch.id))
+     batch.status = "Approved"; batch.approved_by_id = current_user.id; batch.approved_at = datetime.utcnow()
+     for entry in batch.entries:
+         if entry.status == "Pending": entry.status = "Approved"
+@@ -135,11 +143,27 @@
+     if not can_pay_payroll():
+         flash("Only Admin, Management or Finance Officer can record payments.", "danger")
+         return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
+-    entry = ProjectPayrollEntry.query.get_or_404(entry_id); amount = parse_float(request.form.get("amount"))
++    batch_id = select(ProjectPayrollEntry.batch_id).where(ProjectPayrollEntry.id == entry_id).scalar_subquery()
++    db.session.execute(update(ProjectPayrollBatch).where(ProjectPayrollBatch.id == batch_id).values(id=ProjectPayrollBatch.id))
++    db.session.execute(update(ProjectPayrollEntry).where(ProjectPayrollEntry.id == entry_id).values(id=ProjectPayrollEntry.id))
++    db.session.expire_all()
++    entry = ProjectPayrollEntry.query.get_or_404(entry_id)
++    if entry.status not in {"Approved", "Partially Paid"} or entry.batch.status not in {"Approved", "Partially Paid"}:
++        flash("Payroll must be approved before recording payment.", "danger")
++        return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
++    amount = parse_money(request.form.get("amount"))
+     if amount <= 0:
+         flash("Payment amount must be greater than zero.", "danger"); return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
+-    payment = ProjectPayrollPayment(payroll_entry_id=entry.id, payment_date=parse_date(request.form.get("payment_date")) or date.today(), amount=amount, payment_method=request.form.get("payment_method") or "Cash", reference_no=request.form.get("reference_no"), paid_by_id=current_user.id, notes=request.form.get("notes"))
+-    db.session.add(payment)
++    if amount > round(entry.balance, 2):
++        flash("Payment exceeds the remaining payroll balance.", "danger")
++        return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
++    try:
++        payment_date = parse_date(request.form.get("payment_date")) or date.today()
++    except ValueError:
++        flash("Enter a valid payment date.", "danger")
++        return redirect(url_for("payroll.entry_detail", entry_id=entry_id))
++    payment = ProjectPayrollPayment(payment_date=payment_date, amount=amount, payment_method=request.form.get("payment_method") or "Cash", reference_no=request.form.get("reference_no"), paid_by_id=current_user.id, notes=request.form.get("notes"))
++    entry.payments.append(payment)
+     update_entry_status(entry); update_batch_status(entry.batch); db.session.commit(); flash("Payment recorded successfully.", "success")
+     # Phase 20B: auto-journal AFTER the payment is committed - a journal
+     # failure must never undo the payment itself.
+--- a/app/routes/project_routes.py
++++ b/app/routes/project_routes.py
+@@ -55,6 +55,10 @@
+         return redirect(url_for("projects.list_projects"))
+ 
+     if request.method == "POST":
++        requested_status = request.form.get("status", "New")
++        if requested_status not in PROJECT_STATUSES or requested_status == "Completed":
++            flash("Create the project in an active phase; completion requires approved milestones.", "danger")
++            return redirect(url_for("projects.create_project"))
+         project = Project(
+             project_name=request.form.get("project_name"),
+             customer_name=request.form.get("customer_name"),
+@@ -63,7 +67,7 @@
+             capacity=request.form.get("capacity"),
+             start_date=parse_date(request.form.get("start_date")),
+             expected_completion_date=parse_date(request.form.get("expected_completion_date")),
+-            status=request.form.get("status", "New"),
++            status=requested_status,
+             assigned_team=request.form.get("assigned_team"),
+             description=request.form.get("description"),
+             created_by_id=current_user.id,
+@@ -75,7 +79,7 @@
+         flash("Project created successfully.", "success")
+         return redirect(url_for("projects.detail", project_id=project.id))
+ 
+-    return render_template("projects/create.html", statuses=PROJECT_STATUSES, customers=Customer.query.filter_by(is_active=True).order_by(Customer.customer_name.asc()).all(), project_types=ProjectType.query.filter_by(is_active=True).order_by(ProjectType.type_name.asc()).all(), teams=Team.query.filter_by(status="Active").order_by(Team.team_name.asc()).all())
++    return render_template("projects/create.html", statuses=[status for status in PROJECT_STATUSES if status != "Completed"], customers=Customer.query.filter_by(is_active=True).order_by(Customer.customer_name.asc()).all(), project_types=ProjectType.query.filter_by(is_active=True).order_by(ProjectType.type_name.asc()).all(), teams=Team.query.filter_by(status="Active").order_by(Team.team_name.asc()).all())
+ 
+ @project_bp.route("/<int:project_id>")
+ @login_required
+@@ -86,6 +90,7 @@
+         return redirect(url_for("projects.list_projects"))
+     allowed_forms = {
+         "site-survey": can_create_form(current_user, "site-survey"),
++        "solar-pump-survey": can_create_form(current_user, "solar-pump-survey"),
+         "load-assessment": can_create_form(current_user, "load-assessment"),
+         "daily-site-report": can_create_form(current_user, "daily-site-report"),
+         "delivery-note": can_create_form(current_user, "delivery-note"),
+@@ -107,7 +112,7 @@
+ def edit_project(project_id):
+     project = Project.query.get_or_404(project_id)
+ 
+-    if not can_create_project(current_user):
++    if not can_access_module(current_user, "projects", "edit"):
+         flash("Only Admin or Operation Manager can edit projects.", "danger")
+         return redirect(url_for("projects.detail", project_id=project.id))
+ 
+--- a/app/routes/report_routes.py
++++ b/app/routes/report_routes.py
+@@ -2,22 +2,22 @@
+ from datetime import datetime
+ from flask import Blueprint, render_template, request, redirect, url_for, flash, make_response
+ from flask_login import login_required
+-from weasyprint import HTML
++from app.pdf_service import pdf_response
+ 
+ from app.models import Project, ProjectPayrollEntry, MaterialIssue, MaterialReturn, ProjectPayrollBatch, ProjectPayrollBatch
+ from app.routes.form_routes import FORM_CONFIG, build_display_rows
++from app.survey_config import OFF_GRID_SURVEY, PUMP_SURVEY, survey_group
+ 
+ report_bp = Blueprint("reports", __name__, url_prefix="/reports")
+ 
+ FORM_REQUIREMENTS = [
+-    ("Site Survey", "site_surveys"),
+-    ("Load Assessment", "load_assessments"),
+     ("Daily Site Report", "daily_reports"),
+     ("Delivery Note", "delivery_notes"),
+     ("Testing Form", "testing_forms"),
+     ("Commissioning Form", "commissioning_forms"),
+     ("Handover Form", "handover_forms"),
+ ]
++FORM_SUMMARIES = [OFF_GRID_SURVEY[:2], PUMP_SURVEY[:2], ("Legacy Load Assessment", "load_assessments")] + FORM_REQUIREMENTS
+ 
+ def safe_len(value):
+     return len(value) if value is not None else 0
+@@ -30,7 +30,7 @@
+ 
+ def project_checklist(project):
+     items = []
+-    for label, rel in FORM_REQUIREMENTS:
++    for label, rel in [survey_group(project)[:2]] + FORM_REQUIREMENTS:
+         records = getattr(project, rel)
+         count = safe_len(records)
+         approved = len([r for r in records if getattr(r, "approval_status", "") == "Approved"])
+@@ -55,7 +55,7 @@
+     forms_summary = []
+     total_forms = 0
+     approved_forms = 0
+-    for label, rel in FORM_REQUIREMENTS:
++    for label, rel in FORM_SUMMARIES:
+         records = list(getattr(project, rel))
+         counts = status_count(records)
+         total_forms += len(records)
+@@ -202,7 +202,7 @@
+         row["completed_count"] += 1 if project.status == "Completed" else 0
+         row["active_count"] += 0 if project.status == "Completed" else 1
+         row["documents"] += len(project.documents)
+-        row["forms"] += sum(len(getattr(project, rel)) for _, rel in FORM_REQUIREMENTS)
++        row["forms"] += sum(len(getattr(project, rel)) for _, rel in FORM_SUMMARIES)
+         row["open_tasks"] += len([t for t in getattr(project, "tasks", []) if t.status not in ["Completed", "Cancelled"]])
+         row["open_issues"] += len([i for i in getattr(project, "issues", []) if i.status not in ["Resolved", "Closed"]])
+         payroll_entries = ProjectPayrollEntry.query.join(ProjectPayrollBatch).filter(ProjectPayrollBatch.project_id == project.id).all()
+@@ -217,13 +217,6 @@
+         row["locations"] = ", ".join(sorted(row["locations"]))
+         rows.append(row)
+     return sorted(rows, key=lambda r: r["customer_name"].lower())
+-
+-def pdf_response(html, filename):
+-    pdf = HTML(string=html, base_url=request.host_url).write_pdf()
+-    response = make_response(pdf)
+-    response.headers["Content-Type"] = "application/pdf"
+-    response.headers["Content-Disposition"] = f"inline; filename={filename}"
+-    return response
+ 
+ @report_bp.route("/")
+ @login_required
+--- a/app/routes/sales_routes.py
++++ b/app/routes/sales_routes.py
+@@ -1,3 +1,4 @@
++from app.pdf_service import pdf_response
+ from datetime import datetime, date
+ import os
+ from io import BytesIO
+@@ -506,15 +507,7 @@
+     if data.get('ref') != quotation.ref_no:
+         abort(404)
+     html = render_template('sales/quotation_pdf.html', quotation=quotation, generated_at=datetime.utcnow())
+-    try:
+-        from weasyprint import HTML
+-        pdf = HTML(string=html, base_url=request.host_url).write_pdf()
+-        response = make_response(pdf)
+-        response.headers['Content-Type'] = 'application/pdf'
+-        response.headers['Content-Disposition'] = f'inline; filename={quotation.ref_no}.pdf'
+-        return response
+-    except Exception:
+-        return render_template('sales/public_quotation.html', quotation=quotation, generated_at=datetime.utcnow(), pdf_error=True)
++    return pdf_response(html, f"{quotation.ref_no}.pdf")
+ 
+ 
+ @sales_bp.route('/public/quotations/<int:quotation_id>/<token>')
+@@ -530,13 +523,4 @@
+ def quotation_pdf(quotation_id):
+     quotation=SalesQuotation.query.get_or_404(quotation_id)
+     html=render_template('sales/quotation_pdf.html', quotation=quotation, generated_at=datetime.utcnow())
+-    try:
+-        from weasyprint import HTML
+-        pdf=HTML(string=html, base_url=request.host_url).write_pdf()
+-        response=make_response(pdf)
+-        response.headers['Content-Type']='application/pdf'
+-        response.headers['Content-Disposition']=f'inline; filename={quotation.ref_no}.pdf'
+-        return response
+-    except Exception as e:
+-        flash(f'PDF generation failed: {e}', 'danger')
+-        return redirect(url_for('sales.quotation_detail', quotation_id=quotation.id))
++    return pdf_response(html, f"{quotation.ref_no}.pdf")
+--- a/app/routes/support_routes.py
++++ b/app/routes/support_routes.py
+@@ -1,3 +1,4 @@
++from app.pdf_service import pdf_response
+ from datetime import datetime, date, timedelta
+ import json
+ import re
+@@ -458,13 +459,4 @@
+ def ticket_pdf(ticket_id):
+     ticket = SupportTicket.query.get_or_404(ticket_id)
+     html = render_template('support/ticket_report.html', ticket=ticket, generated_at=datetime.utcnow(), pdf_mode=True)
+-    try:
+-        from weasyprint import HTML
+-        pdf = HTML(string=html, base_url=request.host_url).write_pdf()
+-        response = make_response(pdf)
+-        response.headers['Content-Type'] = 'application/pdf'
+-        response.headers['Content-Disposition'] = f'inline; filename={ticket.ref_no}.pdf'
+-        return response
+-    except Exception:
+-        flash('PDF engine is not available. Print view opened instead.', 'warning')
+-        return html
++    return pdf_response(html, f"{ticket.ref_no}.pdf")
+--- a/app/routes/user_routes.py
++++ b/app/routes/user_routes.py
+@@ -54,7 +54,7 @@
+         user.password_hash = generate_password_hash(password); db.session.commit(); flash("Password changed successfully.", "success"); return redirect(url_for("users.list_users"))
+     return render_template("users/change_password.html", user=user)
+ 
+-@user_bp.route("/<int:user_id>/toggle")
++@user_bp.route("/<int:user_id>/toggle", methods=["POST"])
+ @login_required
+ def toggle_user(user_id):
+     if not can_manage_users(current_user): flash("Only Admin can enable or disable users.", "danger"); return redirect(url_for("dashboard.dashboard"))
+--- /dev/null
++++ b/app/survey_config.py
+@@ -0,0 +1,13 @@
++"""Choose the required survey consistently across project evidence and reports."""
++
++
++OFF_GRID_SURVEY = (
++    "Solar Off-Grid Survey & Load Assessment", "site_surveys", "site-survey"
++)
++PUMP_SURVEY = (
++    "Solar Pumping Site Survey", "solar_pump_surveys", "solar-pump-survey"
++)
++
++
++def survey_group(project):
++    return PUMP_SURVEY if "pump" in (project.project_type or "").casefold() else OFF_GRID_SURVEY
+--- a/app/templates/admin/branches.html
++++ b/app/templates/admin/branches.html
+@@ -1,2 +1,2 @@
+ {% extends "base.html" %}{% block content %}<div class="mt-4 mb-3"><h2 class="fw-bold">Branches</h2></div><div class="card shadow-sm mb-4"><div class="card-body"><form method="POST" class="row g-2">
+-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="col-md-5"><input class="form-control" name="branch_name" placeholder="Branch name" required></div><div class="col-md-5"><input class="form-control" name="location" placeholder="Location"></div><div class="col-md-2"><button class="btn btn-primary w-100">Add Branch</button></div></form></div></div><div class="card shadow-sm"><div class="card-body"><table class="table table-hover"><thead><tr><th>Branch</th><th>Location</th><th>Status</th><th>Action</th></tr></thead><tbody>{% for branch in branches %}<tr><td>{{ branch.branch_name }}</td><td>{{ branch.location or "" }}</td><td>{{ "Active" if branch.is_active else "Disabled" }}</td><td><a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.toggle_branch', branch_id=branch.id) }}">Toggle</a></td></tr>{% else %}<tr><td colspan="4" class="text-muted">No branches found.</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}
++    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="col-md-5"><input class="form-control" name="branch_name" placeholder="Branch name" required></div><div class="col-md-5"><input class="form-control" name="location" placeholder="Location"></div><div class="col-md-2"><button class="btn btn-primary w-100">Add Branch</button></div></form></div></div><div class="card shadow-sm"><div class="card-body"><table class="table table-hover"><thead><tr><th>Branch</th><th>Location</th><th>Status</th><th>Action</th></tr></thead><tbody>{% for branch in branches %}<tr><td>{{ branch.branch_name }}</td><td>{{ branch.location or "" }}</td><td>{{ "Active" if branch.is_active else "Disabled" }}</td><td><form method="post" action="{{ url_for('admin.toggle_branch', branch_id=branch.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-dark">Toggle</button></form></td></tr>{% else %}<tr><td colspan="4" class="text-muted">No branches found.</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}
+--- a/app/templates/admin/departments.html
++++ b/app/templates/admin/departments.html
+@@ -1,2 +1,2 @@
+ {% extends "base.html" %}{% block content %}<div class="mt-4 mb-3"><h2 class="fw-bold">Departments</h2></div><div class="card shadow-sm mb-4"><div class="card-body"><form method="POST" class="row g-2">
+-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="col-md-4"><input class="form-control" name="department_name" placeholder="Department name" required></div><div class="col-md-6"><input class="form-control" name="description" placeholder="Description"></div><div class="col-md-2"><button class="btn btn-primary w-100">Add Department</button></div></form></div></div><div class="card shadow-sm"><div class="card-body"><table class="table table-hover"><thead><tr><th>Department</th><th>Description</th><th>Status</th><th>Action</th></tr></thead><tbody>{% for dept in departments %}<tr><td>{{ dept.department_name }}</td><td>{{ dept.description or "" }}</td><td>{{ "Active" if dept.is_active else "Disabled" }}</td><td><a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.toggle_department', department_id=dept.id) }}">Toggle</a></td></tr>{% else %}<tr><td colspan="4" class="text-muted">No departments found.</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}
++    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="col-md-4"><input class="form-control" name="department_name" placeholder="Department name" required></div><div class="col-md-6"><input class="form-control" name="description" placeholder="Description"></div><div class="col-md-2"><button class="btn btn-primary w-100">Add Department</button></div></form></div></div><div class="card shadow-sm"><div class="card-body"><table class="table table-hover"><thead><tr><th>Department</th><th>Description</th><th>Status</th><th>Action</th></tr></thead><tbody>{% for dept in departments %}<tr><td>{{ dept.department_name }}</td><td>{{ dept.description or "" }}</td><td>{{ "Active" if dept.is_active else "Disabled" }}</td><td><form method="post" action="{{ url_for('admin.toggle_department', department_id=dept.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-dark">Toggle</button></form></td></tr>{% else %}<tr><td colspan="4" class="text-muted">No departments found.</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}
+--- a/app/templates/master/project_workforce.html
++++ b/app/templates/master/project_workforce.html
+@@ -28,7 +28,7 @@
+ <thead><tr><th>Team</th><th>Leader</th><th>Members</th><th>Scope</th><th>Status</th><th></th></tr></thead>
+ <tbody>
+ {% for a in project.team_assignments if a.status != "Removed" %}
+-<tr><td>{{ a.team.team_name }}</td><td>{{ a.team.leader.full_name if a.team.leader else "" }}</td><td>{{ a.team.members|selectattr("is_active")|list|length }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td><td><a class="btn btn-sm btn-outline-danger" href="{{ url_for('master.remove_project_team', project_id=project.id, assignment_id=a.id) }}">Remove</a></td></tr>
++<tr><td>{{ a.team.team_name }}</td><td>{{ a.team.leader.full_name if a.team.leader else "" }}</td><td>{{ a.team.members|selectattr("is_active")|list|length }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td><td><form method="post" action="{{ url_for('master.remove_project_team', project_id=project.id, assignment_id=a.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger">Remove</button></form></td></tr>
+ {% else %}<tr><td colspan="6" class="text-muted">No teams assigned.</td></tr>{% endfor %}
+ </tbody>
+ </table>
+@@ -58,7 +58,7 @@
+ <thead><tr><th>Employee</th><th>Job Title</th><th>Role</th><th>Scope</th><th>Status</th><th></th></tr></thead>
+ <tbody>
+ {% for a in project.employee_assignments if a.status != "Removed" %}
+-<tr><td>{{ a.employee.full_name }}</td><td>{{ a.employee.job_title or "" }}</td><td>{{ a.role_on_project or "" }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td><td><a class="btn btn-sm btn-outline-danger" href="{{ url_for('master.remove_project_employee', project_id=project.id, assignment_id=a.id) }}">Remove</a></td></tr>
++<tr><td>{{ a.employee.full_name }}</td><td>{{ a.employee.job_title or "" }}</td><td>{{ a.role_on_project or "" }}</td><td>{{ a.work_scope or "" }}</td><td>{{ a.status }}</td><td><form method="post" action="{{ url_for('master.remove_project_employee', project_id=project.id, assignment_id=a.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger">Remove</button></form></td></tr>
+ {% else %}<tr><td colspan="6" class="text-muted">No direct employees assigned.</td></tr>{% endfor %}
+ </tbody>
+ </table>
+--- a/app/templates/master/team_detail.html
++++ b/app/templates/master/team_detail.html
+@@ -22,7 +22,7 @@
+ <thead><tr><th>Employee</th><th>Job Title</th><th>Role</th><th>Status</th><th></th></tr></thead>
+ <tbody>
+ {% for m in team.members if m.is_active %}
+-<tr><td>{{ m.employee.full_name }}</td><td>{{ m.employee.job_title or "" }}</td><td>{{ m.member_role or "" }}</td><td>{% if m.is_active %}Active{% else %}Inactive{% endif %}</td><td><a class="btn btn-sm btn-outline-danger" href="{{ url_for('master.remove_team_member', team_id=team.id, member_id=m.id) }}">Remove</a></td></tr>
++<tr><td>{{ m.employee.full_name }}</td><td>{{ m.employee.job_title or "" }}</td><td>{{ m.member_role or "" }}</td><td>{% if m.is_active %}Active{% else %}Inactive{% endif %}</td><td><form method="post" action="{{ url_for('master.remove_team_member', team_id=team.id, member_id=m.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger">Remove</button></form></td></tr>
+ {% else %}<tr><td colspan="5" class="text-muted">No active members.</td></tr>{% endfor %}
+ </tbody>
+ </table>
+--- a/app/templates/notifications/list.html
++++ b/app/templates/notifications/list.html
+@@ -5,5 +5,5 @@
+   <div class="d-flex gap-2"><a class="btn btn-outline-dark" href="{{ url_for('notifications.logs') }}">Notification Log</a><a class="btn btn-outline-success" href="{{ url_for('notifications.sms_queue') }}">SMS Queue</a><a class="btn btn-outline-primary" href="{{ url_for('notifications.whatsapp_settings') }}">WhatsApp Future Setup</a><a class="btn btn-primary" href="{{ url_for('notifications.create_notification') }}">Create Notification</a></div>
+ </div>
+ <div class="row g-3 mb-3"><div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Unread</div><h3>{{ unread }}</h3></div></div></div></div>
+-<div class='card'><div class='card-body table-responsive'><table class='table table-hover align-middle'><thead><tr><th>Ref</th><th>Title / Message</th><th>Target</th><th>Priority</th><th>Status</th><th>Related</th><th>Date</th><th></th></tr></thead><tbody>{% for n in notifications %}<tr><td>{{ n.ref_no }}</td><td><strong>{{ n.title }}</strong><br><small>{{ n.message or '' }}</small></td><td>{{ n.target_user.full_name if n.target_user else 'All Users' }}</td><td><span class="badge bg-warning text-dark">{{ n.priority }}</span></td><td>{{ n.status }}</td><td>{{ n.related_module or '' }} {{ n.related_ref or '' }}</td><td>{{ n.created_at }}</td><td><a class='btn btn-sm btn-outline-success' href='{{ url_for('notifications.mark_read', notification_id=n.id) }}'>Read</a></td></tr>{% else %}<tr><td colspan="8" class="text-center text-muted">No notifications found.</td></tr>{% endfor %}</tbody></table></div></div>
++<div class='card'><div class='card-body table-responsive'><table class='table table-hover align-middle'><thead><tr><th>Ref</th><th>Title / Message</th><th>Target</th><th>Priority</th><th>Status</th><th>Related</th><th>Date</th><th></th></tr></thead><tbody>{% for n in notifications %}<tr><td>{{ n.ref_no }}</td><td><strong>{{ n.title }}</strong><br><small>{{ n.message or '' }}</small></td><td>{{ n.target_user.full_name if n.target_user else 'All Users' }}</td><td><span class="badge bg-warning text-dark">{{ n.priority }}</span></td><td>{{ n.status }}</td><td>{{ n.related_module or '' }} {{ n.related_ref or '' }}</td><td>{{ n.created_at }}</td><td><form method="post" action="{{ url_for('notifications.mark_read', notification_id=n.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-success">Read</button></form></td></tr>{% else %}<tr><td colspan="8" class="text-center text-muted">No notifications found.</td></tr>{% endfor %}</tbody></table></div></div>
+ {% endblock %}
+--- a/app/templates/notifications/logs.html
++++ b/app/templates/notifications/logs.html
+@@ -2,5 +2,5 @@
+ {% block content %}
+ <div class="d-flex justify-content-between mb-3"><h2 class="fw-bold">Notification Log</h2><a href="{{ url_for('notifications.list_notifications') }}" class="btn btn-outline-secondary">Notification Center</a></div>
+ <form class="row g-2 mb-3"><div class="col-md-3"><select name="channel" class="form-select"><option value="">All Channels</option>{% for c in channels %}<option value="{{ c }}" {% if filters.get('channel')==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div><div class="col-md-3"><select name="status" class="form-select"><option value="">All Statuses</option>{% for s in statuses %}<option value="{{ s }}" {% if filters.get('status')==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div><div class="col-md-2"><button class="btn btn-primary">Filter</button></div></form>
+-<div class="card"><div class="card-body table-responsive"><table class="table table-sm table-hover"><thead><tr><th>Date</th><th>Channel</th><th>Recipient</th><th>Subject</th><th>Related</th><th>Status</th><th>Error</th><th>Action</th></tr></thead><tbody>{% for l in logs %}<tr><td>{{ l.created_at }}</td><td>{{ l.channel }}</td><td>{{ l.recipient_name or '' }}<br><small>{{ l.recipient or '' }}</small></td><td>{{ l.subject }}<br><small>{{ l.message }}</small></td><td>{{ l.related_module or '' }} {{ l.related_ref or '' }}</td><td><span class="badge bg-secondary">{{ l.status }}</span></td><td><small class="text-danger">{{ l.error_message or '' }}</small></td><td>{% if l.channel=='Email' and l.status in ['Pending','Queued','Failed'] %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('notifications.send_email_log', log_id=l.id) }}">Send Email</a>{% endif %}</td></tr>{% else %}<tr><td colspan="8" class="text-center text-muted">No logs.</td></tr>{% endfor %}</tbody></table></div></div>
++<div class="card"><div class="card-body table-responsive"><table class="table table-sm table-hover"><thead><tr><th>Date</th><th>Channel</th><th>Recipient</th><th>Subject</th><th>Related</th><th>Status</th><th>Error</th><th>Action</th></tr></thead><tbody>{% for l in logs %}<tr><td>{{ l.created_at }}</td><td>{{ l.channel }}</td><td>{{ l.recipient_name or '' }}<br><small>{{ l.recipient or '' }}</small></td><td>{{ l.subject }}<br><small>{{ l.message }}</small></td><td>{{ l.related_module or '' }} {{ l.related_ref or '' }}</td><td><span class="badge bg-secondary">{{ l.status }}</span></td><td><small class="text-danger">{{ l.error_message or '' }}</small></td><td>{% if l.channel=='Email' and l.status in ['Pending','Queued','Failed'] %}<form method="post" action="{{ url_for('notifications.send_email_log', log_id=l.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-primary">Send Email</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="8" class="text-center text-muted">No logs.</td></tr>{% endfor %}</tbody></table></div></div>
+ {% endblock %}
+--- a/app/templates/notifications/sms_queue.html
++++ b/app/templates/notifications/sms_queue.html
+@@ -3,5 +3,5 @@
+ <div class="d-flex justify-content-between mb-3"><div><h2 class="fw-bold">SMS Queue</h2><p class="text-muted">API weli lama xidhin. Halkaan waxaa lagu kaydinayaa SMS-yada la diri doono marka provider la helo.</p></div><a href="{{ url_for('notifications.logs') }}" class="btn btn-outline-dark">Notification Log</a></div>
+ <form method="post" action="{{ url_for('notifications.create_sms_queue') }}" class="card mb-3">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="card-header fw-bold">Add Manual SMS Queue</div><div class="card-body"><div class="row g-2"><div class="col-md-3"><input class="form-control" name="recipient_name" placeholder="Recipient name"></div><div class="col-md-3"><input class="form-control" name="phone_number" placeholder="+252..." required></div><div class="col-md-2"><input class="form-control" name="related_module" placeholder="Module"></div><div class="col-md-2"><input class="form-control" name="related_ref" placeholder="Ref"></div><div class="col-md-12"><textarea class="form-control" name="message" placeholder="SMS message" required></textarea></div><div class="col-md-2"><button class="btn btn-primary">Add to Queue</button></div></div></div></form>
+-<div class="card"><div class="card-body table-responsive"><table class="table table-hover"><thead><tr><th>Ref</th><th>Recipient</th><th>Phone</th><th>Message</th><th>Related</th><th>Status</th><th>Date</th><th></th></tr></thead><tbody>{% for s in items %}<tr><td>{{ s.ref_no }}</td><td>{{ s.recipient_name }}</td><td>{{ s.phone_number }}</td><td>{{ s.message }}</td><td>{{ s.related_module or '' }} {{ s.related_ref or '' }}</td><td>{{ s.status }}</td><td>{{ s.created_at }}</td><td>{% if s.status!='Sent' %}<a class="btn btn-sm btn-outline-success" href="{{ url_for('notifications.mark_sms_sent', sms_id=s.id) }}">Mark Sent</a>{% endif %}</td></tr>{% else %}<tr><td colspan="8" class="text-center text-muted">No SMS queued.</td></tr>{% endfor %}</tbody></table></div></div>
++<div class="card"><div class="card-body table-responsive"><table class="table table-hover"><thead><tr><th>Ref</th><th>Recipient</th><th>Phone</th><th>Message</th><th>Related</th><th>Status</th><th>Date</th><th></th></tr></thead><tbody>{% for s in items %}<tr><td>{{ s.ref_no }}</td><td>{{ s.recipient_name }}</td><td>{{ s.phone_number }}</td><td>{{ s.message }}</td><td>{{ s.related_module or '' }} {{ s.related_ref or '' }}</td><td>{{ s.status }}</td><td>{{ s.created_at }}</td><td>{% if s.status!='Sent' %}<form method="post" action="{{ url_for('notifications.mark_sms_sent', sms_id=s.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-success">Mark Sent</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="8" class="text-center text-muted">No SMS queued.</td></tr>{% endfor %}</tbody></table></div></div>
+ {% endblock %}
+--- a/app/templates/payroll/batch_detail.html
++++ b/app/templates/payroll/batch_detail.html
+@@ -1,4 +1,4 @@
+ {% extends "base.html" %}
+ {% block content %}
+-<div class="d-flex justify-content-between align-items-center mt-4 mb-3"><div><h2 class="fw-bold">{{ batch.batch_title }}</h2><p class="text-muted mb-0">{{ batch.project.project_name }} — {{ batch.work_date or "" }} — {{ batch.batch_no }}</p></div><div><a class="btn btn-outline-dark" href="{{ url_for('payroll.batches') }}">Back</a> {% if batch.status in ["Draft","Submitted"] %}<a class="btn btn-success" href="{{ url_for('payroll.approve_batch', batch_id=batch.id) }}">Approve Batch</a>{% endif %}</div></div><div class="row g-3 mb-3"><div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Employees</div><h3>{{ batch.entries|length }}</h3></div></div></div><div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Total Due</div><h3>${{ "%.2f"|format(batch.total_due) }}</h3></div></div></div><div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Paid</div><h3>${{ "%.2f"|format(batch.total_paid) }}</h3></div></div></div><div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Balance</div><h3>${{ "%.2f"|format(batch.balance) }}</h3></div></div></div></div><div class="card shadow-sm"><div class="card-body table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Employee</th><th>Role</th><th>Current</th><th>Previous</th><th>Total Due</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead><tbody>{% for e in batch.entries %}<tr><td>{{ e.employee.full_name }}</td><td>{{ e.role_on_project or "" }}</td><td>${{ "%.2f"|format(e.current_due) }}</td><td>${{ "%.2f"|format(e.previous_balance or 0) }}</td><td>${{ "%.2f"|format(e.total_due) }}</td><td>${{ "%.2f"|format(e.total_paid) }}</td><td>${{ "%.2f"|format(e.balance) }}</td><td>{{ e.status }}</td><td><a class="btn btn-sm btn-outline-dark" href="{{ url_for('payroll.entry_detail', entry_id=e.id) }}">Payment</a></td></tr>{% else %}<tr><td colspan="10" class="text-muted">No entries in this batch.</td></tr>{% endfor %}</tbody></table></div></div>
++<div class="d-flex justify-content-between align-items-center mt-4 mb-3"><div><h2 class="fw-bold">{{ batch.batch_title }}</h2><p class="text-muted mb-0">{{ batch.project.project_name }} — {{ batch.work_date or "" }} — {{ batch.batch_no }}</p></div><div><a class="btn btn-outline-dark" href="{{ url_for('payroll.batches') }}">Back</a> {% if batch.status in ["Draft","Submitted"] %}<form method="post" action="{{ url_for('payroll.approve_batch', batch_id=batch.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-success">Approve Batch</button></form>{% endif %}</div></div><div class="row g-3 mb-3"><div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Employees</div><h3>{{ batch.entries|length }}</h3></div></div></div><div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Total Due</div><h3>${{ "%.2f"|format(batch.total_due) }}</h3></div></div></div><div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Paid</div><h3>${{ "%.2f"|format(batch.total_paid) }}</h3></div></div></div><div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Balance</div><h3>${{ "%.2f"|format(batch.balance) }}</h3></div></div></div></div><div class="card shadow-sm"><div class="card-body table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Employee</th><th>Role</th><th>Current</th><th>Previous</th><th>Total Due</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead><tbody>{% for e in batch.entries %}<tr><td>{{ e.employee.full_name }}</td><td>{{ e.role_on_project or "" }}</td><td>${{ "%.2f"|format(e.current_due) }}</td><td>${{ "%.2f"|format(e.previous_balance or 0) }}</td><td>${{ "%.2f"|format(e.total_due) }}</td><td>${{ "%.2f"|format(e.total_paid) }}</td><td>${{ "%.2f"|format(e.balance) }}</td><td>{{ e.status }}</td><td><a class="btn btn-sm btn-outline-dark" href="{{ url_for('payroll.entry_detail', entry_id=e.id) }}">Payment</a></td></tr>{% else %}<tr><td colspan="10" class="text-muted">No entries in this batch.</td></tr>{% endfor %}</tbody></table></div></div>
+ {% endblock %}
+--- a/app/templates/users/list.html
++++ b/app/templates/users/list.html
+@@ -1 +1 @@
+-{% extends "base.html" %}{% block content %}<div class="d-flex justify-content-between align-items-center mt-4 mb-3"><h2 class="fw-bold">Users</h2><a class="btn btn-primary" href="{{ url_for('users.create_user') }}">Create User</a></div><div class="card shadow-sm"><div class="card-body"><table class="table table-hover align-middle"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Branch</th><th>Department</th><th>Active</th><th>Actions</th></tr></thead><tbody>{% for user in users %}<tr><td>{{ user.full_name }}</td><td>{{ user.email }}</td><td>{{ user.role }}</td><td>{{ user.branch.branch_name if user.branch else "" }}</td><td>{{ user.department.department_name if user.department else "" }}</td><td>{{ "Yes" if user.is_active else "No" }}</td><td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('users.edit_user', user_id=user.id) }}">Edit</a> <a class="btn btn-sm btn-outline-warning" href="{{ url_for('users.change_password', user_id=user.id) }}">Password</a> {% if user.id != current_user.id %}<a class="btn btn-sm btn-outline-dark" href="{{ url_for('users.toggle_user', user_id=user.id) }}">Toggle</a>{% endif %}</td></tr>{% else %}<tr><td colspan="7" class="text-muted">No users found.</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}
++{% extends "base.html" %}{% block content %}<div class="d-flex justify-content-between align-items-center mt-4 mb-3"><h2 class="fw-bold">Users</h2><a class="btn btn-primary" href="{{ url_for('users.create_user') }}">Create User</a></div><div class="card shadow-sm"><div class="card-body"><table class="table table-hover align-middle"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Branch</th><th>Department</th><th>Active</th><th>Actions</th></tr></thead><tbody>{% for user in users %}<tr><td>{{ user.full_name }}</td><td>{{ user.email }}</td><td>{{ user.role }}</td><td>{{ user.branch.branch_name if user.branch else "" }}</td><td>{{ user.department.department_name if user.department else "" }}</td><td>{{ "Yes" if user.is_active else "No" }}</td><td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('users.edit_user', user_id=user.id) }}">Edit</a> <a class="btn btn-sm btn-outline-warning" href="{{ url_for('users.change_password', user_id=user.id) }}">Password</a> {% if user.id != current_user.id %}<form method="post" action="{{ url_for('users.toggle_user', user_id=user.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-dark">Toggle</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="7" class="text-muted">No users found.</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}
+--- a/app/types.py
++++ b/app/types.py
+@@ -44,8 +44,10 @@
+             return None
+         try:
+             dec = Decimal(str(value))
+-        except Exception:
+-            return None
++        except Exception as exc:
++            raise ValueError("Invalid numeric value.") from exc
++        if not dec.is_finite():
++            raise ValueError("Numeric values must be finite.")
+         return dec.quantize(self._quantum, rounding=ROUND_HALF_UP)
+ 
+     def process_result_value(self, value, dialect):
+@@ -58,15 +60,18 @@
+     """Currency amounts. NUMERIC(14,2) - up to 999,999,999,999.99."""
+     precision = 14
+     scale = 2
++    cache_ok = True
+ 
+ 
+ class Quantity(_ExactNumeric):
+     """Physical quantities and work days. NUMERIC(14,3)."""
+     precision = 14
+     scale = 3
++    cache_ok = True
+ 
+ 
+ class Rate(_ExactNumeric):
+     """Exchange rates. NUMERIC(18,6) - SLSH per USD needs the headroom."""
+     precision = 18
+     scale = 6
++    cache_ok = True
+--- /dev/null
++++ b/docs/README_LEGACY_PHASE_NOTES.md
+@@ -0,0 +1,234 @@
++# Solar Project Document & Approval Management System — Phase 8
++
++## Phase 20E — Project Command Center
++
++Open any project to see a unified Command Center with overall progress,
++milestones, a task Gantt timeline, physical and financial progress, procurement,
++document readiness, issues and risks, and an AI/rule-based project forecast.
++See `PHASE20E_PROJECT_COMMAND_CENTER_RELEASE_NOTES.md` for calculation and access
++control details. This phase uses existing records and requires no schema change.
++
++## Phase 20F — Employee Workspace 360
++
++Employees now have a unified Workspace 360 with profile details, project and
++team assignments, task progress, payroll balances, service history, and an
++activity timeline. A safe Delete action removes only unused employee records;
++employees with linked operational history must be set to Inactive so financial
++and project records remain intact. See
++`PHASE20F_EMPLOYEE_WORKSPACE_360_RELEASE_NOTES.md`. No schema migration is
++required.
++
++## Phase 20H — Team Leader Self-Service
++
++Team Leaders linked through Employee → Team can now submit their own Payment
++Requests and create one Team Daily Report per assigned project, team, and day.
++They only see teams they lead, projects assigned to those teams, and their own
++payment requests. Manager and Finance approvals remain separate. Deploy this
++phase with `flask db upgrade`; do not run `init_db.py` on an existing database.
++See `PHASE20H_TEAM_LEADER_SELF_SERVICE_RELEASE_NOTES.md`.
++
++## Phase 20I — Evidence-Based Milestone Engine
++
++Every project now receives six weighted delivery milestones: Survey, Design,
++Procurement, Installation, Testing/Commissioning, and Handover. Physical,
++procurement, and document progress are calculated from linked operational
++records. A 0% dimension is displayed as N/A and is excluded from the score.
++Team Leaders can submit a ready milestone, but a different manager must approve
++it. The system blocks completion when required evidence or critical work is
++missing; emergency completion needs an audited reason. See
++`PHASE20I_MILESTONE_ENGINE_RELEASE_NOTES.md`.
++
++## Earlier Phase 8 notes
++
++Phase 8 focuses on preparing the system for real deployment and multi-user use.
++
++## Added in Phase 8
++
++- PostgreSQL support using `DATABASE_URL`
++- `.env` support using `python-dotenv`
++- Production configuration
++- `wsgi.py` for deployment
++- `serve_waitress.py` for Windows production-style serving
++- Health check endpoint: `/health`
++- Upload folder environment setting
++- Max upload size environment setting
++- Deployment guides:
++  - Render
++  - Contabo Windows VPS
++  - LAN testing
++- SQLite export to JSON script
++- Database table creation script
++- Improved `.gitignore`
++
++## Run locally
++
++```bash
++cd solar_doc_approval_phase8
++python -m venv env
++env\Scripts\activate
++pip install -r requirements.txt
++copy .env.example .env
++python init_db.py
++python run.py
++```
++
++Open:
++
++```text
++http://127.0.0.1:5000
++```
++
++For LAN testing:
++
++```text
++http://YOUR-IP:5000
++```
++
++Example:
++
++```text
++http://10.10.10.62:5000
++```
++
++## Production-style local run on Windows
++
++```bash
++env\Scripts\activate
++python serve_waitress.py
++```
++
++## PostgreSQL setup
++
++Set in `.env`:
++
++```text
++DATABASE_URL=postgresql://username:password@localhost:5432/solar_doc_system
++```
++
++Then run:
++
++```bash
++python init_db.py
++```
++
++## Health check
++
++Open:
++
++```text
++http://127.0.0.1:5000/health
++```
++
++Expected:
++
++```json
++{"status":"ok","database":"ok"}
++```
++
++## Export SQLite data to JSON
++
++```bash
++python export_sqlite_to_json.py
++```
++
++Output:
++
++```text
++exports/solar_doc_export.json
++```
++
++## Deployment docs
++
++Read:
++
++- `deployment_lan_testing.md`
++- `deployment_contabo_windows.md`
++- `deployment_render.md`
++
++## Default admin
++
++```text
++Email: admin@cadceedmaal.com
++Password: Admin@12345
++```
++
++Change the password before real use.
++
++## Phase 9 Additions
++
++Phase 9 adds a stronger operations layer for project execution:
++
++- Project Task Management
++- Issue & Risk Tracker
++- Enhanced Dashboard with task and issue counters
++- Project Detail summaries for tasks and issues
++- My Tasks page now includes assigned project tasks and assigned issues
++
++After deploying Phase 9 to Render, run:
++
++```bash
++python init_db.py
++```
++
++This creates the new `project_task` and `project_issue` tables without deleting existing data.
++
++Recommended Render environment variable:
++
++```text
++PYTHON_VERSION=3.10.5
++```
++
++
++## Phase 10 Reports Upgrade
++- Full Project Report
++- Customer Report by customer name
++- PDF export for project and customer reports
++- No new database tables required.
++
++
++## Phase 11 Customers / Employees / Teams
++- Customer master table
++- Employee master table
++- Teams with leader and members
++- Project workforce assignment
++- Full Project Report includes workforce and teams
++
++
++## Phase 12 Project Payroll
++- Monthly employee project salary/wage entries
++- Previous balance and remaining balance
++- Finance payment recording
++- Employee and project payroll statements
++- Full Project Report includes payroll summary
++
++
++## Phase 13 Project-Based Payroll
++- Payroll per project, not monthly salary.
++- Bulk/batch data entry for all employees who worked on one project/date.
++- Finance payment tracking and employee/project statements.
++
++
++## Phase 13A Menu and Reports Fix
++- Compact grouped menu.
++- Project report payroll query fixed.
++- Customer reports include payroll balance.
++
++
++## Phase 14A Materials
++- Material Request datasheet with item and description
++- Ref numbers for requests/issues/returns
++- Project material report and returns report
++
++
++## Phase 15E
++Notification Center, Notification Log, Email Notifications, SMS Queue without API, WhatsApp future settings, Sales CRM, and user-specific form permissions have been added.
++
++## Phase 20J - Project Form Context
++
++- Forms opened from a selected project now retain the project and its customer.
++- Project Detail includes context-aware commands for quotations, tasks, material/payment requests, daily reports, documents, issues, service tickets, and warranties.
++- Quotations also prefill project capacity and project type when available.
++- Project selection is authoritative: the server resolves the correct customer from the selected project.
++- No new database migration is required for this release.
++
++See `PHASE20J_PROJECT_FORM_CONTEXT_RELEASE_NOTES.md` for deployment and verification notes.
+--- a/init_db.py
++++ b/init_db.py
+@@ -1,9 +1,10 @@
+ from app import create_app, db
+-from sqlalchemy import text
++import os
++import secrets
++from pathlib import Path
++from flask_migrate import upgrade
+ from app.models import User, Branch, Department, SystemSetting, Customer, Project, ProjectType, CompanyProfile, QuotationItem, AISetting
+ from werkzeug.security import generate_password_hash
+-
+-app = create_app()
+ 
+ DEFAULT_BRANCHES = [("Hargeisa HQ", "Hargeisa"), ("Burco Branch", "Burco"), ("Jigjiga Branch", "Jigjiga")]
+ DEFAULT_DEPARTMENTS = [
+@@ -20,171 +21,106 @@
+     "MAIL_USERNAME": "", "MAIL_PASSWORD": "", "MAIL_DEFAULT_SENDER": "",
+ }
+ 
+-with app.app_context():
+-    db.create_all()
++def initialize_database(application):
++    """Migrate and seed defaults without replacing existing accounts or data."""
++    with application.app_context():
++        upgrade(directory=str(Path(__file__).resolve().parent / "migrations"))
++        # Phase 14C: default company profile for forms and reports.
++        default_company = CompanyProfile.query.first()
++        if not default_company:
++            db.session.add(CompanyProfile(
++                company_name="Cadceed-Maal Solar Energy",
++                tagline="Renewable Energy Solutions",
++                address="Green Mall, Second Floor, Road One, Hargeisa, Somaliland",
++                phone="+252-2-524868",
++                email="info@cadceedmaal.com",
++                website="www.cadceedmaal.com",
++                logo_text="CMSE",
++                primary_color="#f97316",
++                secondary_color="#16a34a"
++            ))
+ 
+-    # Phase 14E: migrate project_task assignment columns for existing SQLite/PostgreSQL databases.
+-    try:
+-        inspector = db.inspect(db.engine)
+-        existing_cols = [c["name"] for c in inspector.get_columns("project_task")]
+-        if "assigned_employee_id" not in existing_cols:
+-            db.session.execute(text("ALTER TABLE project_task ADD COLUMN assigned_employee_id INTEGER"))
+-        if "supervisor_user_id" not in existing_cols:
+-            db.session.execute(text("ALTER TABLE project_task ADD COLUMN supervisor_user_id INTEGER"))
+-        db.session.commit()
+-    except Exception as e:
+-        db.session.rollback()
+-        print("Phase 14E task assignment migration skipped or already applied:", e)
++        admin_email = os.environ.get("INITIAL_ADMIN_EMAIL", "admin@cadceedmaal.com").strip().lower()
++        existing_admin = User.query.filter(db.func.lower(User.role) == "admin").first()
++        admin_password = None
++        if not existing_admin:
++            if User.query.filter_by(email=admin_email).first():
++                raise RuntimeError("Bootstrap email already belongs to a user. Use admin recovery instead.")
++            admin_password = os.environ.get("INITIAL_ADMIN_PASSWORD") or secrets.token_urlsafe(18)
++            if len(admin_password) < 12:
++                raise ValueError("INITIAL_ADMIN_PASSWORD must be at least 12 characters.")
++            admin = User(full_name="System Administrator", email=admin_email, password_hash=generate_password_hash(admin_password), role="Admin", is_active=True)
++            db.session.add(admin)
++        for name, location in DEFAULT_BRANCHES:
++            if not Branch.query.filter_by(branch_name=name).first():
++                db.session.add(Branch(branch_name=name, location=location, is_active=True))
++        for name, desc in DEFAULT_DEPARTMENTS:
++            if not Department.query.filter_by(department_name=name).first():
++                db.session.add(Department(department_name=name, description=desc, is_active=True))
++        for key, value in DEFAULT_SETTINGS.items():
++            if not SystemSetting.query.filter_by(setting_key=key).first():
++                db.session.add(SystemSetting(setting_key=key, setting_value=value))
+ 
+ 
+-    # Phase 15K: migrate combined Site Survey & Load Assessment fields and extended permissions.
+-    try:
+-        inspector = db.inspect(db.engine)
+-        site_cols = [c["name"] for c in inspector.get_columns("site_survey_form")]
+-        site_additions = {
+-            "assessment_date": "DATE",
+-            "assessed_by": "VARCHAR(150)",
+-            "daytime_load_kw": "VARCHAR(80)",
+-            "nighttime_load_kw": "VARCHAR(80)",
+-            "total_daily_consumption_kwh": "VARCHAR(80)",
+-            "critical_loads": "TEXT",
+-            "ac_loads": "TEXT",
+-            "pump_loads": "TEXT",
+-            "lighting_loads": "TEXT",
+-            "backup_hours_required": "VARCHAR(80)",
+-            "recommended_system_size": "VARCHAR(120)",
+-            "recommendation": "TEXT",
+-        }
+-        for col, typ in site_additions.items():
+-            if col not in site_cols:
+-                db.session.execute(text(f"ALTER TABLE site_survey_form ADD COLUMN {col} {typ}"))
+-        perm_cols = [c["name"] for c in inspector.get_columns("user_form_permission")]
+-        if "can_print_export" not in perm_cols:
+-            db.session.execute(text("ALTER TABLE user_form_permission ADD COLUMN can_print_export BOOLEAN DEFAULT 0"))
+-        db.session.commit()
+-    except Exception as e:
+-        db.session.rollback()
+-        print("Phase 15K combined forms / permissions migration skipped or already applied:", e)
++        # Phase 13B: seed common project types.
++        default_project_types = [
++            "Hybrid Solar System", "Off-grid Solar System", "On-grid Solar System",
++            "Solar Pump System", "Solar Street Lighting", "Solar Water Heating",
++            "Battery / ESS System", "Maintenance / O&M", "Site Survey", "Other",
++        ]
++        for type_name in default_project_types:
++            if not ProjectType.query.filter_by(type_name=type_name).first():
++                db.session.add(ProjectType(type_name=type_name, is_active=True))
+ 
+ 
+ 
+-    # Phase 15D: migrate advanced service ticket columns for existing databases.
+-    try:
+-        inspector = db.inspect(db.engine)
+-        support_cols = [c["name"] for c in inspector.get_columns("support_ticket")]
+-        support_additions = {
+-            "location": "VARCHAR(180)",
+-            "complaint_source": "VARCHAR(100)",
+-            "preferred_visit_date": "DATE",
+-            "due_date": "DATE",
+-            "root_cause": "TEXT",
+-            "corrective_action": "TEXT",
+-            "preventive_action": "TEXT",
+-            "final_result": "VARCHAR(120)",
+-            "customer_confirmation": "VARCHAR(120)",
+-        }
+-        for col, typ in support_additions.items():
+-            if col not in support_cols:
+-                db.session.execute(text(f"ALTER TABLE support_ticket ADD COLUMN {col} {typ}"))
+-        visit_cols = [c["name"] for c in inspector.get_columns("service_visit")]
+-        visit_additions = {
+-            "fault_found": "TEXT",
+-            "root_cause": "TEXT",
+-            "test_result": "VARCHAR(120)",
+-            "customer_confirmation": "VARCHAR(120)",
+-            "next_action": "TEXT",
+-        }
+-        for col, typ in visit_additions.items():
+-            if col not in visit_cols:
+-                db.session.execute(text(f"ALTER TABLE service_visit ADD COLUMN {col} {typ}"))
+-        db.session.commit()
+-    except Exception as e:
+-        db.session.rollback()
+-        print("Phase 15D support ticket migration skipped or already applied:", e)
+-
+-    # Phase 14C: default company profile for forms and reports.
+-    default_company = CompanyProfile.query.first()
+-    if not default_company:
+-        db.session.add(CompanyProfile(
+-            company_name="Cadceed-Maal Solar Energy",
+-            tagline="Renewable Energy Solutions",
+-            address="Green Mall, Second Floor, Road One, Hargeisa, Somaliland",
+-            phone="+252-2-524868",
+-            email="info@cadceedmaal.com",
+-            website="www.cadceedmaal.com",
+-            logo_text="CMSE",
+-            primary_color="#f97316",
+-            secondary_color="#16a34a"
+-        ))
+-
+-    admin_email = "admin@cadceedmaal.com"
+-    existing_admin = User.query.filter_by(email=admin_email).first()
+-    if not existing_admin:
+-        admin = User(full_name="System Administrator", email=admin_email, password_hash=generate_password_hash("Admin@12345"), role="Admin", is_active=True)
+-        db.session.add(admin)
+-    for name, location in DEFAULT_BRANCHES:
+-        if not Branch.query.filter_by(branch_name=name).first():
+-            db.session.add(Branch(branch_name=name, location=location, is_active=True))
+-    for name, desc in DEFAULT_DEPARTMENTS:
+-        if not Department.query.filter_by(department_name=name).first():
+-            db.session.add(Department(department_name=name, description=desc, is_active=True))
+-    for key, value in DEFAULT_SETTINGS.items():
+-        if not SystemSetting.query.filter_by(setting_key=key).first():
+-            db.session.add(SystemSetting(setting_key=key, setting_value=value))
+-
+-
+-    # Phase 13B: seed common project types.
+-    default_project_types = [
+-        "Hybrid Solar System", "Off-grid Solar System", "On-grid Solar System",
+-        "Solar Pump System", "Solar Street Lighting", "Solar Water Heating",
+-        "Battery / ESS System", "Maintenance / O&M", "Site Survey", "Other",
+-    ]
+-    for type_name in default_project_types:
+-        if not ProjectType.query.filter_by(type_name=type_name).first():
+-            db.session.add(ProjectType(type_name=type_name, is_active=True))
++        # Phase 15C: seed standard quotation items for dropdown quotation lines.
++        default_quotation_items = [
++            ("Solar Panel", "High efficiency PV solar module", "pcs", 0, "PV Module"),
++            ("Hybrid Inverter", "Hybrid solar inverter", "pcs", 0, "Inverter"),
++            ("Lithium Battery", "Lithium battery storage module", "pcs", 0, "Battery"),
++            ("Mounting Structure", "Roof/ground mounting structure", "set", 0, "Mounting"),
++            ("DC Cable", "PV DC cable", "m", 0, "Cable"),
++            ("AC Cable", "AC power cable", "m", 0, "Cable"),
++            ("Protection Box", "AC/DC protection and breakers", "set", 0, "Protection"),
++            ("Earthing System", "Grounding and lightning protection", "set", 0, "Earthing"),
++            ("Installation Labor", "Installation, testing and commissioning service", "job", 0, "Service"),
++            ("Transport", "Material transportation to site", "trip", 0, "Logistics"),
++        ]
++        for item_name, description, unit, unit_price, category in default_quotation_items:
++            if not QuotationItem.query.filter_by(item_name=item_name).first():
++                db.session.add(QuotationItem(item_name=item_name, description=description, unit=unit, unit_price=unit_price, category=category, is_active=True))
+ 
+ 
+ 
+-    # Phase 15C: seed standard quotation items for dropdown quotation lines.
+-    default_quotation_items = [
+-        ("Solar Panel", "High efficiency PV solar module", "pcs", 0, "PV Module"),
+-        ("Hybrid Inverter", "Hybrid solar inverter", "pcs", 0, "Inverter"),
+-        ("Lithium Battery", "Lithium battery storage module", "pcs", 0, "Battery"),
+-        ("Mounting Structure", "Roof/ground mounting structure", "set", 0, "Mounting"),
+-        ("DC Cable", "PV DC cable", "m", 0, "Cable"),
+-        ("AC Cable", "AC power cable", "m", 0, "Cable"),
+-        ("Protection Box", "AC/DC protection and breakers", "set", 0, "Protection"),
+-        ("Earthing System", "Grounding and lightning protection", "set", 0, "Earthing"),
+-        ("Installation Labor", "Installation, testing and commissioning service", "job", 0, "Service"),
+-        ("Transport", "Material transportation to site", "trip", 0, "Logistics"),
+-    ]
+-    for item_name, description, unit, unit_price, category in default_quotation_items:
+-        if not QuotationItem.query.filter_by(item_name=item_name).first():
+-            db.session.add(QuotationItem(item_name=item_name, description=description, unit=unit, unit_price=unit_price, category=category, is_active=True))
++        # Phase 15F: default AI settings. Live AI remains disabled until admin configures API key.
++        if not AISetting.query.first():
++            db.session.add(AISetting(
++                enabled=False,
++                provider="OpenAI-Compatible",
++                model_name="gpt-4o-mini",
++                api_base_url="https://api.openai.com/v1/chat/completions",
++                system_prompt="You are Cadceed-Maal Solar Energy ERP assistant. Give practical, professional, concise answers for solar business operations.",
++                allow_data_context=True,
++                notes="Set OPENAI_API_KEY in Render Environment Variables or enter an API key in AI Settings."
++            ))
++
++        # Phase 11: build Customer master list from existing project customer names.
++        for project in Project.query.all():
++            if project.customer_name and not Customer.query.filter_by(customer_name=project.customer_name).first():
++                db.session.add(Customer(customer_name=project.customer_name, customer_type="Project Customer", is_active=True))
++        db.session.commit()
++        print("Database migrations and default data are ready.")
++        if not existing_admin:
++            print("Default admin user created:")
++            print(f"Email: {admin_email}")
++            print(f"Temporary password: {admin_password}")
++            print("Save this password now; it is only displayed when the administrator is created.")
++        else:
++            print("Admin user already exists.")
+ 
+ 
+-
+-    # Phase 15F: default AI settings. Live AI remains disabled until admin configures API key.
+-    if not AISetting.query.first():
+-        db.session.add(AISetting(
+-            enabled=False,
+-            provider="OpenAI-Compatible",
+-            model_name="gpt-4o-mini",
+-            api_base_url="https://api.openai.com/v1/chat/completions",
+-            system_prompt="You are Cadceed-Maal Solar Energy ERP assistant. Give practical, professional, concise answers for solar business operations.",
+-            allow_data_context=True,
+-            notes="Set OPENAI_API_KEY in Render Environment Variables or enter an API key in AI Settings."
+-        ))
+-
+-    # Phase 11: build Customer master list from existing project customer names.
+-    for project in Project.query.all():
+-        if project.customer_name and not Customer.query.filter_by(customer_name=project.customer_name).first():
+-            db.session.add(Customer(customer_name=project.customer_name, customer_type="Project Customer", is_active=True))
+-    db.session.commit()
+-    print("Database created or updated.")
+-    if not existing_admin:
+-        print("Default admin user created:")
+-        print("Email: admin@cadceedmaal.com")
+-        print("Password: Admin@12345")
+-    else:
+-        print("Admin user already exists.")
++if __name__ == "__main__":
++    from app.local_setup import prepare_local_environment
++    prepare_local_environment()
++    initialize_database(create_app())
+--- a/migrations/versions/b20k0000a001_split_solar_surveys.py
++++ b/migrations/versions/b20k0000a001_split_solar_surveys.py
+@@ -12,17 +12,30 @@
+ depends_on = None
+ 
+ def upgrade():
++    columns = {c['name'] for c in sa.inspect(op.get_bind()).get_columns('site_survey_form')}
+     with op.batch_alter_table('site_survey_form') as batch:
+-        batch.add_column(sa.Column('monthly_consumption_kwh', sa.String(length=80), nullable=True))
+-        batch.add_column(sa.Column('monthly_electricity_bill', sa.String(length=80), nullable=True))
+-        batch.add_column(sa.Column('power_supply', sa.String(length=80), nullable=True))
+-        batch.add_column(sa.Column('connected_load_kw', sa.String(length=80), nullable=True))
+-        batch.add_column(sa.Column('estimated_peak_load_kw', sa.String(length=80), nullable=True))
+-        batch.add_column(sa.Column('day_consumption_kwh', sa.String(length=80), nullable=True))
+-        batch.add_column(sa.Column('night_consumption_kwh', sa.String(length=80), nullable=True))
+-        batch.add_column(sa.Column('critical_load_kw', sa.String(length=80), nullable=True))
+-        batch.add_column(sa.Column('critical_energy_kwh', sa.String(length=80), nullable=True))
+-        batch.add_column(sa.Column('inverter_battery_location', sa.String(length=200), nullable=True))
++        if 'monthly_consumption_kwh' not in columns:
++            batch.add_column(sa.Column('monthly_consumption_kwh', sa.String(length=80), nullable=True))
++        if 'monthly_electricity_bill' not in columns:
++            batch.add_column(sa.Column('monthly_electricity_bill', sa.String(length=80), nullable=True))
++        if 'power_supply' not in columns:
++            batch.add_column(sa.Column('power_supply', sa.String(length=80), nullable=True))
++        if 'connected_load_kw' not in columns:
++            batch.add_column(sa.Column('connected_load_kw', sa.String(length=80), nullable=True))
++        if 'estimated_peak_load_kw' not in columns:
++            batch.add_column(sa.Column('estimated_peak_load_kw', sa.String(length=80), nullable=True))
++        if 'day_consumption_kwh' not in columns:
++            batch.add_column(sa.Column('day_consumption_kwh', sa.String(length=80), nullable=True))
++        if 'night_consumption_kwh' not in columns:
++            batch.add_column(sa.Column('night_consumption_kwh', sa.String(length=80), nullable=True))
++        if 'critical_load_kw' not in columns:
++            batch.add_column(sa.Column('critical_load_kw', sa.String(length=80), nullable=True))
++        if 'critical_energy_kwh' not in columns:
++            batch.add_column(sa.Column('critical_energy_kwh', sa.String(length=80), nullable=True))
++        if 'inverter_battery_location' not in columns:
++            batch.add_column(sa.Column('inverter_battery_location', sa.String(length=200), nullable=True))
++    if 'solar_pump_survey_form' in sa.inspect(op.get_bind()).get_table_names():
++        return
+     op.create_table('solar_pump_survey_form',
+         sa.Column('id', sa.Integer(), primary_key=True),
+         sa.Column('project_id', sa.Integer(), sa.ForeignKey('project.id'), nullable=False, unique=True),
+--- /dev/null
++++ b/migrations/versions/b20k0000a002_pumping_survey_requirements.py
+@@ -0,0 +1,33 @@
++"""Connect existing pumping projects to the new survey evidence type.
++
++Only the unlinked default requirement is changed. Historical forms and
++explicit document/form links are preserved.
++"""
++from alembic import op
++import sqlalchemy as sa
++
++revision = "b20k0000a002"
++down_revision = "b20k0000a001"
++branch_labels = None
++depends_on = None
++
++
++def upgrade():
++    op.execute(sa.text("""
++        UPDATE milestone_document_requirement
++        SET form_key = 'solar-pump-survey', title = 'Approved Solar Pumping Site Survey'
++        WHERE form_key = 'site-survey'
++          AND title = 'Approved site survey & load assessment'
++          AND form_record_id IS NULL AND document_id IS NULL
++          AND milestone_id IN (
++              SELECT m.id FROM project_milestone m JOIN project p ON p.id = m.project_id
++              WHERE m.code = 'SURVEY' AND LOWER(p.project_type) LIKE '%pump%'
++                AND m.status NOT IN ('Completed', 'Completed with Exception')
++          )
++    """))
++
++
++def downgrade():
++    # Preserve evidence configuration; reverting a data repair would overwrite
++    # choices made by managers after upgrade.
++    pass
+--- a/README.md
++++ b/README.md
+@@ -1,234 +1,81 @@
+-# Solar Project Document & Approval Management System — Phase 8
++# Solar ERP — reviewed Phase 20K
+ 
+-## Phase 20E — Project Command Center
++This build repairs survey integration, migrations, form/document approvals,
++permissions, payment validation, and first-time setup. See `REVIEW_REPORT.md`
++for the changes and verification results. Historical release notes are in `docs/`.
+ 
+-Open any project to see a unified Command Center with overall progress,
+-milestones, a task Gantt timeline, physical and financial progress, procurement,
+-document readiness, issues and risks, and an AI/rule-based project forecast.
+-See `PHASE20E_PROJECT_COMMAND_CENTER_RELEASE_NOTES.md` for calculation and access
+-control details. This phase uses existing records and requires no schema change.
++## New local installation (Windows)
+ 
+-## Phase 20F — Employee Workspace 360
++Use the extracted `erp_work` directory. This release was tested on Python 3.10.5.
+ 
+-Employees now have a unified Workspace 360 with profile details, project and
+-team assignments, task progress, payroll balances, service history, and an
+-activity timeline. A safe Delete action removes only unused employee records;
+-employees with linked operational history must be set to Inactive so financial
+-and project records remain intact. See
+-`PHASE20F_EMPLOYEE_WORKSPACE_360_RELEASE_NOTES.md`. No schema migration is
+-required.
+-
+-## Phase 20H — Team Leader Self-Service
+-
+-Team Leaders linked through Employee → Team can now submit their own Payment
+-Requests and create one Team Daily Report per assigned project, team, and day.
+-They only see teams they lead, projects assigned to those teams, and their own
+-payment requests. Manager and Finance approvals remain separate. Deploy this
+-phase with `flask db upgrade`; do not run `init_db.py` on an existing database.
+-See `PHASE20H_TEAM_LEADER_SELF_SERVICE_RELEASE_NOTES.md`.
+-
+-## Phase 20I — Evidence-Based Milestone Engine
+-
+-Every project now receives six weighted delivery milestones: Survey, Design,
+-Procurement, Installation, Testing/Commissioning, and Handover. Physical,
+-procurement, and document progress are calculated from linked operational
+-records. A 0% dimension is displayed as N/A and is excluded from the score.
+-Team Leaders can submit a ready milestone, but a different manager must approve
+-it. The system blocks completion when required evidence or critical work is
+-missing; emergency completion needs an audited reason. See
+-`PHASE20I_MILESTONE_ENGINE_RELEASE_NOTES.md`.
+-
+-## Earlier Phase 8 notes
+-
+-Phase 8 focuses on preparing the system for real deployment and multi-user use.
+-
+-## Added in Phase 8
+-
+-- PostgreSQL support using `DATABASE_URL`
+-- `.env` support using `python-dotenv`
+-- Production configuration
+-- `wsgi.py` for deployment
+-- `serve_waitress.py` for Windows production-style serving
+-- Health check endpoint: `/health`
+-- Upload folder environment setting
+-- Max upload size environment setting
+-- Deployment guides:
+-  - Render
+-  - Contabo Windows VPS
+-  - LAN testing
+-- SQLite export to JSON script
+-- Database table creation script
+-- Improved `.gitignore`
+-
+-## Run locally
+-
+-```bash
+-cd solar_doc_approval_phase8
++```powershell
+ python -m venv env
+-env\Scripts\activate
+-pip install -r requirements.txt
+-copy .env.example .env
+-python init_db.py
+-python run.py
++.\env\Scripts\python.exe -m pip install -r requirements.txt
++.\env\Scripts\python.exe run.py
+ ```
+ 
+-Open:
++Open http://127.0.0.1:5000. On a new SQLite installation, the launcher creates
++`.env` with a unique secret, applies migrations, and seeds an administrator and
++reference data. Save the temporary administrator password printed in the terminal;
++it is displayed only when the account is created. Existing administrator passwords
++are preserved. To choose credentials before first setup, set `INITIAL_ADMIN_EMAIL`
++and `INITIAL_ADMIN_PASSWORD` (at least 12 characters).
+ 
+-```text
+-http://127.0.0.1:5000
++The local server binds to `127.0.0.1` with debug disabled. For deliberate LAN
++access set `HOST=0.0.0.0`. Use `serve_waitress.py` for a Windows application server;
++configure production environment variables and apply migrations before starting it.
++PDF exports use WeasyPrint in an isolated process and require its native runtime
++dependencies on the host. If that renderer is unavailable or crashes, the export
++opens a printable report with a Print / Save as PDF button; the ERP stays running.
++
++## Upgrade an existing installation
++
++1. Back up the database, `.env`, and uploaded files; stop the running application.
++2. Replace application code with this build, preserving those data/configuration files.
++3. Activate the application's Python environment and install `requirements.txt`.
++4. For an Alembic-managed database run:
++
++```powershell
++python -m flask --app wsgi db upgrade
+ ```
+ 
+-For LAN testing:
++5. Restart the application. The current migration revision is `b20k0000a002`.
++6. In Admin → User Form Permissions, grant **Solar Pumping Site Survey** permissions
++   to the appropriate users. Access is not copied from another form automatically.
+ 
+-```text
+-http://YOUR-IP:5000
++Process environment variables now take precedence over `.env`. Check which source
++contains your intended database URL before upgrading. For an unstamped legacy SQLite
++installation, `python run.py` retains the existing recognized-schema onboarding flow
++and creates a backup before stamping; it stops for an unrecognized database.
++For legacy PostgreSQL use the existing deployment/legacy schema bridge guidance.
++Do not stamp an unknown schema as the current head.
++
++`python init_db.py` now uses Alembic and seeds missing reference data. It does not
++reset existing administrator credentials. It is no longer a substitute for legacy
++schema onboarding.
++
++## Workflow changes
++
++- New forms and documents start as Draft or Submitted. Payroll batches follow the
++  same rule; approval is a separate action.
++- Editing a form resets it to Draft, clears the prior reviewer, and records history.
++  Changing evidence reopens affected completed milestones for review.
++- Payment amounts are rounded to cents before validation. Invalid values, overpayments,
++  and payments against unapproved payroll are rejected. The final cent remains due.
++- Toggle, remove, approval and notification-send actions use CSRF-protected POST forms.
++- Pumping projects use the pumping survey as their default survey requirement.
++  Other project types use the combined off-grid survey/load assessment. Existing
++  custom evidence links and completed historical milestones are preserved.
++- Legacy load assessment records remain available, but are not an extra required
++  form in the current completion checklist.
++
++## Run tests
++
++```powershell
++python -m pip install -r requirements-dev.txt
++python -m pytest -q
+ ```
+ 
+-Example:
+-
+-```text
+-http://10.10.10.62:5000
+-```
+-
+-## Production-style local run on Windows
+-
+-```bash
+-env\Scripts\activate
+-python serve_waitress.py
+-```
+-
+-## PostgreSQL setup
+-
+-Set in `.env`:
+-
+-```text
+-DATABASE_URL=postgresql://username:password@localhost:5432/solar_doc_system
+-```
+-
+-Then run:
+-
+-```bash
+-python init_db.py
+-```
+-
+-## Health check
+-
+-Open:
+-
+-```text
+-http://127.0.0.1:5000/health
+-```
+-
+-Expected:
+-
+-```json
+-{"status":"ok","database":"ok"}
+-```
+-
+-## Export SQLite data to JSON
+-
+-```bash
+-python export_sqlite_to_json.py
+-```
+-
+-Output:
+-
+-```text
+-exports/solar_doc_export.json
+-```
+-
+-## Deployment docs
+-
+-Read:
+-
+-- `deployment_lan_testing.md`
+-- `deployment_contabo_windows.md`
+-- `deployment_render.md`
+-
+-## Default admin
+-
+-```text
+-Email: admin@cadceedmaal.com
+-Password: Admin@12345
+-```
+-
+-Change the password before real use.
+-
+-## Phase 9 Additions
+-
+-Phase 9 adds a stronger operations layer for project execution:
+-
+-- Project Task Management
+-- Issue & Risk Tracker
+-- Enhanced Dashboard with task and issue counters
+-- Project Detail summaries for tasks and issues
+-- My Tasks page now includes assigned project tasks and assigned issues
+-
+-After deploying Phase 9 to Render, run:
+-
+-```bash
+-python init_db.py
+-```
+-
+-This creates the new `project_task` and `project_issue` tables without deleting existing data.
+-
+-Recommended Render environment variable:
+-
+-```text
+-PYTHON_VERSION=3.10.5
+-```
+-
+-
+-## Phase 10 Reports Upgrade
+-- Full Project Report
+-- Customer Report by customer name
+-- PDF export for project and customer reports
+-- No new database tables required.
+-
+-
+-## Phase 11 Customers / Employees / Teams
+-- Customer master table
+-- Employee master table
+-- Teams with leader and members
+-- Project workforce assignment
+-- Full Project Report includes workforce and teams
+-
+-
+-## Phase 12 Project Payroll
+-- Monthly employee project salary/wage entries
+-- Previous balance and remaining balance
+-- Finance payment recording
+-- Employee and project payroll statements
+-- Full Project Report includes payroll summary
+-
+-
+-## Phase 13 Project-Based Payroll
+-- Payroll per project, not monthly salary.
+-- Bulk/batch data entry for all employees who worked on one project/date.
+-- Finance payment tracking and employee/project statements.
+-
+-
+-## Phase 13A Menu and Reports Fix
+-- Compact grouped menu.
+-- Project report payroll query fixed.
+-- Customer reports include payroll balance.
+-
+-
+-## Phase 14A Materials
+-- Material Request datasheet with item and description
+-- Ref numbers for requests/issues/returns
+-- Project material report and returns report
+-
+-
+-## Phase 15E
+-Notification Center, Notification Log, Email Notifications, SMS Queue without API, WhatsApp future settings, Sales CRM, and user-specific form permissions have been added.
+-
+-## Phase 20J - Project Form Context
+-
+-- Forms opened from a selected project now retain the project and its customer.
+-- Project Detail includes context-aware commands for quotations, tasks, material/payment requests, daily reports, documents, issues, service tickets, and warranties.
+-- Quotations also prefill project capacity and project type when available.
+-- Project selection is authoritative: the server resolves the correct customer from the selected project.
+-- No new database migration is required for this release.
+-
+-See `PHASE20J_PROJECT_FORM_CONTEXT_RELEASE_NOTES.md` for deployment and verification notes.
++Tests migrate disposable SQLite databases and keep uploads in temporary directories.
++The optional PostgreSQL check runs only when `TEST_POSTGRES_URL` is configured for
++a dedicated test database. Live email, WhatsApp and AI services are not exercised.
+--- /dev/null
++++ b/requirements-dev.txt
+@@ -0,0 +1,2 @@
++-r requirements.txt
++pytest==9.1.1
+--- /dev/null
++++ b/REVIEW_REPORT.md
+@@ -0,0 +1,83 @@
++# Solar ERP review and repairs
++
++Reviewed 12 September 2026. Source: `solar_doc_phase20K_survey_split.zip`.
++The original ZIP and source directory were not changed. All execution used an
++extracted workspace copy and disposable databases.
++
++## Result
++
++The corrected build fixes reproduced migration, survey, approval, permission,
++payment, and setup defects. The full regression suite completed with **65 passed,
++1 skipped**. The skipped test requires a dedicated PostgreSQL database.
++The native Windows PDF renderer failed during testing; exports now run in an
++isolated process and provide a printable HTML fallback instead of taking down
++the ERP. Direct PDF rendering still needs a working WeasyPrint/native runtime.
++
++## Changes made
++
++| Area | Problem found | Repair |
++| --- | --- | --- |
++| Migrations | Replaying the survey upgrade failed with duplicate columns; the legacy repair test expected an obsolete head. | Detect existing survey columns/table, preserve their contents, and check the current migration head. |
++| Pumping survey | Missing permission catalog entry and incomplete project, milestone, dashboard, and report integration. | Make the survey assignable and include it in the relevant project commands, evidence requirements and totals. |
++| Readiness | Legacy load assessment was still counted as another required form after combining it with the off-grid survey. | Use the relevant survey plus the five other current forms; retain legacy records in historical reports. |
++| Existing pumping projects | Default survey requirements still pointed to the off-grid form. | New migration `b20k0000a002` updates only unlinked default requirements on unfinished pumping milestones. Custom links and completed historical milestones are preserved. |
++| Form approvals | Create requests could forge Approved status; editing approved content retained approval. | Accept Draft/Submitted on creation, reset edited forms to Draft, clear reviewer metadata, and record the transition. Reopen affected milestone approvals when their supporting evidence changes. |
++| Historical surveys | Renamed forms could hide old approval history and measurements omitted from the new editor. | Include historical module names in history lookup and show retained legacy measurements in detail/print/export views. |
++| Duplicate forms | Editing could move a singleton form onto a project that already had one. Parallel creates could race. | Validate projects, check duplicates on edit, and serialize duplicate checks and saves. Daily reports retain team/project/date uniqueness. |
++| Documents | Upload requests could forge approval; identical filenames uploaded in the same second could overwrite files. | Validate initial status/project, use unique storage names, clear stale reviewer metadata on new versions, and prevent reviewing one's own uploaded version. |
++| Permissions | View-only users could reach some modifying actions; form PDF access used a broad reporting permission; project editing incorrectly also required create permission. | Use explicit mutation/approval permissions, the specific form's export permission, and the project's edit permission. Honor per-form delete permissions. |
++| CSRF | Ten toggle/remove/approval/notification operations changed state through GET links. | Convert routes and their buttons to POST with CSRF tokens. Match workforce removal records to the requested team/project. |
++| Payment requests | Invalid/nonfinite values and fractional cents could defeat validation; a one-cent debt could be marked paid, and overpayments of one cent were allowed. | Round valid input before comparing balances, reject invalid/oversized values, retain the final cent, and serialize payment recording. |
++| Payroll | Payments could be recorded without approval or above the balance; payment status could use stale relationship data. | Enforce approval and remaining balance on the server, serialize writes, and update status from the appended payment. New batches start as Draft/Submitted. |
++| Numeric storage | Nonfinite numeric values could reach database binding; numeric subclasses lacked SQLAlchemy cache declarations. | Reject invalid/nonfinite values and declare safe type caching. |
++| Login/configuration | Invalid user IDs could raise errors; `.env` overrode process database/security configuration. | Reject malformed/inactive sessions and give process configuration precedence. |
++| First run | The launcher could leave a new database without an administrator; initialization used schema creation instead of migrations and a shared default password. | Use Alembic, seed missing reference data, create a unique bootstrap password, preserve existing administrators, and stop on unrecognized legacy schemas. Local debug is off by default. |
++| PDF availability | WeasyPrint's native Windows text renderer crashed during a real export. | Render in a bounded child process for reports, quotations, and tickets. On failure/timeout show the complete printable report with Print / Save as PDF. |
++
++## Verification
++
++- Original suite: 42 passed, 1 failed, 1 skipped. The failure reproduced the survey migration replay problem.
++- Expanded suite: 65 passed, 1 skipped. The retained tests cover existing dashboard,
++  project, team-leader, employee, security, money, and migration behavior.
++- Added regressions cover survey permissions and persistence, historical data,
++  approvals, duplicate edits, nonfinite amounts, final-cent settlement, payroll
++  approvals, session handling, permission boundaries, CSRF, bootstrap behavior,
++  environment precedence, evidence reopening, and PDF failure handling.
++- Two concurrent payment submissions cannot both spend the same remaining balance;
++  two concurrent singleton form submissions produce one record.
++- Common authenticated pages render successfully, including project details,
++  both survey editors, documents, permissions, accounting, payroll, materials,
++  payments, and full project reports.
++- An isolated real `python run.py` startup returned a healthy database, accepted
++  the first-run administrator login with CSRF, and served the pumping survey page.
++- Python compilation passed. Native PDF export was attempted and its failure
++  was reproduced. Printable fallback and continued dashboard availability were checked.
++
++Two existing test expectations were intentionally updated: the migration head now
++comes from Alembic, and readiness reflects six current forms rather than seven.
++The legacy load assessment remains available but no longer reduces readiness.
++
++## Applying the build
++
++Use the included `README.md`. Preserve your database, uploads and `.env`; install
++the requirements and run `python -m flask --app wsgi db upgrade` for an existing
++Alembic-managed installation. The new head is `b20k0000a002`. Administrators must
++explicitly grant the new pumping survey permissions to relevant staff.
++
++## Limits and remaining verification
++
++No live database or deployment credentials were supplied, so production data
++migration and PostgreSQL behavior were not exercised. Email, WhatsApp, AI API
++calls, and live backup restoration were not run. This is a source review and
++regression repair, not certification of every ERP business rule or of financial
++reporting across currencies. Legacy financial data, exchange-rate treatment, and
++payroll carry-forward policy still require validation against the business's records.
++
++Direct PDF download remains dependent on the host's native WeasyPrint libraries.
++The tested Windows runtime raised a native access violation and the isolated
++renderer could not complete. Browser Print / Save as PDF is the available fallback
++on this host. No system libraries were replaced.
++
++The repository still emits SQLAlchemy/Alembic deprecation warnings; they do not
++fail the tests. Generated credentials, databases, logs containing setup credentials,
++uploads, caches, and compiled bytecode are excluded from the delivery ZIP.
+--- a/run.py
++++ b/run.py
+@@ -13,54 +13,7 @@
+ import secrets
+ 
+ 
+-PROJECT_ROOT = Path(__file__).resolve().parent
+-
+-
+-def _set_env_value(content, key, value):
+-    pattern = re.compile(rf"^{re.escape(key)}=.*$", re.MULTILINE)
+-    replacement = f"{key}={value}"
+-    if pattern.search(content):
+-        return pattern.sub(replacement, content, count=1)
+-    return content.rstrip() + f"\n{replacement}\n"
+-
+-
+-def prepare_local_environment():
+-    """Create/repair only the local, git-ignored environment file."""
+-    process_env = (os.environ.get("FLASK_ENV") or "").strip().lower()
+-    if process_env == "production" or os.environ.get("RENDER"):
+-        return
+-
+-    env_path = PROJECT_ROOT / ".env"
+-    env_example_path = PROJECT_ROOT / ".env.example"
+-    created = not env_path.exists()
+-    content = (
+-        env_example_path.read_text(encoding="utf-8")
+-        if created and env_example_path.exists()
+-        else env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+-    )
+-
+-    match = re.search(r"^SECRET_KEY=(.*)$", content, re.MULTILINE)
+-    current_secret = match.group(1).strip() if match else ""
+-    unsafe = {
+-        "", "secret", "dev", "development", "change-this-secret-key",
+-        "change-this-to-a-long-random-secret-key",
+-    }
+-    changed = created
+-    if current_secret.lower() in unsafe or len(current_secret) < 32:
+-        content = _set_env_value(content, "SECRET_KEY", secrets.token_hex(32))
+-        changed = True
+-    # `run.py` is the local launcher. Keep local HTTP login cookies usable even
+-    # when `.env` was previously copied verbatim from the production example.
+-    if not re.search(r"^FLASK_ENV=development$", content, re.MULTILINE):
+-        content = _set_env_value(content, "FLASK_ENV", "development")
+-        changed = True
+-    if not re.search(r"^SESSION_COOKIE_SECURE=0$", content, re.MULTILINE):
+-        content = _set_env_value(content, "SESSION_COOKIE_SECURE", "0")
+-        changed = True
+-
+-    if changed:
+-        env_path.write_text(content, encoding="utf-8")
+-        print("LOCAL SETUP: .env is ready with a private generated SECRET_KEY.")
++from app.local_setup import PROJECT_ROOT, prepare_local_environment
+ 
+ 
+ if __name__ == "__main__":
+@@ -102,7 +55,7 @@
+         if not tables or "alembic_version" in tables:
+             upgrade()
+             print("DATABASE SETUP: SQLite schema is up to date.")
+-            return
++            return True
+ 
+         # Phase 20D's documented onboarding for a pre-Alembic installation is
+         # "backup -> stamp the full-schema baseline -> upgrade". Automate that
+@@ -117,14 +70,17 @@
+             print(f"DATABASE BACKUP: {backup_path}")
+             stamp(revision="cc82184d6822")
+             upgrade()
+-            print("DATABASE SETUP: legacy SQLite schema upgraded to Phase 20H.")
++            print("DATABASE SETUP: legacy SQLite schema upgraded to the current release.")
++            return True
+         else:
+-            print(
++            raise RuntimeError(
+                 "DATABASE SETUP STOPPED: this unstamped SQLite file is not a "
+                 "recognized full CMSE database, so it was not modified."
+             )
+ 
+ 
+ if __name__ == "__main__":
+-    upgrade_local_sqlite_database()
+-    app.run(host="0.0.0.0", port=5000, debug=True)
++    if upgrade_local_sqlite_database():
++        from init_db import initialize_database
++        initialize_database(app)
++    app.run(host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "5000")), debug=os.environ.get("FLASK_DEBUG", "0") == "1")
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -14,10 +14,12 @@
+ 
+ 
+ @pytest.fixture()
+-def app():
++def app(monkeypatch, tmp_path):
+     fd, path = tempfile.mkstemp(suffix=".db")
+     os.close(fd)
+-    os.environ["DATABASE_URL"] = f"sqlite:///{path}"
++    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{path}")
++    monkeypatch.setenv("UPLOAD_FOLDER", str(tmp_path / "uploads"))
++    monkeypatch.delenv("ADMIN_RECOVERY_PASSWORD", raising=False)
+ 
+     from app import create_app, db
+     application = create_app()
+@@ -43,11 +45,13 @@
+ 
+ 
+ @pytest.fixture()
+-def csrf_app():
++def csrf_app(monkeypatch, tmp_path):
+     """Same as `app` but with CSRF left ON, for the CSRF tests."""
+     fd, path = tempfile.mkstemp(suffix=".db")
+     os.close(fd)
+-    os.environ["DATABASE_URL"] = f"sqlite:///{path}"
++    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{path}")
++    monkeypatch.setenv("UPLOAD_FOLDER", str(tmp_path / "uploads"))
++    monkeypatch.delenv("ADMIN_RECOVERY_PASSWORD", raising=False)
+ 
+     from app import create_app, db
+     application = create_app()
+--- a/tests/test_phase20h_missing_payment_migration.py
++++ b/tests/test_phase20h_missing_payment_migration.py
+@@ -39,4 +39,5 @@
+     current_revision = db.session.execute(
+         sa.text("SELECT version_num FROM alembic_version")
+     ).scalar_one()
+-    assert current_revision == "b20i0000a001"
++    from alembic.script import ScriptDirectory
++    assert current_revision == ScriptDirectory("migrations").get_current_head()
+--- a/tests/test_project_command_center.py
++++ b/tests/test_project_command_center.py
+@@ -106,10 +106,10 @@
+     snapshot = build_project_command_center(project, today=today)
+     assert snapshot["physical"]["progress"] == 56
+     assert snapshot["procurement"]["progress"] == 55
+-    # The approved survey and approved daily report complete two of the seven
+-    # required form gates: 2 / 7 = 29% readiness.
+-    assert snapshot["documents"]["progress"] == 29
+-    assert snapshot["overall"] == 49
++    # Survey and daily report complete two of six current required forms;
++    # the historical separate load assessment no longer lowers readiness.
++    assert snapshot["documents"]["progress"] == 33  # Two of six current forms; legacy load assessment is optional.
++    assert snapshot["overall"] == 50
+     assert snapshot["financials"]["revenue"] == 10000
+     assert snapshot["financials"]["committed_cost"] == 2000
+     assert snapshot["financials"]["profit"] == 8000
+--- /dev/null
++++ b/tests/test_review_regressions.py
+@@ -0,0 +1,415 @@
++"""End-to-end regressions for the ERP review repairs."""
++import io
++from datetime import date
++
++import pytest
++
++
++@pytest.fixture(autouse=True)
++def disable_outbound_email(monkeypatch):
++    monkeypatch.setattr("app.notifications.send_email", lambda *args, **kwargs: None)
++
++
++def login(client, user):
++    from flask import g
++    with client.session_transaction() as session:
++        session["_user_id"] = str(user.id)
++        session["_fresh"] = True
++    g.pop("_login_user", None)
++
++
++def setup_project():
++    from app import db
++    from app.models import User, Project
++    user = User(full_name="Review Admin", email="review@example.invalid", role="Admin", password_hash="unused", is_active=True)
++    db.session.add(user)
++    db.session.flush()
++    project = Project(project_name="Review Pump", customer_name="Review Customer", location="Test Site", project_type="Solar Pumping", created_by_id=user.id)
++    db.session.add(project)
++    db.session.commit()
++    return user, project
++
++
++def test_survey_permissions_can_be_saved_and_used(app, client):
++    from app import db
++    from app.models import User, UserFormPermission
++    admin, project = setup_project()
++    engineer = User(full_name="Engineer", email="engineer@example.invalid", role="Technical Engineer", password_hash="unused", is_active=True)
++    db.session.add(engineer)
++    db.session.commit()
++    login(client, admin)
++    response = client.post(f"/admin/form-permissions?user_id={engineer.id}", data={"user_id": engineer.id, "solar-pump-survey_view": "on", "solar-pump-survey_create": "on", "solar-pump-survey_edit": "on"})
++    assert response.status_code == 302
++    assert UserFormPermission.query.filter_by(user_id=engineer.id, form_key="solar-pump-survey").one().can_create
++    login(client, engineer)
++    assert client.get("/forms/").status_code == 200
++    assert client.get(f"/forms/solar-pump-survey/new?project_id={project.id}").status_code == 200
++
++
++def test_survey_crud_duplicate_guards_and_approval_reset(app, client):
++    from app import db
++    from app.models import Project, SolarPumpSurveyForm, ApprovalHistory
++    user, project = setup_project()
++    second = Project(project_name="Second", customer_name="Review Customer", location="Test", project_type="Solar Pumping", created_by_id=user.id)
++    db.session.add(second)
++    db.session.commit()
++    login(client, user)
++    for p in (project, second):
++        assert client.post("/forms/solar-pump-survey/new", data={"project_id": p.id, "survey_date": "2026-09-12", "water_source": "Borehole", "approval_status": "Draft"}).status_code == 302
++    entry = SolarPumpSurveyForm.query.filter_by(project_id=project.id).one()
++    assert client.post("/forms/solar-pump-survey/new", data={"project_id": project.id}).status_code == 302
++    assert SolarPumpSurveyForm.query.count() == 2
++    client.post(f"/forms/solar-pump-survey/{entry.id}/edit", data={"project_id": second.id})
++    db.session.refresh(entry)
++    assert entry.project_id == project.id
++    entry.approval_status = "Approved"
++    entry.reviewed_by_id = user.id
++    db.session.commit()
++    client.post(f"/forms/solar-pump-survey/{entry.id}/edit", data={"project_id": project.id, "required_flow_m3h": "12.5"})
++    db.session.refresh(entry)
++    assert entry.approval_status == "Draft"
++    assert entry.reviewed_by_id is None and entry.required_flow_m3h == "12.5"
++    assert ApprovalHistory.query.filter_by(record_id=entry.id, previous_status="Approved", new_status="Draft").count() == 1
++
++
++def test_forms_reject_approval_injection_and_invalid_project_dates(app, client):
++    from app.models import SiteSurveyForm, SolarPumpSurveyForm
++    user, project = setup_project()
++    login(client, user)
++    for key, model in [("site-survey", SiteSurveyForm), ("solar-pump-survey", SolarPumpSurveyForm)]:
++        for invalid in [dict(approval_status="Approved"), dict(project_id="999999"), dict(project_id="bad"), dict(survey_date="not-a-date")]:
++            payload = {"project_id": project.id, **invalid}
++            response = client.post(f"/forms/{key}/new", data=payload)
++            assert response.status_code == 302
++            assert model.query.count() == 0
++
++
++def test_pumping_evidence_is_counted_and_legacy_load_is_not_required(app, client):
++    from app import db
++    from app.models import SolarPumpSurveyForm, ProjectTask
++    from app.milestone_service import ensure_default_milestones, build_milestone_snapshot
++    from app.project_command_center import build_project_command_center
++    from app.dashboard_command_center import _form_counts
++    from app.routes.report_routes import project_checklist, project_report_data, build_customer_summary
++    user, project = setup_project()
++    ensure_default_milestones(project, user.id)
++    survey = next(m for m in project.milestones if m.code == "SURVEY")
++    assert survey.document_requirements[0].form_key == "solar-pump-survey"
++    db.session.add_all([
++        SolarPumpSurveyForm(project_id=project.id, created_by_id=user.id, approval_status="Approved"),
++        ProjectTask(project_id=project.id, milestone_id=survey.id, title="Survey visit", status="Completed", progress_percent=100, created_by_id=user.id),
++    ])
++    db.session.commit()
++    assert build_milestone_snapshot(survey)["ready"]
++    checklist, _ = project_checklist(project)
++    assert checklist[0]["status"] == "Approved"
++    assert all("Load Assessment" not in item["label"] for item in checklist)
++    assert project_report_data(project)["summary"]["approved_forms"] == 1
++    assert build_customer_summary([project])[0]["forms"] == 1
++    assert _form_counts([project.id])["approved"] == 1
++    login(client, user)
++    html = client.get(f"/projects/{project.id}").get_data(as_text=True)
++    assert "solar-pump-survey" in html
++
++
++def test_upgrade_repairs_only_unlinked_default_pumping_requirement(app):
++    from app import db
++    from app.models import MilestoneDocumentRequirement
++    from app.milestone_service import ensure_default_milestones
++    from flask_migrate import downgrade, upgrade
++    user, project = setup_project()
++    ensure_default_milestones(project, user.id)
++    survey = next(m for m in project.milestones if m.code == "SURVEY")
++    requirement = survey.document_requirements[0]
++    requirement.form_key = "site-survey"
++    requirement.title = "Approved site survey & load assessment"
++    custom = MilestoneDocumentRequirement(milestone_id=survey.id, title="Custom historic survey", form_key="site-survey", form_record_id=7)
++    db.session.add(custom)
++    db.session.commit()
++    downgrade(revision="b20k0000a001")
++    upgrade()
++    db.session.expire_all()
++    assert requirement.form_key == "solar-pump-survey"
++    assert custom.form_key == "site-survey" and custom.form_record_id == 7
++
++
++def test_legacy_survey_values_and_history_remain_visible(app, client):
++    from app import db
++    from app.models import SiteSurveyForm, ApprovalHistory
++    user, project = setup_project()
++    entry = SiteSurveyForm(project_id=project.id, created_by_id=user.id, daytime_load_kw="47", pump_loads="Legacy pump measurement")
++    db.session.add(entry)
++    db.session.flush()
++    db.session.add(ApprovalHistory(module="Site Survey & Load Assessment", record_id=entry.id, previous_status="Submitted", new_status="Approved", comments="Historical approval note", reviewed_by_id=user.id))
++    db.session.commit()
++    login(client, user)
++    html = client.get(f"/forms/site-survey/{entry.id}").get_data(as_text=True)
++    assert "47" in html and "Legacy pump measurement" in html and "Historical approval note" in html
++
++
++def test_payment_amount_validation_and_last_cent(app, client):
++    from app import db
++    from app.models import PaymentRequest, PaymentRequestPayment
++    user, _ = setup_project()
++    pr = PaymentRequest(request_no="REVIEW-PR", requested_by_id=user.id, payee_name="Vendor", purpose="Test payment", amount=100, currency="USD", status="Approved")
++    db.session.add(pr)
++    db.session.commit()
++    login(client, user)
++    url = f"/payments/requests/{pr.id}/payment"
++    for value in ("nan", "inf", "1e999", "-1", "0.001", "100.01"):
++        assert client.post(url, data={"amount": value}).status_code == 302
++        assert PaymentRequestPayment.query.count() == 0
++    client.post(url, data={"amount": "99.99"})
++    db.session.refresh(pr)
++    assert pr.status == "Partially Paid" and round(pr.balance, 2) == .01
++    client.post(url, data={"amount": "0.005"})
++    db.session.refresh(pr)
++    assert pr.status == "Paid" and round(pr.balance, 2) == 0
++    assert PaymentRequestPayment.query.count() == 2
++
++
++def test_payroll_requires_approval_and_cannot_overpay(app, client):
++    from app import db
++    from app.models import Employee, ProjectPayrollBatch, ProjectPayrollEntry, ProjectPayrollPayment
++    user, project = setup_project()
++    employee = Employee(employee_code="REVIEW-EMP", full_name="Worker", status="Active")
++    batch = ProjectPayrollBatch(batch_no="REVIEW-BATCH", batch_title="Test payroll", project_id=project.id, created_by_id=user.id, status="Submitted")
++    db.session.add_all([employee, batch])
++    db.session.flush()
++    entry = ProjectPayrollEntry(batch_id=batch.id, employee_id=employee.id, project_amount=100, status="Pending")
++    db.session.add(entry)
++    db.session.commit()
++    login(client, user)
++    url = f"/payroll/entries/{entry.id}/payment"
++    client.post(url, data={"amount": "100"})
++    assert ProjectPayrollPayment.query.count() == 0
++    assert client.get(f"/payroll/batches/{batch.id}/approve").status_code == 405
++    client.post(f"/payroll/batches/{batch.id}/approve")
++    for value in ("100.01", "NaN", "Infinity"):
++        client.post(url, data={"amount": value})
++        assert ProjectPayrollPayment.query.count() == 0
++    client.post(url, data={"amount": "100"})
++    db.session.refresh(entry)
++    db.session.refresh(batch)
++    assert entry.status == "Paid" and batch.status == "Paid"
++    assert round(entry.balance, 2) == 0
++
++
++def test_document_approval_injection_and_upload_collision(app, client):
++    from app.models import Document
++    user, project = setup_project()
++    login(client, user)
++    def upload(status):
++        return client.post("/documents/upload", data={"project_id": project.id, "document_title": "Evidence", "document_type": "Technical Design", "approval_status": status, "file": (io.BytesIO(b"test file"), "same.txt.pdf")})
++    upload("Approved")
++    assert Document.query.count() == 0
++    upload("Submitted")
++    upload("Submitted")
++    docs = Document.query.all()
++    assert len(docs) == 2 and docs[0].stored_file_name != docs[1].stored_file_name
++    client.post(f"/documents/{docs[0].id}/review", data={"approval_status": "Approved"})
++    assert docs[0].approval_status == "Submitted"
++
++
++def test_inactive_and_malformed_sessions_are_rejected(app, client):
++    from app import db
++    from flask import g
++    user, _ = setup_project()
++    login(client, user)
++    user.is_active = False
++    db.session.commit()
++    g.pop("_login_user", None)
++    response = client.get("/projects/")
++    assert response.status_code == 302 and "/login" in response.location
++    with client.session_transaction() as session:
++        session["_user_id"] = "bad-id"
++    g.pop("_login_user", None)
++    response = client.get("/projects/")
++    assert response.status_code == 302 and "/login" in response.location
++
++
++def test_read_only_permission_cannot_approve_payment_or_export_other_form(app, client):
++    from app import db
++    from app.models import User, UserFormPermission, PaymentRequest
++    user, project = setup_project()
++    manager = User(full_name="Read Only Manager", email="readonly@example.invalid", role="Management", password_hash="unused", is_active=True)
++    db.session.add(manager)
++    db.session.flush()
++    db.session.add_all([UserFormPermission(user_id=manager.id, form_key="payment-requests", can_view=True), UserFormPermission(user_id=manager.id, form_key="form-reports", can_print_export=True)])
++    pr = PaymentRequest(request_no="READ-ONLY", requested_by_id=user.id, payee_name="Vendor", purpose="Example", amount=5, status="Pending Manager Approval")
++    db.session.add(pr)
++    db.session.commit()
++    login(client, manager)
++    client.post(f"/payments/requests/{pr.id}/reject", data={"reason": "Must not succeed"})
++    assert pr.status == "Pending Manager Approval"
++    response = client.get("/reports/form/solar-pump-survey/1/pdf")
++    assert response.status_code == 302 and "dashboard" in response.location
++
++
++def test_mutating_routes_require_post_and_csrf(csrf_app):
++    endpoints = {"payroll.approve_batch", "admin.toggle_branch", "admin.toggle_department", "users.toggle_user", "master.remove_team_member", "master.remove_project_team", "master.remove_project_employee", "notifications.send_email_log", "notifications.mark_sms_sent", "notifications.mark_read"}
++    for rule in csrf_app.url_map.iter_rules():
++        if rule.endpoint in endpoints:
++            assert "POST" in rule.methods and "GET" not in rule.methods
++    response = csrf_app.test_client().post("/payroll/batches/1/approve")
++    assert response.status_code == 400
++
++
++def test_common_pages_render_and_new_projects_cannot_skip_completion(app, client):
++    user, project = setup_project()
++    login(client, user)
++    paths = ["/dashboard", "/projects/", f"/projects/{project.id}", "/forms/", "/forms/site-survey/new", "/forms/solar-pump-survey/new", "/documents/", "/documents/upload", "/accounting/", "/payments/", "/payroll/", "/payroll/batches/create", "/materials/", "/users/", "/admin/form-permissions", "/reports/", f"/reports/project/{project.id}/full"]
++    for path in paths:
++        assert client.get(path).status_code == 200, path
++    from app.models import Project
++    client.post("/projects/create", data={"project_name": "Bypass", "customer_name": "Test", "location": "Test", "project_type": "Solar Pumping", "status": "Completed"})
++    assert Project.query.filter_by(project_name="Bypass").count() == 0
++
++
++def test_editing_evidence_reopens_completed_milestone(app, client):
++    from app import db
++    from app.models import SolarPumpSurveyForm
++    from app.milestone_service import ensure_default_milestones
++    user, project = setup_project()
++    ensure_default_milestones(project, user.id)
++    survey = next(m for m in project.milestones if m.code == "SURVEY")
++    survey.status = "Completed"
++    project.status = "Completed"
++    entry = SolarPumpSurveyForm(project_id=project.id, created_by_id=user.id, approval_status="Approved")
++    db.session.add(entry)
++    db.session.commit()
++    login(client, user)
++    client.post(f"/forms/solar-pump-survey/{entry.id}/edit", data={"project_id": project.id, "water_source": "Updated borehole"})
++    db.session.refresh(survey)
++    db.session.refresh(project)
++    assert survey.status == "In Progress" and project.status == "Handover"
++    assert any(log.action == "Reopen" for log in survey.audit_logs)
++
++
++def test_bootstrap_migrates_and_never_resets_an_existing_admin(app, monkeypatch, capsys):
++    from app.models import User, ProjectType
++    from werkzeug.security import check_password_hash
++    from init_db import initialize_database
++    password = "Only-for-automated-test-1234"
++    monkeypatch.setenv("INITIAL_ADMIN_EMAIL", "bootstrap@example.invalid")
++    monkeypatch.setenv("INITIAL_ADMIN_PASSWORD", password)
++    initialize_database(app)
++    admin = User.query.filter_by(email="bootstrap@example.invalid").one()
++    assert check_password_hash(admin.password_hash, password)
++    assert ProjectType.query.filter_by(type_name="Solar Pump System").count() == 1
++    monkeypatch.setenv("INITIAL_ADMIN_PASSWORD", "replacement-must-not-be-applied")
++    initialize_database(app)
++    assert User.query.count() == 1 and check_password_hash(admin.password_hash, password)
++    capsys.readouterr()
++
++
++def test_local_environment_setup_generates_private_secret(tmp_path, monkeypatch):
++    import app.local_setup as setup
++    from dotenv import dotenv_values
++    monkeypatch.setattr(setup, "PROJECT_ROOT", tmp_path)
++    monkeypatch.setenv("FLASK_ENV", "development")
++    monkeypatch.delenv("RENDER", raising=False)
++    setup.prepare_local_environment()
++    first = dotenv_values(tmp_path / ".env")
++    assert len(first["SECRET_KEY"]) >= 32 and first["SESSION_COOKIE_SECURE"] == "0"
++    setup.prepare_local_environment()
++    assert dotenv_values(tmp_path / ".env")["SECRET_KEY"] == first["SECRET_KEY"]
++
++
++def test_process_database_configuration_takes_precedence(app, tmp_path, monkeypatch):
++    import app as module
++    from app import db
++    (tmp_path / ".env").write_text("DATABASE_URL=sqlite:///wrong-database.db\nSECRET_KEY=wrong-secret\n", encoding="utf-8")
++    monkeypatch.setattr(module, "__file__", str(tmp_path / "app" / "__init__.py"))
++    other = module.create_app()
++    assert other.config["SQLALCHEMY_DATABASE_URI"] == app.config["SQLALCHEMY_DATABASE_URI"]
++    assert other.config["SECRET_KEY"] != "wrong-secret"
++    with other.app_context():
++        db.engine.dispose()
++
++
++def test_numeric_types_reject_nonfinite_values():
++    from app.types import Money, Quantity, Rate
++    for kind in (Money, Quantity, Rate):
++        for value in ("NaN", "Infinity", "-Infinity", "invalid"):
++            with pytest.raises(ValueError):
++                kind().process_bind_param(value, None)
++
++
++def test_simultaneous_requests_do_not_overpay_or_duplicate_forms(app):
++    from concurrent.futures import ThreadPoolExecutor
++    from threading import Barrier
++    from app import db
++    from app.models import PaymentRequest, PaymentRequestPayment, SiteSurveyForm
++    user, project = setup_project()
++    user_id, project_id = user.id, project.id
++    payment_request = PaymentRequest(request_no="CONCURRENT-PR", requested_by_id=user_id, payee_name="Vendor", purpose="Concurrency check", amount=100, status="Approved", currency="USD")
++    db.session.add(payment_request)
++    db.session.commit()
++    request_id = payment_request.id
++
++    def together(url, payload):
++        barrier = Barrier(2)
++        def post():
++            client = app.test_client()
++            with client.session_transaction() as session:
++                session["_user_id"] = str(user_id)
++                session["_fresh"] = True
++            barrier.wait(timeout=10)
++            return client.post(url, data=payload).status_code
++        with ThreadPoolExecutor(max_workers=2) as executor:
++            futures = [executor.submit(post) for _ in range(2)]
++            assert [future.result(timeout=30) for future in futures] == [302, 302]
++
++    together(f"/payments/requests/{request_id}/payment", {"amount": "75"})
++    assert PaymentRequestPayment.query.count() == 1
++    together("/forms/site-survey/new", {"project_id": project_id, "approval_status": "Draft"})
++    assert SiteSurveyForm.query.count() == 1
++
++
++def test_native_survey_export_returns_pdf_or_printable_fallback(app, client):
++    from app import db
++    from app.models import SolarPumpSurveyForm
++    user, project = setup_project()
++    entry = SolarPumpSurveyForm(project_id=project.id, created_by_id=user.id, water_source="Borehole", required_flow_m3h="12.5")
++    db.session.add(entry)
++    db.session.commit()
++    login(client, user)
++    response = client.get(f"/reports/form/solar-pump-survey/{entry.id}/pdf")
++    assert response.status_code == 200
++    if response.mimetype == "application/pdf":
++        assert response.data.startswith(b"%PDF-") and b"%%EOF" in response.data[-50:]
++    else:
++        assert response.headers["X-PDF-Fallback"] == "printable-html"
++        assert b"Print / Save as PDF" in response.data and b"Borehole" in response.data
++    assert client.get("/dashboard").status_code == 200
++
++
++def test_project_edit_permission_does_not_require_create_permission(app, client):
++    from app import db
++    from app.models import User, UserFormPermission
++    _, project = setup_project()
++    editor = User(full_name="Project Editor", email="editor@example.invalid", role="Technical Engineer", password_hash="unused", is_active=True)
++    db.session.add(editor)
++    db.session.flush()
++    db.session.add(UserFormPermission(user_id=editor.id, form_key="projects", can_view=True, can_edit=True, can_create=False))
++    db.session.commit()
++    login(client, editor)
++    assert client.get(f"/projects/{project.id}/edit").status_code == 200
++
++
++def test_pdf_worker_failures_and_success_are_handled(monkeypatch):
++    import subprocess
++    from types import SimpleNamespace
++    from app.pdf_service import render_pdf, PDFRenderError
++    import app.pdf_service as service
++    monkeypatch.setattr(service.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0, stdout=b"%PDF-test", stderr=b""))
++    assert render_pdf("<html>Report</html>", "http://localhost/") == b"%PDF-test"
++    monkeypatch.setattr(service.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=1, stdout=b"", stderr=b"native renderer failed"))
++    with pytest.raises(PDFRenderError):
++        render_pdf("<html>Report</html>", "http://localhost/")
++    def timeout(*args, **kwargs):
++        raise subprocess.TimeoutExpired("pdf_worker", 45)
++    monkeypatch.setattr(service.subprocess, "run", timeout)
++    with pytest.raises(PDFRenderError):
++        render_pdf("<html>Report</html>", "http://localhost/")

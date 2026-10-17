@@ -80,8 +80,15 @@ def test_forms_reject_approval_injection_and_invalid_project_dates(app, client):
         for invalid in [dict(approval_status="Approved"), dict(project_id="999999"), dict(project_id="bad"), dict(survey_date="not-a-date")]:
             payload = {"project_id": project.id, **invalid}
             response = client.post(f"/forms/{key}/new", data=payload)
-            assert response.status_code == 302
+            assert response.status_code == 400
             assert model.query.count() == 0
+    response = client.post(
+        "/forms/site-survey/new",
+        data={"project_id": project.id, "survey_date": "not-a-date", "surveyed_by": "Saved Text"},
+    )
+    html = response.get_data(as_text=True)
+    assert "Saved Text" in html
+    assert "is-invalid" in html
 
 
 def test_pumping_evidence_is_counted_and_legacy_load_is_not_required(app, client):

@@ -109,7 +109,7 @@ def test_command_center_uses_operational_records_and_renders(app, client):
     # Survey and daily report complete two of six current required forms;
     # the historical separate load assessment no longer lowers readiness.
     assert snapshot["documents"]["progress"] == 33  # Two of six current forms; legacy load assessment is optional.
-    assert snapshot["overall"] == 50
+    assert snapshot["overall"] == 46
     assert snapshot["financials"]["revenue"] == 10000
     assert snapshot["financials"]["committed_cost"] == 2000
     assert snapshot["financials"]["profit"] == 8000
