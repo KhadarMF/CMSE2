@@ -64,7 +64,7 @@ def _ensure_requirement(bind, milestone_id, title, form_key, document_type, crit
         """
         INSERT INTO milestone_document_requirement
         (milestone_id, title, form_key, document_type, is_required, is_critical, created_at)
-        VALUES (:milestone_id, :title, :form_key, :document_type, 1, :critical, :created_at)
+        VALUES (:milestone_id, :title, :form_key, :document_type, TRUE, :critical, :created_at)
         """,
         milestone_id=milestone_id,
         title=title,
